@@ -1,7 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2 } from 'lucide-react';
+import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut } from 'lucide-react';
 
 const VittaDocumentChat = () => {
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  
+  // Existing states
   const [messages, setMessages] = useState([
     {
       type: 'bot',
@@ -15,6 +20,118 @@ const VittaDocumentChat = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Login handler
+  const handleLogin = (email, password) => {
+    // Mock authentication - in real app, this would be actual auth
+    setUser({ 
+      email, 
+      name: email.split('@')[0],
+      joinDate: new Date()
+    });
+    setIsAuthenticated(true);
+    
+    // Add welcome message
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `Welcome back, ${email.split('@')[0]}! I'm ready to help you with your financial documents and credit card optimization. What would you like to know?`,
+      timestamp: new Date()
+    }]);
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUser(null);
+    setMessages([{
+      type: 'bot',
+      content: "Hi! I'm your Vitta AI assistant. Upload your financial documents and I'll help you find information instantly.",
+      timestamp: new Date()
+    }]);
+    setUploadedDocs([]);
+    setIsOpen(false);
+  };
+
+  // Login Component
+  const LoginScreen = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (email && password) {
+        handleLogin(email, password);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          {/* Demo Banner */}
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🚧</span>
+              <h3 className="font-semibold text-amber-800">Demo Mode</h3>
+            </div>
+            <p className="text-amber-800 text-sm">
+              This is a demo of Vitta's login system. Enter any email and password combination to access the platform.
+            </p>
+          </div>
+
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-white font-bold text-2xl">V</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Vitta</h1>
+            <p className="text-gray-600">Your family's financial intelligence platform</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="john@example.com"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
+            >
+              Sign In
+            </button>
+          </form>
+
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <h3 className="font-semibold text-blue-900 mb-2">What's New in Vitta:</h3>
+            <ul className="text-sm text-blue-700 space-y-1">
+              <li>• AI-powered document chat</li>
+              <li>• Smart credit card recommendations</li>
+              <li>• Family spending coordination</li>
+              <li>• Real-time financial optimization</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Mock document processing
   const processDocument = async (file) => {
@@ -166,24 +283,47 @@ const VittaDocumentChat = () => {
     "Give me a financial summary"
   ];
 
+  // If not authenticated, show login screen
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Main Landing Page */}
       <div className="container mx-auto px-6 py-12">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <div className="flex items-center justify-center gap-3 mb-6">
+        {/* Header with Logout */}
+        <div className="flex items-center justify-between mb-16">
+          <div className="flex items-center gap-3">
             <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-2xl">V</span>
             </div>
             <div>
               <h1 className="text-5xl font-bold text-gray-900 mb-2">Vitta</h1>
-              <p className="text-xl text-gray-600">Family Financial Intelligence Platform</p>
+              <p className="text-xl text-gray-600">Welcome back, {user.name}!</p>
             </div>
           </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm text-gray-600">Signed in as</p>
+              <p className="font-medium text-gray-900">{user.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-white rounded-lg transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+
+        {/* Updated description for authenticated users */}
+        <div className="text-center mb-16">
           <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            The first AI-powered platform built specifically for families managing multiple credit cards. 
-            Optimize rewards, coordinate spending, and protect against fraud—all in real-time.
+            Your family financial intelligence platform is ready! Upload documents, ask questions, 
+            and get AI-powered insights for credit card optimization and family spending coordination.
           </p>
         </div>
 
@@ -216,12 +356,12 @@ const VittaDocumentChat = () => {
 
         {/* CTA Section */}
         <div className="text-center">
-          <p className="text-gray-600 mb-6">Try our AI document assistant demo</p>
+          <p className="text-gray-600 mb-6">Start by chatting with your AI assistant</p>
           <button
             onClick={() => setIsOpen(true)}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
           >
-            Chat with Your Documents
+            Open AI Assistant
           </button>
         </div>
       </div>
@@ -247,7 +387,7 @@ const VittaDocumentChat = () => {
               </div>
               <div>
                 <h3 className="font-semibold">Vitta AI Assistant</h3>
-                <p className="text-blue-100 text-sm">Chat with your documents</p>
+                <p className="text-blue-100 text-sm">Welcome, {user.name}!</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -393,12 +533,14 @@ const VittaDocumentChat = () => {
         </div>
       )}
 
-      {/* Demo Notice */}
-      <div className="fixed bottom-6 left-6 max-w-sm p-3 bg-amber-50 border border-amber-200 rounded-lg shadow-lg">
-        <p className="text-amber-800 text-sm">
-          🚧 <strong>Demo Mode:</strong> Using mock data for YC presentation. Production will use secure RAG processing.
-        </p>
-      </div>
+      {/* Demo Notice - Only show when logged in */}
+      {isAuthenticated && (
+        <div className="fixed bottom-6 left-6 max-w-sm p-3 bg-green-50 border border-green-200 rounded-lg shadow-lg">
+          <p className="text-green-800 text-sm">
+            ✅ <strong>Logged In:</strong> You're now using Vitta's demo platform with enhanced login system.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
