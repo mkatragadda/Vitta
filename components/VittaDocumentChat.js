@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut } from 'lucide-react';
+import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard } from 'lucide-react';
+import CreditCardScreen from './CreditCardScreen';
 
 const VittaDocumentChat = () => {
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  
+  // Screen navigation state
+  const [currentScreen, setCurrentScreen] = useState('main'); // 'main' or 'creditCards'
   
   // Existing states
   const [messages, setMessages] = useState([
@@ -43,6 +47,7 @@ const VittaDocumentChat = () => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUser(null);
+    setCurrentScreen('main');
     setMessages([{
       type: 'bot',
       content: "Hi! I'm your Vitta AI assistant. Upload your financial documents and I'll help you find information instantly.",
@@ -195,7 +200,7 @@ const VittaDocumentChat = () => {
     }
     
     if (q.includes('credit card') || q.includes('balance') || q.includes('payment')) {
-      return "From your credit card statements:\n\n• Chase Freedom ****5678: $1,234.56 balance, minimum payment $35 due Dec 15\n• Based on your spending patterns, I recommend using your Chase Freedom for grocery purchases this quarter (5% cashback)\n\nWould you like me to analyze your card optimization opportunities?";
+      return "From your credit card statements:\n\n• Chase Freedom ****5678: $1,234.56 balance, minimum payment $35 due Dec 15\n• Based on your spending patterns, I recommend using your Chase Freedom for grocery purchases this quarter (5% cashback)\n\n💳 **Credit Card Management**: You can now access your full credit card dashboard with detailed analytics, spending breakdowns, and optimization tips. Click the 'Credit Cards' button in the header to explore!\n\nWould you like me to analyze your card optimization opportunities?";
     }
     
     if (q.includes('bank') || q.includes('checking') || q.includes('account')) {
@@ -208,6 +213,10 @@ const VittaDocumentChat = () => {
     
     if (q.includes('summary') || q.includes('overview')) {
       return "Here's your financial summary:\n\n📊 **Income**: $100,000 (W-2 + 1099)\n💳 **Credit Cards**: $1,234.56 total balance\n🏦 **Bank Balance**: $3,247.82\n🧾 **Monthly Expenses**: ~$2,400\n\n💡 **Optimization Tip**: Pay off your credit card balance before the due date to avoid $27 in interest charges.";
+    }
+    
+    if (q.includes('which card') || q.includes('groceries') || q.includes('dining') || q.includes('gas')) {
+      return "💳 **Credit Card Recommendations**:\n\n• **Groceries**: Use Amex Gold (4x points) for maximum rewards\n• **Dining**: Amex Gold (4x points) is your best option\n• **Gas**: Chase Freedom Unlimited (1.5% cashback)\n• **Online Shopping**: Citi Double Cash (2% cashback)\n• **Everything Else**: Chase Freedom Unlimited (1.5% cashback)\n\n🎯 **Pro Tip**: Access your full credit card dashboard for detailed spending analysis and real-time optimization tips!";
     }
     
     return "I can help you find information from your uploaded documents. Try asking about:\n\n• Tax information (W-2, 1099 details)\n• Credit card balances and payments\n• Bank account summaries\n• Business expenses and receipts\n• Financial overviews and summaries";
@@ -280,12 +289,18 @@ const VittaDocumentChat = () => {
     "What's my total tax liability?",
     "When are my credit card payments due?",
     "Show me my business expenses",
-    "Give me a financial summary"
+    "Give me a financial summary",
+    "Which card should I use for groceries?"
   ];
 
   // If not authenticated, show login screen
   if (!isAuthenticated) {
     return <LoginScreen />;
+  }
+
+  // If credit card screen is active, show it
+  if (currentScreen === 'creditCards') {
+    return <CreditCardScreen onBack={() => setCurrentScreen('main')} user={user} />;
   }
 
   return (
@@ -305,6 +320,13 @@ const VittaDocumentChat = () => {
           </div>
           
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setCurrentScreen('creditCards')}
+              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg"
+            >
+              <CreditCard className="w-4 h-4" />
+              Credit Cards
+            </button>
             <div className="text-right">
               <p className="text-sm text-gray-600">Signed in as</p>
               <p className="font-medium text-gray-900">{user.email}</p>
@@ -325,6 +347,15 @@ const VittaDocumentChat = () => {
             Your family financial intelligence platform is ready! Upload documents, ask questions, 
             and get AI-powered insights for credit card optimization and family spending coordination.
           </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <span className="text-sm text-gray-500">💳 New:</span>
+            <button
+              onClick={() => setCurrentScreen('creditCards')}
+              className="text-blue-600 hover:text-blue-700 font-medium underline"
+            >
+              Credit Card Management Dashboard
+            </button>
+          </div>
         </div>
 
         {/* Feature Grid */}
@@ -337,9 +368,9 @@ const VittaDocumentChat = () => {
             <p className="text-gray-600">Ask questions about your tax documents, bank statements, and receipts using natural language.</p>
           </div>
 
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('creditCards')}>
             <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-              <FileText className="w-6 h-6 text-green-600" />
+              <CreditCard className="w-6 h-6 text-green-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">Smart Card Optimization</h3>
             <p className="text-gray-600">Never use the wrong credit card again. Get real-time recommendations for maximum rewards.</p>
