@@ -1,0 +1,146 @@
+Here is a prioritized list of **Vitta’s core features** based on impact, feasibility for MVP/demo, and differentiation in the market:
+
+***
+
+## **Vitta Core Feature Priorities**
+
+1. **Auto-Optimized Credit Card Payment Recommendations**  
+   - Suggest monthly payment amounts per card based on APR, balance, and user’s total budget.  
+   - Key value driver to minimize interest and save money.
+   - Lets say I pay $1000 evry month for credit card bills and I've 3 cards now Vitta will suggest payment distribution for three cards based on APR, available balance and road o clear debt and saving money to user
+
+2. **Credit Card Linking & Transaction Aggregation**  
+   - Connect multiple cards, aggregate balances, transactions, APRs.  
+   - Foundation for all insights and recommendations.
+
+3. **Best Card Suggestion for Purchases**  
+   - Recommend which card to use for each purchase to maximize rewards and minimize utilization.This decision based on APR,available balance and rewards
+
+4. **Transaction Categorization with Tax Tagging**  
+   - Automatically categorize transactions.  
+   - Tag expenses for easier tax filing (business, deductible, personal).
+
+5. **Credit Utilization Tracking and Alerts**  
+   - Show credit usage per card with warnings for high utilization.  
+   - Helps users maintain good credit scores.
+
+6. **Simple AI-Powered Chatbot for Financial Guidance**  
+   - Answer user questions about payments, purchases, categories.  
+   - Enhance user engagement and personalized advice.
+
+7. **Interactive Dashboard with Unified Financial Overview**  
+   - Visualize balances, payment plans, key insights, and actionable tips.
+
+8. **BNPL (Buy Now, Pay Later) Management** *(optional for later MVP phases)*  
+   - Track BNPL plans alongside credit cards.  
+   - Integrate BNPL payment scheduling into budgeting and payment advice.
+
+***
+
+### **Why This Order?**
+
+- Features 1–3 deliver the most direct financial benefit and differentiate Vitta in the crowded personal finance space.
+- Features 4–5 enhance usability and depth of financial insights.
+- Feature 6 boosts engagement with AI and conversational UI.
+- Feature 7 ties everything together visually for better user experience.
+- BNPL, a growing important trend, can be added once core flows and credit card payments are stable.
+
+This prioritization balances delivering immediate value, technical feasibility, and long-term growth potential.Here is a prioritized list of **Vitta’s core features** based on impact, feasibility for MVP/demo, and differentiation in the market:
+
+***
+
+To cover Vitta’s core features effectively in a web app, a clean, intuitive wireframe structure is essential. Here’s an outline of what the wireframe should include for each major feature, organized to ensure smooth user flow and clarity:
+
+Vitta Web App Wireframe Structure
+1. Login / Onboarding Screen
+Simple login/signup with OAuth (Google, Apple) and email/password.
+
+Guided onboarding to link credit cards and set monthly payment budget.
+
+Quick tutorial highlighting core value: payment optimization, card suggestions, tax tagging.
+
+2. Dashboard (Home Screen)
+Top Summary Cards:
+
+Total credit card balance
+
+Available credit
+
+Monthly payment budget & recommended total payment
+
+Auto Payment Recommendations:
+
+Table or card list showing each credit card, balance, APR, minimum payment, and recommended payment amount.
+
+Best Card Suggestions:
+
+Highlight next best card to use based on rewards/utilization for upcoming transactions.
+
+Credit Utilization Alerts:
+
+Visual alerts or progress bars showing usage per card with warnings if above threshold.
+
+Quick Actions:
+
+Buttons for “Add Card,” “Upload Tax Docs,” or “Ask Chatbot.”
+
+3. Payments Detail Page
+Detailed transaction list per card (with filters for date, category).
+
+Editable payment recommendations with slider or input for user override.
+
+Visual breakdown of interest saved by following recommendations.
+
+4. Transactions & Categorization
+Full transaction list with category tags.
+
+Tax tagging toggle or option when reviewing transactions.
+
+Ability to add custom tags or notes (e.g., “India trip”).
+
+5. Card Suggestion Tool
+Input box for purchase category or merchant.
+
+Recommended card display with estimated rewards and utilization impact.
+
+6. Chatbot Interface
+Floating chatbot button available on all pages.
+
+Chat window with persistent conversation history.
+
+Example prompts or quick buttons for common questions (e.g., “How much tax did I pay last year?”).
+
+7. BNPL Management (If Implemented)
+Overview of active BNPL plans.
+
+Upcoming installment schedules and payment recommendations.
+
+Alerts for due dates or overspending risks.
+
+8. Settings & Profile
+User profile and security settings.
+
+Linked accounts management.
+
+Notification preferences (alerts for high utilization, bill due dates).
+
+Privacy and data permissions.
+
+Wireframe Flow Summary
+Screen	Key Components	Core Features Covered
+Login/Onboarding	Login, credit card linking, payment budget setup	Card linking, budget setting
+Dashboard	Summary cards, payment recommendations, alerts	Payment optimization, utilization tracking, card suggestions
+Payments Detail	Transaction list, payment editing, interest saved	Payment allocation, transaction review
+Transactions	Categorization, tagging, filtering	Categorization, tax tagging
+Card Suggestion	Purchase input, recommended card	Card recommendation
+Chatbot	Chat window with prompts	Conversational financial guidance
+BNPL Overview	BNPL plans and payments	BNPL management (optional)
+Settings	Profile, linked accounts, alerts	User & privacy controls
+Design Tips
+Use clear data visualization (progress bars, charts) for utilization and payment breakdowns.
+
+Keep navigation simple and consistent (top nav or sidebar).
+
+Prioritize mobile responsiveness—many users will access on phones.
+
+Use progressive disclosure: show summary first, drill down for details.

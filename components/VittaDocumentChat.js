@@ -1,6 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard } from 'lucide-react';
-import CreditCardScreen from './CreditCardScreen';
+import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Users, TrendingUp } from 'lucide-react';
+
+import FamilyManagementScreen from './FamilyManagementScreen';
+import dynamic from 'next/dynamic';
+const StatementAnalyzer = dynamic(() => import('./StatementAnalyzer'), { ssr: false });
+const Dashboard = dynamic(() => import('./Dashboard'), { ssr: false });
+
 
 const VittaDocumentChat = () => {
   // Authentication state
@@ -8,7 +13,7 @@ const VittaDocumentChat = () => {
   const [user, setUser] = useState(null);
   
   // Screen navigation state
-  const [currentScreen, setCurrentScreen] = useState('main'); // 'main' or 'creditCards'
+  const [currentScreen, setCurrentScreen] = useState('dashboard'); // 'dashboard', 'familyManagement', 'statementAnalyzer'
   
   // Existing states
   const [messages, setMessages] = useState([
@@ -123,6 +128,16 @@ const VittaDocumentChat = () => {
               Sign In
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => handleLogin('demo@vitta.ai', 'demo')}
+              className="text-sm text-blue-600 hover:text-blue-700"
+            >
+              Skip demo login
+            </button>
+          </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
             <h3 className="font-semibold text-blue-900 mb-2">What's New in Vitta:</h3>
@@ -298,10 +313,18 @@ const VittaDocumentChat = () => {
     return <LoginScreen />;
   }
 
-  // If credit card screen is active, show it
-  if (currentScreen === 'creditCards') {
-    return <CreditCardScreen onBack={() => setCurrentScreen('main')} user={user} />;
+
+
+  // If family management screen is active, show it
+  if (currentScreen === 'familyManagement') {
+    return <FamilyManagementScreen onBack={() => setCurrentScreen('dashboard')} user={user} />;
   }
+
+  if (currentScreen === 'statementAnalyzer') {
+    return <StatementAnalyzer onBack={() => setCurrentScreen('dashboard')} />;
+  }
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -321,12 +344,25 @@ const VittaDocumentChat = () => {
           
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setCurrentScreen('creditCards')}
-              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg"
+              onClick={() => setCurrentScreen('dashboard')}
+              className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-all shadow-lg ${currentScreen === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
             >
-              <CreditCard className="w-4 h-4" />
-              Credit Cards
+              Dashboard
             </button>
+            <button
+              onClick={() => setCurrentScreen('familyManagement')}
+              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg"
+            >
+              <Users className="w-4 h-4" />
+              Family
+            </button>
+            <button
+              onClick={() => setCurrentScreen('statementAnalyzer')}
+              className="flex items-center gap-2 px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all shadow-lg"
+            >
+              Analyze Statement
+            </button>
+
             <div className="text-right">
               <p className="text-sm text-gray-600">Signed in as</p>
               <p className="font-medium text-gray-900">{user.email}</p>
@@ -341,71 +377,27 @@ const VittaDocumentChat = () => {
           </div>
         </div>
 
-        {/* Updated description for authenticated users */}
-        <div className="text-center mb-16">
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Your family financial intelligence platform is ready! Upload documents, ask questions, 
-            and get AI-powered insights for credit card optimization and family spending coordination.
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <span className="text-sm text-gray-500">💳 New:</span>
-            <button
-              onClick={() => setCurrentScreen('creditCards')}
-              className="text-blue-600 hover:text-blue-700 font-medium underline"
-            >
-              Credit Card Management Dashboard
-            </button>
-          </div>
-        </div>
-
-        {/* Feature Grid */}
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
-              <MessageCircle className="w-6 h-6 text-blue-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Document Chat</h3>
-            <p className="text-gray-600">Ask questions about your tax documents, bank statements, and receipts using natural language.</p>
-          </div>
-
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('creditCards')}>
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-              <CreditCard className="w-6 h-6 text-green-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Smart Card Optimization</h3>
-            <p className="text-gray-600">Never use the wrong credit card again. Get real-time recommendations for maximum rewards.</p>
-          </div>
-
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-              <Upload className="w-6 h-6 text-purple-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Family Coordination</h3>
-            <p className="text-gray-600">Real-time spending visibility and coordination across all family members and accounts.</p>
-          </div>
-        </div>
-
-        {/* CTA Section */}
-        <div className="text-center">
-          <p className="text-gray-600 mb-6">Start by chatting with your AI assistant</p>
-          <button
-            onClick={() => setIsOpen(true)}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
-          >
-            Open AI Assistant
-          </button>
+        {/* Dashboard Content */}
+        <div className="mb-16">
+          <Dashboard
+            onOpenAnalyzer={() => setCurrentScreen('statementAnalyzer')}
+            onOpenOptimizer={() => setCurrentScreen('familyManagement')}
+            onOpenCards={() => setCurrentScreen('familyManagement')}
+          />
         </div>
       </div>
 
-      {/* Floating Chat Widget */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all hover:scale-110 flex items-center justify-center z-50"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </button>
-      )}
+              {/* Floating Chat Widget */}
+        {!isOpen && (
+          <button
+            onClick={() => setIsOpen(true)}
+            className="fixed bottom-6 right-6 w-20 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all hover:scale-110 flex items-center justify-center z-50 px-4"
+            title="Open Vitta AI Assistant"
+          >
+            <MessageCircle className="w-5 h-5 mr-2" />
+            <span className="text-sm font-medium">Vitta AI</span>
+          </button>
+        )}
 
       {/* Chat Interface */}
       {isOpen && (
