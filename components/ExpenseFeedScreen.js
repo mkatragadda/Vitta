@@ -502,7 +502,7 @@ const ExpenseFeedScreen = ({ onBack, user }) => {
                             ⚠️ Interest Warning: Pay in full before statement date
                           </p>
                           <p className="text-xs text-red-700 mt-1">
-                            If you carry a balance, you'll pay ${(transaction.amount * transaction.card.apr / 100 / 12).toFixed(2)} in interest per month on this purchase
+                            If you carry a balance, you&apos;ll pay ${(transaction.amount * transaction.card.apr / 100 / 12).toFixed(2)} in interest per month on this purchase
                           </p>
                           <div className="mt-2 text-xs text-red-600">
                             <span className="font-medium">Monthly Interest:</span> ${(transaction.amount * transaction.card.apr / 100 / 12).toFixed(2)} | 
@@ -535,7 +535,7 @@ const ExpenseFeedScreen = ({ onBack, user }) => {
 
                   {/* Notes */}
                   {transaction.notes && (
-                    <p className="text-sm text-gray-600 italic">"{transaction.notes}"</p>
+                    <p className="text-sm text-gray-600 italic">&quot;{transaction.notes}&quot;</p>
                   )}
                 </div>
               </div>

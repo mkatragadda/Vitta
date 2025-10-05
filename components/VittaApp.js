@@ -3,7 +3,141 @@ import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut,
 import CreditCardScreen from './CreditCardScreen';
 import PaymentOptimizer from './PaymentOptimizer';
 
-const VittaDocumentChat = () => {
+// Component to render message content with clickable links and tables
+const MessageContent = ({ content }) => {
+  // Parse markdown-style links [text](url)
+  const parseMarkdownLinks = (text) => {
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(text)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      
+      // Add the link
+      parts.push(
+        <a 
+          key={match.index}
+          href={match[2]} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline font-medium"
+        >
+          {match[1]}
+        </a>
+      );
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    
+    return parts.length > 0 ? parts : text;
+  };
+
+  // Check if content contains a table
+  const isTable = content.includes('|') && content.includes('---');
+  
+  if (isTable) {
+    const lines = content.split('\n');
+    const tableLines = [];
+    const otherLines = [];
+    let inTable = false;
+    
+    lines.forEach(line => {
+      if (line.includes('|') && (line.includes('**Card**') || line.includes('---') || inTable)) {
+        inTable = true;
+        tableLines.push(line);
+      } else {
+        if (inTable && line.trim() === '') {
+          inTable = false;
+        }
+        if (!inTable) {
+          otherLines.push(line);
+        }
+      }
+    });
+    
+    return (
+      <>
+        {/* Render non-table content first */}
+        {otherLines.slice(0, otherLines.findIndex(line => tableLines.length > 0)).map((line, index) => (
+          <React.Fragment key={`before-${index}`}>
+            {parseMarkdownLinks(line)}
+            <br />
+          </React.Fragment>
+        ))}
+        
+        {/* Render table if exists */}
+        {tableLines.length > 0 && (
+          <div className="my-4 overflow-x-auto">
+            <table className="w-full text-xs border-collapse border border-gray-300">
+              {tableLines.map((line, index) => {
+                if (line.includes('---')) return null; // Skip separator line
+                
+                const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+                const isHeader = index === 0;
+                
+                return isHeader ? (
+                  <thead key={index}>
+                    <tr className="bg-gray-100">
+                      {cells.map((cell, cellIndex) => (
+                        <th key={cellIndex} className="border border-gray-300 px-2 py-1 text-left font-semibold">
+                          {parseMarkdownLinks(cell.replace(/\*\*/g, ''))}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                ) : (
+                  <tbody key={index}>
+                    <tr className="hover:bg-gray-50">
+                      {cells.map((cell, cellIndex) => (
+                        <td key={cellIndex} className="border border-gray-300 px-2 py-1">
+                          {parseMarkdownLinks(cell.replace(/\*\*/g, ''))}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                );
+              })}
+            </table>
+          </div>
+        )}
+        
+        {/* Render remaining non-table content */}
+        {otherLines.slice(otherLines.findIndex(line => tableLines.length > 0) + 1).map((line, index) => (
+          <React.Fragment key={`after-${index}`}>
+            {parseMarkdownLinks(line)}
+            {index < otherLines.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </>
+    );
+  }
+  
+  // Regular content without tables
+  const lines = content.split('\n');
+  
+  return (
+    <>
+      {lines.map((line, index) => (
+        <React.Fragment key={index}>
+          {parseMarkdownLinks(line)}
+          {index < lines.length - 1 && <br />}
+        </React.Fragment>
+      ))}
+    </>
+  );
+};
+
+const VittaApp = () => {
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -47,9 +181,9 @@ const VittaDocumentChat = () => {
   // Google OAuth handler
   const handleGoogleSignIn = (response) => {
     try {
-      // Decode the JWT token to get user info
+      console.log('[Vitta] Google OAuth Success!', response);
       const payload = JSON.parse(atob(response.credential.split('.')[1]));
-      
+      console.log('[Vitta] Decoded payload:', payload);
       setUser({
         email: payload.email,
         name: payload.name,
@@ -58,30 +192,137 @@ const VittaDocumentChat = () => {
         provider: 'google'
       });
       setIsAuthenticated(true);
-      
-      // Add welcome message
       setMessages(prev => [...prev, {
         type: 'bot',
         content: `Welcome back, ${payload.name}! I'm ready to help you with your financial documents and credit card optimization. What would you like to know?`,
         timestamp: new Date()
       }]);
     } catch (error) {
-      console.error('Google sign-in error:', error);
-      alert('Google sign-in failed. Please try again.');
+      console.error('[Vitta] Google sign-in error:', error);
+      console.error('[Vitta] Full error details:', error);
+
+      // Check for specific error types
+      if (error.message && error.message.includes('origin')) {
+        alert(`OAuth Error: The current origin (${window.location.origin}) is not authorized.\n\nTroubleshooting steps:\n1. Verify origins are added to Google Console\n2. Wait 5-15 minutes for propagation\n3. Clear browser cache completely\n4. Try incognito/private window\n5. Ensure signed in with way2vitta@gmail.com`);
+      } else {
+        alert('Google sign-in failed. Please try again.');
+      }
     }
   };
 
-  // Initialize Google OAuth
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.google) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'demo_client_id_for_testing',
+  // Initialize Google OAuth (ensure init after script load)
+  const [isGsiInitialized, setIsGsiInitialized] = useState(false);
+  const [gsiStatus, setGsiStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
+  const [hasRenderedGsiButton, setHasRenderedGsiButton] = useState(false);
+  const gsiButtonRef = useRef(null);
+
+  const initializeGsiIfNeeded = () => {
+    if (typeof window === 'undefined') return false;
+    const gsi = window.google && window.google.accounts && window.google.accounts.id;
+    if (!gsi) {
+      console.log('[Vitta] Google GSI not loaded yet');
+      return false;
+    }
+    if (isGsiInitialized) return true;
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+    // Don't initialize if no real client ID is provided
+    if (!clientId) {
+      console.log('[Vitta] No Google Client ID provided - skipping Google OAuth initialization');
+      setGsiStatus('disabled');
+      return false;
+    }
+
+    console.log('[Vitta] Initializing GSI with Client ID:', clientId);
+    console.log('[Vitta] Current origin:', window.location.origin);
+    console.log('[Vitta] Current hostname:', window.location.hostname);
+    console.log('[Vitta] Current port:', window.location.port);
+    console.log('[Vitta] Current protocol:', window.location.protocol);
+    console.log('[Vitta] Required Google Console Origins:', [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:3002'
+    ]);
+    try {
+      gsi.initialize({
+        client_id: clientId,
         callback: handleGoogleSignIn,
         auto_select: false,
-        cancel_on_tap_outside: true
+        cancel_on_tap_outside: true,
+        // Explicitly disable FedCM to avoid conflicts
+        use_fedcm_for_prompt: false,
+        // Add additional configuration for better compatibility
+        itp_support: true
       });
+      setIsGsiInitialized(true);
+      setGsiStatus('ready');
+      console.log('[Vitta] GSI initialized successfully');
+      // Render official Google button if container exists
+      if (gsiButtonRef.current && !hasRenderedGsiButton) {
+        try {
+          gsi.renderButton(gsiButtonRef.current, {
+            theme: 'outline',
+            size: 'large',
+            type: 'standard',
+            text: 'continue_with',
+            shape: 'pill',
+            logo_alignment: 'left'
+          });
+          setHasRenderedGsiButton(true);
+          console.log('[Vitta] GSI button rendered successfully');
+        } catch (e) {
+          console.warn('[Vitta] GSI renderButton failed:', e);
+        }
+      }
+      return true;
+    } catch (e) {
+      console.error('[Vitta] GSI initialize failed:', e);
+      setGsiStatus('error');
+      return false;
     }
+  };
+
+  useEffect(() => {
+    // Try immediately
+    if (initializeGsiIfNeeded()) return;
+    // Poll until script loads
+    const intervalId = setInterval(() => {
+      if (initializeGsiIfNeeded()) {
+        clearInterval(intervalId);
+      }
+    }, 200);
+    // Safety timeout after 8s
+    const timeoutId = setTimeout(() => clearInterval(intervalId), 8000);
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
   }, []);
+
+  // Ensure official Google button renders once initialized and ref is ready
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const gsi = window.google && window.google.accounts && window.google.accounts.id;
+    if (!gsi) return;
+    if (isGsiInitialized && gsiButtonRef.current && !hasRenderedGsiButton) {
+      try {
+        gsi.renderButton(gsiButtonRef.current, {
+          theme: 'outline',
+          size: 'large',
+          type: 'standard',
+          text: 'continue_with',
+          shape: 'pill',
+          logo_alignment: 'left'
+        });
+        setHasRenderedGsiButton(true);
+      } catch (e) {
+        console.warn('GSI renderButton failed in effect:', e);
+      }
+    }
+  }, [isGsiInitialized, hasRenderedGsiButton]);
 
   // Logout handler
   const handleLogout = () => {
@@ -101,18 +342,12 @@ const VittaDocumentChat = () => {
   const LoginScreen = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const clientIdPresent = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
     const handleSubmit = (e) => {
       e.preventDefault();
       if (email && password) {
         handleLogin(email, password);
-      }
-    };
-
-    // Google Sign-In button click handler
-    const handleGoogleSignInClick = () => {
-      if (typeof window !== 'undefined' && window.google) {
-        window.google.accounts.id.prompt(); // Show the One Tap dialog
       }
     };
 
@@ -136,14 +371,68 @@ const VittaDocumentChat = () => {
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Vitta</h1>
             <p className="text-gray-600">Your family&apos;s financial intelligence platform</p>
+            <div className="mt-2 text-xs text-gray-500">
+              {clientIdPresent ? (
+                <span>Google Sign-In configured</span>
+              ) : (
+                <span>Google Sign-In not configured</span>
+              )}
+              {gsiStatus && (
+                <span className="ml-2">· Status: {gsiStatus}</span>
+              )}
+              <div className="mt-1">
+                Client ID: {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? 'Set' : 'Not Set'}
+              </div>
+            </div>
           </div>
 
           {/* Google OAuth Sign-In */}
-          <div className="mb-6">
-            <button
+          {gsiStatus !== 'disabled' && (
+            <div className="mb-6">
+              <div className="w-full">
+                <div className="text-center text-sm text-gray-600 mb-2">
+                  {gsiStatus === 'loading' && 'Loading Google Sign-In...'}
+                  {gsiStatus === 'ready' && 'Google Sign-In ready'}
+                  {gsiStatus === 'error' && 'Google Sign-In failed to initialize'}
+                </div>
+                <div ref={gsiButtonRef} className="w-full flex items-center justify-center min-h-[46px]" />
+              </div>
+              <button
               type="button"
-              onClick={handleGoogleSignInClick}
-              className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              onClick={() => {
+                const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+                console.log('[Vitta] Manual Google Sign-In attempt');
+                console.log('[Vitta] Client ID:', clientId || 'Not provided');
+                console.log('[Vitta] GSI Status:', gsiStatus);
+
+                if (!clientId) {
+                  alert('Google Sign-In is disabled in demo mode. Please use email/password login.');
+                  return;
+                }
+
+                // Try to initialize if not ready
+                const ready = initializeGsiIfNeeded();
+
+                if (typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id) {
+                  try {
+                    console.log('[Vitta] Triggering Google prompt');
+                    window.google.accounts.id.prompt({
+                      hd: undefined, // Allow any domain
+                      use_fedcm_for_prompt: false // Disable FedCM
+                    });
+                  } catch (error) {
+                    console.error('[Vitta] Error triggering Google prompt:', error);
+                    alert('Google Sign-In error: ' + error.message);
+                  }
+                } else if (!ready) {
+                  console.warn('[Vitta] Google Sign-In not ready');
+                  alert('Google Sign-In is still loading. Please try again in a moment.');
+                } else {
+                  console.error('[Vitta] Google GSI library not available');
+                  alert('Google Sign-In library failed to load. Please refresh the page.');
+                }
+              }}
+              className="mt-3 w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -153,17 +442,34 @@ const VittaDocumentChat = () => {
               </svg>
               Continue with Google
             </button>
-          </div>
+            <div className="mt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+                  console.log('[Vitta] NEXT_PUBLIC_GOOGLE_CLIENT_ID (retry):', clientId || 'Not provided');
 
-          {/* Divider */}
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">Or continue with email</span>
+                  if (!clientId) {
+                    alert('Google Sign-In is disabled in demo mode. Please use email/password login.');
+                    return;
+                  }
+
+                  const ready = initializeGsiIfNeeded();
+                  if (typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id) {
+                    window.google.accounts.id.prompt({
+                      use_fedcm_for_prompt: false // Disable FedCM
+                    });
+                  } else if (!ready) {
+                    alert('Google Sign-In is still loading. Please try again in a moment.');
+                  }
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Having trouble? Try again
+              </button>
             </div>
           </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -276,10 +582,194 @@ const VittaDocumentChat = () => {
     };
   };
 
+  // Mock credit card recommendations database
+  const creditCardRecommendations = {
+    zeroAPR: [
+      {
+        name: "Chase Freedom Unlimited®",
+        issuer: "Chase",
+        introAPR: "0% APR for 15 months on purchases and balance transfers",
+        regularAPR: "19.74% - 28.74% Variable",
+        annualFee: "$0",
+        signupBonus: "$200 cash back after spending $500 in first 3 months",
+        rewards: "1.5% cash back on all purchases",
+        benefits: ["No foreign transaction fees", "Purchase protection", "Extended warranty"],
+        bestFor: "Everyday spending with 0% intro period",
+        applyUrl: "https://creditcards.chase.com"
+      },
+      {
+        name: "Citi Simplicity® Card",
+        issuer: "Citi",
+        introAPR: "0% APR for 21 months on purchases and balance transfers",
+        regularAPR: "17.24% - 27.24% Variable",
+        annualFee: "$0",
+        signupBonus: "No signup bonus",
+        rewards: "No rewards program",
+        benefits: ["No late fees", "No penalty APR", "No annual fee"],
+        bestFor: "Long-term 0% financing and debt consolidation",
+        applyUrl: "https://www.citi.com/credit-cards"
+      },
+      {
+        name: "Wells Fargo Reflect® Card",
+        issuer: "Wells Fargo", 
+        introAPR: "0% APR for 21 months on purchases and qualifying balance transfers",
+        regularAPR: "16.49% - 27.24% Variable",
+        annualFee: "$0",
+        signupBonus: "No signup bonus",
+        rewards: "No rewards program",
+        benefits: ["Cell phone protection", "Zero liability protection"],
+        bestFor: "Extended 0% period for large purchases",
+        applyUrl: "https://www.wellsfargo.com/credit-cards"
+      }
+    ],
+    travelRewards: [
+      {
+        name: "Chase Sapphire Preferred®",
+        issuer: "Chase",
+        introAPR: "No intro APR offer",
+        regularAPR: "19.74% - 26.74% Variable",
+        annualFee: "$95 (waived first year)",
+        signupBonus: "60,000 bonus points after spending $4,000 in first 3 months",
+        rewards: "2x points on travel and dining, 1x on everything else",
+        benefits: ["No foreign transaction fees", "Trip cancellation insurance", "Baggage delay insurance", "25% more value when redeeming through Chase Travel"],
+        bestFor: "European travel with excellent trip protections",
+        applyUrl: "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred"
+      },
+      {
+        name: "Capital One Venture Rewards",
+        issuer: "Capital One",
+        introAPR: "No intro APR offer", 
+        regularAPR: "19.74% - 29.24% Variable",
+        annualFee: "$95",
+        signupBonus: "75,000 miles after spending $4,000 in first 3 months",
+        rewards: "2x miles on every purchase",
+        benefits: ["No foreign transaction fees", "Travel accident insurance", "24/7 travel assistance", "Global Entry/TSA PreCheck credit"],
+        bestFor: "Simple flat-rate travel rewards for Europe trips",
+        applyUrl: "https://www.capitalone.com/credit-cards/venture"
+      },
+      {
+        name: "American Express® Gold Card",
+        issuer: "American Express",
+        introAPR: "No intro APR offer",
+        regularAPR: "19.74% - 26.74% Variable", 
+        annualFee: "$250",
+        signupBonus: "60,000 Membership Rewards points after spending $4,000 in first 6 months",
+        rewards: "4x points at restaurants & U.S. supermarkets, 3x points on flights",
+        benefits: ["No foreign transaction fees", "Baggage insurance", "Trip delay insurance", "$120 dining credit", "$120 Uber Cash"],
+        bestFor: "European dining and flight bookings with premium perks",
+        applyUrl: "https://www.americanexpress.com/us/credit-cards/card/gold-card"
+      }
+    ],
+    zeroAPRTravel: [
+      {
+        name: "Bank of America® Travel Rewards",
+        issuer: "Bank of America",
+        introAPR: "0% APR for 21 months on purchases and balance transfers",
+        regularAPR: "16.24% - 26.24% Variable",
+        annualFee: "$0",
+        signupBonus: "25,000 bonus points after spending $1,000 in first 90 days",
+        rewards: "1.5x points on all purchases",
+        benefits: ["No foreign transaction fees", "No annual fee", "No category restrictions"],
+        bestFor: "Europe trip with 0% financing and travel rewards",
+        applyUrl: "https://www.bankofamerica.com/credit-cards/travel-rewards-credit-card"
+      },
+      {
+        name: "Discover it® Miles",
+        issuer: "Discover",
+        introAPR: "0% APR for 15 months on purchases",
+        regularAPR: "16.24% - 25.24% Variable",
+        annualFee: "$0", 
+        signupBonus: "Match all miles earned at end of first year",
+        rewards: "1.5x miles on all purchases",
+        benefits: ["No foreign transaction fees", "Free FICO credit score", "Freeze your account instantly"],
+        bestFor: "Europe travel with first-year mile matching",
+        applyUrl: "https://www.discover.com/credit-cards/travel/it-miles"
+      }
+    ]
+  };
+
   // Mock AI responses based on query
   const generateResponse = (query, docs) => {
     const q = query.toLowerCase();
     
+    // Credit card application recommendations
+    if ((q.includes('recommend') || q.includes('suggest') || q.includes('apply')) && q.includes('credit card')) {
+      let recommendations = [];
+      let responseHeader = "🎯 **Credit Card Recommendations for You:**\n\n";
+      
+      // Check for specific criteria
+      const wantsZeroAPR = q.includes('0%') || q.includes('zero') || q.includes('intro apr') || q.includes('no interest');
+      const wantsTravel = q.includes('travel') || q.includes('europe') || q.includes('trip') || q.includes('vacation') || q.includes('miles') || q.includes('points');
+      
+      if (wantsZeroAPR && wantsTravel) {
+        // Best of both worlds - cards with 0% APR AND travel rewards
+        recommendations = creditCardRecommendations.zeroAPRTravel;
+        responseHeader += "Perfect! I found cards that combine 0% intro APR with travel rewards for your Europe trip:\n\n";
+      } else if (wantsZeroAPR) {
+        // Focus on 0% APR cards
+        recommendations = creditCardRecommendations.zeroAPR;
+        responseHeader += "Here are the best 0% APR credit cards currently available:\n\n";
+      } else if (wantsTravel) {
+        // Focus on travel rewards cards
+        recommendations = creditCardRecommendations.travelRewards;
+        responseHeader += "Here are the top travel rewards cards perfect for your Europe trip:\n\n";
+      } else {
+        // General recommendation
+        recommendations = [...creditCardRecommendations.zeroAPRTravel, ...creditCardRecommendations.travelRewards.slice(0,1)];
+        responseHeader += "Here are some excellent credit card options to consider:\n\n";
+      }
+      
+      let response = responseHeader;
+      
+      // Create table header
+      response += `| **Card** | **Issuer** | **Intro APR** | **Annual Fee** | **Signup Bonus** | **Rewards** | **Apply** |\n`;
+      response += `|----------|------------|---------------|----------------|------------------|-------------|----------||\n`;
+      
+      // Add each card as a table row
+      recommendations.forEach((card, index) => {
+        const shortName = card.name.replace(/®|™/g, '').substring(0, 20) + (card.name.length > 20 ? '...' : '');
+        const shortAPR = card.introAPR.length > 20 ? card.introAPR.substring(0, 20) + '...' : card.introAPR;
+        const shortBonus = card.signupBonus.length > 25 ? card.signupBonus.substring(0, 25) + '...' : card.signupBonus;
+        const shortRewards = card.rewards.length > 20 ? card.rewards.substring(0, 20) + '...' : card.rewards;
+        
+        response += `| ${shortName} | ${card.issuer} | ${shortAPR} | ${card.annualFee} | ${shortBonus} | ${shortRewards} | [Apply →](${card.applyUrl}) |\n`;
+      });
+      
+      response += `\n`;
+      
+      // Add detailed information below table
+      response += `📋 **Detailed Information:**\n\n`;
+      recommendations.forEach((card, index) => {
+        response += `**${index + 1}. ${card.name}**\n`;
+        response += `✅ **Best For:** ${card.bestFor}\n`;
+        if (card.benefits.length > 0) {
+          response += `🛡️ **Key Benefits:** ${card.benefits.slice(0,3).join(", ")}\n`;
+        }
+        response += `\n`;
+      });
+      
+      if (wantsTravel && q.includes('europe')) {
+        response += "\n💡 **Europe Travel Tips:**\n";
+        response += "• All recommended cards have no foreign transaction fees\n";
+        response += "• Consider cards with trip protection for international travel\n";
+        response += "• Sign up 2-3 months before your trip to meet signup bonus requirements\n";
+        response += "• Notify your card issuer of travel plans to avoid blocks\n\n";
+      }
+      
+      if (wantsZeroAPR) {
+        response += "\n⚠️ **0% APR Important Notes:**\n";
+        response += "• Pay off balance before intro rate expires\n";
+        response += "• Make minimum payments on time to keep 0% rate\n";
+        response += "• Plan your Europe trip expenses within the intro period\n\n";
+      }
+      
+      // Add quick apply section
+      response += "\n🎯 **Ready to Apply?** Click the \"Apply Now\" links above to get started!\n\n";
+      response += "💬 **Want more details?** Ask me about specific cards, approval requirements, or compare cards side-by-side!";
+      
+      return response;
+    }
+
     if (q.includes('tax') || q.includes('w2') || q.includes('1099')) {
       return "Based on your uploaded tax documents, I found:\n\n• W-2 from TechCorp Inc: $85,000 in wages, $12,500 federal tax withheld\n• 1099 income: $15,000 from freelance work\n• Total taxable income: $100,000\n\nWould you like me to help estimate your tax liability or find specific deductions?";
     }
@@ -371,11 +861,14 @@ const VittaDocumentChat = () => {
   };
 
   const sampleQuestions = [
+    "Recommend a credit card with 0% APR for my Europe trip",
+    "What's the best travel rewards credit card for Europe?",
+    "Suggest a credit card with no annual fee and travel rewards",
+    "Show me credit card options in a table format",
     "What's my total tax liability?",
     "When are my credit card payments due?",
     "Show me my business expenses",
-    "Give me a financial summary",
-    "Which card should I use for groceries?"
+    "Give me a financial summary"
   ];
 
   // If not authenticated, show login screen
@@ -525,12 +1018,12 @@ const VittaDocumentChat = () => {
 
         {/* CTA Section */}
         <div className="text-center">
-          <p className="text-gray-600 mb-6">Start by chatting with your AI assistant</p>
+          <p className="text-gray-600 mb-6">Start by chatting with your Vitta AI Assistant</p>
           <button
             onClick={() => setIsOpen(true)}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
           >
-            Open AI Assistant
+            Open Vitta AI Assistant
           </button>
         </div>
       </div>
@@ -632,7 +1125,7 @@ const VittaDocumentChat = () => {
                           : 'bg-gray-50 text-gray-900 rounded-bl-md'
                       }`}>
                         <div className="whitespace-pre-line text-sm leading-relaxed">
-                          {message.content}
+                          <MessageContent content={message.content} />
                         </div>
                         <div className="text-xs opacity-70 mt-1">
                           {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -714,4 +1207,4 @@ const VittaDocumentChat = () => {
   );
 };
 
-export default VittaDocumentChat;
+export default VittaApp;

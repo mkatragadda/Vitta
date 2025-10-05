@@ -58,7 +58,7 @@ npm run dev
 ### Usage
 1. Open [http://localhost:3000](http://localhost:3000)
 2. Enter any email and password combination to access the demo
-3. Upload financial documents or start chatting with the AI assistant
+3. Upload financial documents or start chatting with the Vitta AI Assistant
 4. Click "Credit Cards" to access the comprehensive credit card management dashboard
 5. Explore different cards, analyze spending patterns, and get optimization tips
 
@@ -74,7 +74,7 @@ npm run dev
 ```
 vitta-document-chat/
 ├── components/
-│   ├── VittaDocumentChat.js    # Main application component
+│   ├── VittaApp.js             # Main application component
 │   └── CreditCardScreen.js     # Credit card management dashboard
 ├── pages/
 │   ├── _app.js                 # App wrapper
@@ -251,7 +251,7 @@ Vitta is the first AI-powered platform built specifically for families managing 
 
 ### **Modern Interface Design**
 - **Responsive Design** - Works on desktop, tablet, and mobile
-- **Floating Chat Widget** - Always-accessible AI assistant
+- **Floating Chat Widget** - Always-accessible Vitta AI Assistant
 - **Clean Dashboard** - Intuitive financial overview
 - **Real-time Updates** - Live transaction feeds and alerts
 
@@ -329,7 +329,7 @@ This comprehensive feature list showcases Vitta as a sophisticated, family-first
 - Citi Double Cash (Mastercard)
 - Dynamic spending patterns and balances
 
-### AI Assistant
+### Vitta AI Assistant
 - Context-aware responses
 - Document-specific insights
 - Credit card optimization advice
@@ -345,7 +345,7 @@ This comprehensive feature list showcases Vitta as a sophisticated, family-first
 
 ### Adding New Features
 1. Create new components in the `components/` directory
-2. Update the main `VittaDocumentChat.js` component
+2. Update the main `VittaApp.js` component
 3. Add new screen states and navigation as needed
 4. Test with `npm run build` to ensure no syntax errors
 
