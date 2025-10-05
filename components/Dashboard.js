@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, AlertCircle, TrendingUp } from 'lucide-react';
+import { FileText, AlertCircle, TrendingUp, ArrowLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
 const PaymentOptimizer = dynamic(() => import('./PaymentOptimizer'), { ssr: false });
 
@@ -13,7 +13,7 @@ const readPersistedTx = () => {
   }
 };
 
-const Dashboard = ({ apr = 18.99, onOpenAnalyzer, onOpenCards }) => {
+const Dashboard = ({ apr = 18.99, onOpenAnalyzer, onOpenCards, onBack, user }) => {
   const [transactions, setTransactions] = useState([]);
   const optimizerRef = useRef(null);
 
@@ -43,56 +43,84 @@ const Dashboard = ({ apr = 18.99, onOpenAnalyzer, onOpenCards }) => {
   const groceriesSpend = summary.byCategory['Groceries'] || 0;
 
   return (
-    <div className="space-y-6">
-      {/* KPI Strip */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-lg text-center">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <FileText className="w-6 h-6 text-blue-600" />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onBack}
+              className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition-shadow"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-gray-600">Your smart payment recommendations and card insights</p>
+            </div>
           </div>
-          <p className="text-sm text-gray-600">Total Amount Spent (this Cycle)</p>
-          <p className="text-2xl font-bold text-gray-900">${summary.totalSpend.toLocaleString()}</p>
-        </div>
-        <div className="bg-white rounded-xl p-6 shadow-lg text-center">
-          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <AlertCircle className="w-6 h-6 text-red-600" />
-          </div>
-          <p className="text-sm text-gray-600">Estimated Interest (this cycle)</p>
-          <p className="text-2xl font-bold text-red-600">${monthlyInterest.toLocaleString()}</p>
-        </div>
-        <div className="bg-white rounded-xl p-6 shadow-lg text-center">
-          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <TrendingUp className="w-6 h-6 text-green-600" />
-          </div>
-          <p className="text-sm text-gray-600">Amount Spent on Groceries</p>
-          <p className="text-2xl font-bold text-green-600">${groceriesSpend.toLocaleString()}</p>
-        </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <button onClick={onOpenAnalyzer} className="bg-white rounded-xl p-6 text-left shadow-lg hover:shadow-xl transition-shadow">
-          <p className="text-lg font-semibold text-gray-900 mb-2">Analyze Statement</p>
-          <p className="text-gray-600">Upload CSV/PDF to extract spend, interest risk, subscriptions.</p>
-        </button>
-        <button onClick={() => optimizerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="bg-white rounded-xl p-6 text-left shadow-lg hover:shadow-xl transition-shadow">
-          <p className="text-lg font-semibold text-gray-900 mb-2">Smart Paydown</p>
-          <p className="text-gray-600">Distribute budget across cards to minimize interest.</p>
-        </button>
-        <button onClick={onOpenCards} className="bg-white rounded-xl p-6 text-left shadow-lg hover:shadow-xl transition-shadow">
-          <p className="text-lg font-semibold text-gray-900 mb-2">Best Card Suggestions</p>
-          <p className="text-gray-600">Pick the right card for groceries/dining/gas right now.</p>
-        </button>
-      </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm text-gray-600">Welcome back</p>
+              <p className="font-medium text-gray-900">{user?.name || 'User'}</p>
+            </div>
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-sm">V</span>
+            </div>
+          </div>
+        </div>
 
-      {/* Payment Optimizer */}
-      <div ref={optimizerRef}>
-        <PaymentOptimizer />
+        <div className="space-y-6">
+          {/* KPI Strip */}
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <FileText className="w-6 h-6 text-blue-600" />
+              </div>
+              <p className="text-sm text-gray-600">Total Amount Spent (this Cycle)</p>
+              <p className="text-2xl font-bold text-gray-900">${summary.totalSpend.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <p className="text-sm text-gray-600">Estimated Interest (this cycle)</p>
+              <p className="text-2xl font-bold text-red-600">${monthlyInterest.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <TrendingUp className="w-6 h-6 text-green-600" />
+              </div>
+              <p className="text-sm text-gray-600">Amount Spent on Groceries</p>
+              <p className="text-2xl font-bold text-green-600">${groceriesSpend.toLocaleString()}</p>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="grid md:grid-cols-3 gap-6">
+            <button onClick={onOpenAnalyzer} className="bg-white rounded-xl p-6 text-left shadow-lg hover:shadow-xl transition-shadow">
+              <p className="text-lg font-semibold text-gray-900 mb-2">Analyze Statement</p>
+              <p className="text-gray-600">Upload CSV/PDF to extract spend, interest risk, subscriptions.</p>
+            </button>
+            <button onClick={() => optimizerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="bg-white rounded-xl p-6 text-left shadow-lg hover:shadow-xl transition-shadow">
+              <p className="text-lg font-semibold text-gray-900 mb-2">Smart Paydown</p>
+              <p className="text-gray-600">Distribute budget across cards to minimize interest.</p>
+            </button>
+            <button onClick={onOpenCards} className="bg-white rounded-xl p-6 text-left shadow-lg hover:shadow-xl transition-shadow">
+              <p className="text-lg font-semibold text-gray-900 mb-2">Best Card Suggestions</p>
+              <p className="text-gray-600">Pick the right card for groceries/dining/gas right now.</p>
+            </button>
+          </div>
+
+          {/* Payment Optimizer */}
+          <div ref={optimizerRef}>
+            <PaymentOptimizer />
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default Dashboard;
-
-

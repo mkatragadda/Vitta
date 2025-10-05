@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator } from 'lucide-react';
+import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet } from 'lucide-react';
 import CreditCardScreen from './CreditCardScreen';
 import PaymentOptimizer from './PaymentOptimizer';
+import Dashboard from './Dashboard';
 
 // Component to render message content with clickable links and tables
 const MessageContent = ({ content }) => {
@@ -143,13 +144,13 @@ const VittaApp = () => {
   const [user, setUser] = useState(null);
   
   // Screen navigation state
-  const [currentScreen, setCurrentScreen] = useState('main'); // 'main', 'creditCards', or 'paymentOptimizer'
+  const [currentScreen, setCurrentScreen] = useState('main'); // 'main', 'creditCards', 'paymentOptimizer', 'dashboard'
   
   // Existing states
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      content: "Hi! I'm your Vitta AI assistant. Upload your financial documents and I'll help you find information instantly.",
+      content: "Hi! I'm your Vitta AI assistant. I can help you choose the best credit card for any purchase, optimize your payments, and maximize your rewards. Ask me anything!",
       timestamp: new Date()
     }
   ]);
@@ -331,7 +332,7 @@ const VittaApp = () => {
     setCurrentScreen('main');
     setMessages([{
       type: 'bot',
-      content: "Hi! I'm your Vitta AI assistant. Upload your financial documents and I'll help you find information instantly.",
+      content: "Hi! I'm your Vitta AI assistant. I can help you choose the best credit card for any purchase, optimize your payments, and maximize your rewards. Ask me anything!",
       timestamp: new Date()
     }]);
     setUploadedDocs([]);
@@ -515,13 +516,13 @@ const VittaApp = () => {
           </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="font-semibold text-blue-900 mb-2">What&apos;s New in Vitta:</h3>
+            <h3 className="font-semibold text-blue-900 mb-2">Vitta helps you:</h3>
             <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Intelligent payment strategies</li>
-              <li>• Smart credit card recommendations</li>
-              <li>• AI-powered document chat</li>
-              <li>• Family spending coordination</li>
-              <li>• Real-time financial optimization</li>
+              <li>• Choose the best card for every purchase</li>
+              <li>• Optimize payments to minimize interest</li>
+              <li>• Maximize rewards and cashback</li>
+              <li>• Avoid interest with smart timing</li>
+              <li>• Save money on every transaction</li>
             </ul>
           </div>
         </div>
@@ -900,7 +901,7 @@ const VittaApp = () => {
                 <p className="text-gray-600">Optimize your credit card payments to save money</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-sm text-gray-600">Welcome back</p>
@@ -917,6 +918,11 @@ const VittaApp = () => {
         </div>
       </div>
     );
+  }
+
+  // If dashboard screen is active, show it
+  if (currentScreen === 'dashboard') {
+    return <Dashboard onBack={() => setCurrentScreen('main')} user={user} />;
   }
 
   return (
@@ -937,18 +943,25 @@ const VittaApp = () => {
           
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setCurrentScreen('paymentOptimizer')}
-              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg"
+              onClick={() => setCurrentScreen('dashboard')}
+              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg"
             >
-              <Calculator className="w-4 h-4" />
-              Smart Payments
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard
             </button>
             <button
               onClick={() => setCurrentScreen('creditCards')}
               className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg"
             >
-              <CreditCard className="w-4 h-4" />
-              Credit Cards
+              <Wallet className="w-4 h-4" />
+              My Cards
+            </button>
+            <button
+              onClick={() => setCurrentScreen('paymentOptimizer')}
+              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg"
+            >
+              <Calculator className="w-4 h-4" />
+              Smart Payments
             </button>
             <div className="text-right">
               <p className="text-sm text-gray-600">Signed in as</p>
@@ -967,52 +980,43 @@ const VittaApp = () => {
         {/* Updated description for authenticated users */}
         <div className="text-center mb-16">
           <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Your family financial intelligence platform is ready! Upload documents, ask questions, 
-            and get AI-powered insights for credit card optimization and family spending coordination.
+            Your intelligent credit card platform is ready! Get personalized card recommendations,
+            optimize your payments, and maximize rewards with AI-powered insights.
           </p>
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <span className="text-sm text-gray-500">💳 New:</span>
-            <button
-              onClick={() => setCurrentScreen('creditCards')}
-              className="text-blue-600 hover:text-blue-700 font-medium underline"
-            >
-              Credit Card Management Dashboard
-            </button>
-          </div>
         </div>
 
         {/* Feature Grid */}
         <div className="grid md:grid-cols-3 gap-8 mb-16">
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
-              <MessageCircle className="w-6 h-6 text-blue-600" />
+          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('dashboard')}>
+            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+              <LayoutDashboard className="w-6 h-6 text-purple-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Document Chat</h3>
-            <p className="text-gray-600">Ask questions about your tax documents, bank statements, and receipts using natural language.</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Smart Dashboard</h3>
+            <p className="text-gray-600">View personalized payment recommendations and see which card to use for every category and time period.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('creditCards')}>
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+              <Wallet className="w-6 h-6 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">My Wallet</h3>
+            <p className="text-gray-600">Manage your credit cards by type. Add cards without sensitive info - no card numbers needed.</p>
           </div>
 
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('paymentOptimizer')}>
             <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
               <Calculator className="w-6 h-6 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Smart Payment Strategies</h3>
-            <p className="text-gray-600">Optimize your credit card payments to minimize interest and pay off debt faster with AI-powered recommendations.</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Payment Strategy</h3>
+            <p className="text-gray-600">Optimize monthly payments across cards to minimize interest based on APR, balance, and your budget.</p>
           </div>
 
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('creditCards')}>
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-              <CreditCard className="w-6 h-6 text-green-600" />
+          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setIsOpen(true)}>
+            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4">
+              <MessageCircle className="w-6 h-6 text-indigo-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Smart Card Optimization</h3>
-            <p className="text-gray-600">Never use the wrong credit card again. Get real-time recommendations for maximum rewards.</p>
-          </div>
-
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-              <Upload className="w-6 h-6 text-purple-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">Family Coordination</h3>
-            <p className="text-gray-600">Real-time spending visibility and coordination across all family members and accounts.</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Assistant</h3>
+            <p className="text-gray-600">Ask which card to use at Costco, for groceries, or any purchase. Get instant, personalized recommendations.</p>
           </div>
         </div>
 
@@ -1070,42 +1074,6 @@ const VittaApp = () => {
 
           {!isMinimized && (
             <>
-              {/* File Upload Section */}
-              <div className="p-4 border-b border-gray-100">
-                <div className="border-2 border-dashed border-gray-200 rounded-lg p-3 text-center hover:border-blue-300 transition-colors">
-                  <Upload className="w-5 h-5 text-gray-400 mx-auto mb-1" />
-                  <p className="text-gray-600 text-sm mb-2">Upload financial documents</p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors"
-                  >
-                    Choose Files
-                  </button>
-                </div>
-                
-                {/* Uploaded Documents */}
-                {uploadedDocs.length > 0 && (
-                  <div className="mt-3">
-                    <div className="flex flex-wrap gap-1">
-                      {uploadedDocs.map((doc) => (
-                        <div key={doc.id} className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded text-xs">
-                          <FileText className="w-3 h-3" />
-                          {doc.type}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {messages.map((message, index) => (
@@ -1152,22 +1120,20 @@ const VittaApp = () => {
               </div>
 
               {/* Sample Questions */}
-              {uploadedDocs.length > 0 && (
-                <div className="border-t border-gray-100 p-3">
-                  <p className="text-xs text-gray-600 mb-2">Try asking:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {sampleQuestions.slice(0, 2).map((question, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setInput(question)}
-                        className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-md transition-colors"
-                      >
-                        {question}
-                      </button>
-                    ))}
-                  </div>
+              <div className="border-t border-gray-100 p-3">
+                <p className="text-xs text-gray-600 mb-2">Try asking:</p>
+                <div className="flex flex-wrap gap-1">
+                  {["Which card for groceries?", "Best card at Costco?"].map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setInput(question)}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-md transition-colors"
+                    >
+                      {question}
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
 
               {/* Input */}
               <div className="border-t border-gray-100 p-3">
@@ -1177,7 +1143,7 @@ const VittaApp = () => {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Ask about your documents..."
+                    placeholder="Which card should I use for..."
                     className="flex-1 p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     disabled={isLoading}
                   />
@@ -1195,14 +1161,6 @@ const VittaApp = () => {
         </div>
       )}
 
-      {/* Demo Notice - Only show when logged in */}
-      {isAuthenticated && (
-        <div className="fixed bottom-6 left-6 max-w-sm p-3 bg-green-50 border border-green-200 rounded-lg shadow-lg">
-          <p className="text-green-800 text-sm">
-            ✅ <strong>Logged In:</strong> You&apos;re now using Vitta&apos;s demo platform with enhanced login system.
-          </p>
-        </div>
-      )}
     </div>
   );
 };
