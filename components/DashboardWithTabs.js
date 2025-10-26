@@ -381,7 +381,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
 
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-gray-900">Today's Best Card</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Today&apos;s Best Card</h2>
 
         {cards.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl">
@@ -494,7 +494,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
             }`}
           >
             <Star className="w-5 h-5" />
-            Today's Best Card
+            Today&apos;s Best Card
           </button>
         </div>
 
