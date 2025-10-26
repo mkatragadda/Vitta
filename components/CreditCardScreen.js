@@ -1,128 +1,183 @@
-import React, { useState } from 'react';
-import { CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Shield, Zap, ArrowRight, Plus, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Shield, Zap, ArrowRight, Plus, Eye, EyeOff, Trash2, Edit } from 'lucide-react';
+import { getUserCards, addCard, updateCard, deleteCard } from '../services/cardService';
 
-const CreditCardScreen = ({ onBack, user }) => {
+const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
   const [showCardNumbers, setShowCardNumbers] = useState(false);
   const [selectedCard, setSelectedCard] = useState(0);
+  const [creditCards, setCreditCards] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCard, setNewCard] = useState({
+    card_type: '',
+    card_name: '',
+    apr: '',
+    credit_limit: '',
+    current_balance: '',
+    amount_to_pay: '',
+    due_date: ''
+  });
 
-  // Mock credit card data
-  const creditCards = [
-    {
-      id: 1,
-      name: 'Chase Freedom Unlimited',
-      number: '**** **** **** 5678',
-      fullNumber: '4532 1234 5678 9012',
-      type: 'Visa',
-      balance: 1234.56,
-      limit: 15000,
-      dueDate: '2024-12-15',
-      minPayment: 35,
-      apr: 18.99,
-      rewards: {
-        type: 'Cashback',
-        rate: '1.5%',
-        categories: ['All purchases'],
-        signupBonus: '$200'
-      },
-      spending: {
-        thisMonth: 2340.67,
-        lastMonth: 1890.45,
-        categories: {
-          'Dining': 456.78,
-          'Groceries': 234.56,
-          'Gas': 89.12,
-          'Shopping': 890.45,
-          'Utilities': 234.56,
-          'Entertainment': 435.20
-        }
-      }
-    },
-    {
-      id: 2,
-      name: 'Amex Gold Card',
-      number: '**** **** **** 1234',
-      fullNumber: '3782 123456 78901',
-      type: 'Amex',
-      balance: 0,
-      limit: 25000,
-      dueDate: '2024-12-20',
-      minPayment: 0,
-      apr: 0,
-      rewards: {
-        type: 'Points',
-        rate: '4x',
-        categories: ['Dining', 'Groceries'],
-        signupBonus: '60,000 points'
-      },
-      spending: {
-        thisMonth: 0,
-        lastMonth: 0,
-        categories: {}
-      }
-    },
-    {
-      id: 3,
-      name: 'Citi Double Cash',
-      number: '**** **** **** 9012',
-      fullNumber: '5424 1234 5678 9012',
-      type: 'Mastercard',
-      balance: 567.89,
-      limit: 12000,
-      dueDate: '2024-12-10',
-      minPayment: 25,
-      apr: 16.99,
-      rewards: {
-        type: 'Cashback',
-        rate: '2%',
-        categories: ['All purchases'],
-        signupBonus: '$150'
-      },
-      spending: {
-        thisMonth: 1234.56,
-        lastMonth: 987.65,
-        categories: {
-          'Online Shopping': 456.78,
-          'Bills': 234.56,
-          'Transportation': 123.45,
-          'Healthcare': 89.67,
-          'Other': 330.10
-        }
-      }
+  // Load cards from database on mount
+  useEffect(() => {
+    loadCards();
+  }, [user]);
+
+  const loadCards = async () => {
+    if (!user || !user.id) return;
+
+    setIsLoading(true);
+    try {
+      const cards = await getUserCards(user.id);
+      setCreditCards(cards || []);
+      console.log('[CreditCardScreen] Loaded cards:', cards?.length || 0);
+    } catch (error) {
+      console.error('[CreditCardScreen] Error loading cards:', error);
+      setCreditCards([]);
     }
-  ];
+    setIsLoading(false);
+  };
 
+  const handleAddCard = async () => {
+    try {
+      const cardData = {
+        user_id: user.id,
+        card_type: newCard.card_type,
+        card_name: newCard.card_name || newCard.card_type,
+        apr: parseFloat(newCard.apr) || 0,
+        credit_limit: parseFloat(newCard.credit_limit) || 0,
+        current_balance: parseFloat(newCard.current_balance) || 0,
+        amount_to_pay: parseFloat(newCard.amount_to_pay) || 0,
+        due_date: newCard.due_date || null
+      };
+
+      await addCard(cardData);
+      console.log('[CreditCardScreen] Card added successfully');
+
+      // Reload cards and trigger parent refresh
+      await loadCards();
+      console.log('[CreditCardScreen] Calling onCardsChanged callback...');
+      if (onCardsChanged) {
+        await onCardsChanged();
+        console.log('[CreditCardScreen] onCardsChanged callback completed');
+      } else {
+        console.warn('[CreditCardScreen] onCardsChanged callback not provided!');
+      }
+
+      // Reset form and close modal
+      setNewCard({
+        card_type: '',
+        card_name: '',
+        apr: '',
+        credit_limit: '',
+        current_balance: '',
+        amount_to_pay: '',
+        due_date: ''
+      });
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('[CreditCardScreen] Error adding card:', error);
+      alert('Failed to add card. Please try again.');
+    }
+  };
+
+  const handleDeleteCard = async (cardId) => {
+    if (!confirm('Are you sure you want to delete this card?')) return;
+
+    try {
+      await deleteCard(cardId);
+      console.log('[CreditCardScreen] Card deleted successfully');
+
+      // Reload cards and trigger parent refresh
+      await loadCards();
+      console.log('[CreditCardScreen] Calling onCardsChanged callback after delete...');
+      if (onCardsChanged) {
+        await onCardsChanged();
+        console.log('[CreditCardScreen] onCardsChanged callback completed');
+      } else {
+        console.warn('[CreditCardScreen] onCardsChanged callback not provided!');
+      }
+
+      // Reset selection if needed
+      if (selectedCard >= creditCards.length - 1) {
+        setSelectedCard(Math.max(0, creditCards.length - 2));
+      }
+    } catch (error) {
+      console.error('[CreditCardScreen] Error deleting card:', error);
+      alert('Failed to delete card. Please try again.');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your cards...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (creditCards.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+        <div className="max-w-4xl mx-auto">
+          <button onClick={onBack} className="mb-6 text-blue-600 hover:text-blue-800 flex items-center gap-2">
+            ← Back
+          </button>
+
+          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+            <CreditCard className="w-24 h-24 text-gray-300 mx-auto mb-6" />
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">No Cards Yet</h2>
+            <p className="text-gray-600 mb-8">Add your first credit card to get started with smart payment optimization</p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 mx-auto"
+            >
+              <Plus className="w-5 h-5" />
+              Add Your First Card
+            </button>
+          </div>
+        </div>
+
+        {showAddModal && (
+          <AddCardModal
+            newCard={newCard}
+            setNewCard={setNewCard}
+            onSave={handleAddCard}
+            onCancel={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Use real cards from database
   const currentCard = creditCards[selectedCard];
-  const utilizationRate = (currentCard.balance / currentCard.limit * 100).toFixed(1);
-  const daysUntilDue = Math.ceil((new Date(currentCard.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+  const utilizationRate = ((currentCard.current_balance / currentCard.credit_limit) * 100).toFixed(1);
+  const daysUntilDue = currentCard.due_date
+    ? Math.ceil((new Date(currentCard.due_date) - new Date()) / (1000 * 60 * 60 * 24))
+    : null;
 
   const getCardColor = (cardType) => {
-    switch (cardType) {
-      case 'Visa': return 'from-blue-600 to-blue-800';
-      case 'Amex': return 'from-green-600 to-green-800';
-      case 'Mastercard': return 'from-orange-600 to-red-600';
-      default: return 'from-gray-600 to-gray-800';
-    }
+    const type = cardType?.toLowerCase() || '';
+    if (type.includes('visa')) return 'from-blue-600 to-blue-800';
+    if (type.includes('amex') || type.includes('american express')) return 'from-green-600 to-green-800';
+    if (type.includes('mastercard')) return 'from-orange-600 to-red-600';
+    if (type.includes('discover')) return 'from-purple-600 to-purple-800';
+    return 'from-gray-600 to-gray-800';
   };
-
-  const getSpendingTrend = (thisMonth, lastMonth) => {
-    const change = ((thisMonth - lastMonth) / lastMonth * 100).toFixed(1);
-    return {
-      value: change,
-      isPositive: change > 0,
-      trend: change > 0 ? 'up' : 'down'
-    };
-  };
-
-  const spendingTrend = getSpendingTrend(currentCard.spending.thisMonth, currentCard.spending.lastMonth);
 
   const getOptimizationTips = () => {
     const tips = [];
-    
-    if (currentCard.balance > 0) {
+
+    if (currentCard.current_balance > 0 && currentCard.due_date) {
+      const interestCost = (currentCard.current_balance * currentCard.apr / 100 / 12).toFixed(2);
       tips.push({
         icon: '💡',
         title: 'Pay in Full',
-        description: `Pay your $${currentCard.balance.toFixed(2)} balance before ${currentCard.dueDate} to avoid $${(currentCard.balance * currentCard.apr / 100 / 12).toFixed(2)} in interest.`
+        description: `Pay your $${currentCard.current_balance.toFixed(2)} balance before ${new Date(currentCard.due_date).toLocaleDateString()} to avoid $${interestCost} in interest.`
       });
     }
 
@@ -134,19 +189,11 @@ const CreditCardScreen = ({ onBack, user }) => {
       });
     }
 
-    if (currentCard.rewards.type === 'Cashback' && currentCard.spending.thisMonth > 1000) {
+    if (currentCard.current_balance === 0 && currentCard.credit_limit > 0) {
       tips.push({
-        icon: '🎯',
-        title: 'Rewards Optimization',
-        description: `You're earning ${currentCard.rewards.rate} cashback on all purchases. Consider using this card for non-category spending.`
-      });
-    }
-
-    if (currentCard.rewards.type === 'Points' && currentCard.spending.thisMonth === 0) {
-      tips.push({
-        icon: '🚀',
-        title: 'Activate Card',
-        description: `Start using your Amex Gold to earn 4x points on dining and groceries.`
+        icon: '✅',
+        title: 'Zero Balance',
+        description: `Great job! You have no balance on this card. Keep it up!`
       });
     }
 
@@ -174,7 +221,10 @@ const CreditCardScreen = ({ onBack, user }) => {
           </div>
           
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-lg hover:shadow-xl transition-shadow">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-lg hover:shadow-xl transition-shadow"
+            >
               <Plus className="w-4 h-4 text-blue-600" />
               <span className="text-blue-600 font-medium">Add Card</span>
             </button>
@@ -199,9 +249,9 @@ const CreditCardScreen = ({ onBack, user }) => {
               <CreditCard className={`w-5 h-5 ${
                 selectedCard === index ? 'text-blue-600' : 'text-gray-400'
               }`} />
-              <span className="font-medium">{card.name}</span>
+              <span className="font-medium">{card.card_name || card.card_type}</span>
               <div className={`w-3 h-3 rounded-full ${
-                card.balance > 0 ? 'bg-red-500' : 'bg-green-500'
+                card.current_balance > 0 ? 'bg-red-500' : 'bg-green-500'
               }`}></div>
             </button>
           ))}
@@ -211,40 +261,41 @@ const CreditCardScreen = ({ onBack, user }) => {
           {/* Main Card Display */}
           <div className="lg:col-span-2 space-y-6">
             {/* Card Visual */}
-            <div className={`bg-gradient-to-r ${getCardColor(currentCard.type)} rounded-2xl p-6 text-white shadow-2xl`}>
+            <div className={`bg-gradient-to-r ${getCardColor(currentCard.card_type)} rounded-2xl p-6 text-white shadow-2xl`}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                     <CreditCard className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg">{currentCard.name}</h3>
-                    <p className="text-blue-100">{currentCard.type}</p>
+                    <h3 className="font-semibold text-lg">{currentCard.card_name || currentCard.card_type}</h3>
+                    <p className="text-blue-100">{currentCard.card_type}</p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowCardNumbers(!showCardNumbers)}
-                  className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center hover:bg-white/30 transition-colors"
+                  onClick={() => handleDeleteCard(currentCard.id)}
+                  className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center hover:bg-red-500/80 transition-colors"
+                  title="Delete Card"
                 >
-                  {showCardNumbers ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              
+
               <div className="mb-6">
-                <p className="text-blue-100 text-sm mb-2">Card Number</p>
-                <p className="text-2xl font-mono tracking-wider">
-                  {showCardNumbers ? currentCard.fullNumber : currentCard.number}
+                <p className="text-blue-100 text-sm mb-2">Balance</p>
+                <p className="text-3xl font-bold tracking-wider">
+                  ${currentCard.current_balance.toLocaleString()}
                 </p>
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-blue-100 text-sm">Cardholder</p>
-                  <p className="font-medium">{user?.name || 'Cardholder'}</p>
+                  <p className="text-blue-100 text-sm">Credit Limit</p>
+                  <p className="font-medium">${currentCard.credit_limit.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-blue-100 text-sm">Expires</p>
-                  <p className="font-medium">12/28</p>
+                  <p className="text-blue-100 text-sm">APR</p>
+                  <p className="font-medium">{currentCard.apr}%</p>
                 </div>
               </div>
             </div>
@@ -257,18 +308,19 @@ const CreditCardScreen = ({ onBack, user }) => {
                     <DollarSign className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Current Balance</p>
-                    <p className="text-2xl font-bold text-gray-900">${currentCard.balance.toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">Utilization</p>
+                    <p className="text-2xl font-bold text-gray-900">{utilizationRate}%</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all"
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        utilizationRate < 30 ? 'bg-green-600' : utilizationRate < 50 ? 'bg-yellow-500' : 'bg-red-600'
+                      }`}
                       style={{ width: `${Math.min(utilizationRate, 100)}%` }}
                     ></div>
                   </div>
-                  <span className="text-sm text-gray-600">{utilizationRate}%</span>
                 </div>
               </div>
 
@@ -279,84 +331,68 @@ const CreditCardScreen = ({ onBack, user }) => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Payment Due</p>
-                    <p className="text-2xl font-bold text-gray-900">${currentCard.minPayment}</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      ${currentCard.amount_to_pay?.toLocaleString() || '0'}
+                    </p>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600">
-                  Due in {daysUntilDue} days ({currentCard.dueDate})
-                </p>
+                {daysUntilDue !== null ? (
+                  <p className="text-sm text-gray-600">
+                    Due in {daysUntilDue} days ({new Date(currentCard.due_date).toLocaleDateString()})
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">No due date set</p>
+                )}
               </div>
 
               <div className="bg-white rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-purple-600" />
+                    <Shield className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">This Month</p>
-                    <p className="text-2xl font-bold text-gray-900">${currentCard.spending.thisMonth.toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">Available Credit</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      ${(currentCard.credit_limit - currentCard.current_balance).toLocaleString()}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {spendingTrend.trend === 'up' ? (
-                    <TrendingUp className="w-4 h-4 text-red-500" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-green-500" />
-                  )}
-                  <span className={`text-sm ${
-                    spendingTrend.trend === 'up' ? 'text-red-600' : 'text-green-600'
-                  }`}>
-                    {spendingTrend.trend === 'up' ? '+' : ''}{spendingTrend.value}% vs last month
-                  </span>
-                </div>
+                <p className="text-sm text-gray-600">
+                  of ${currentCard.credit_limit.toLocaleString()} limit
+                </p>
               </div>
             </div>
-
-            {/* Spending Categories */}
-            {Object.keys(currentCard.spending.categories).length > 0 && (
-              <div className="bg-white rounded-xl p-6 shadow-lg">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4">Spending by Category</h3>
-                <div className="space-y-3">
-                  {Object.entries(currentCard.spending.categories).map(([category, amount]) => (
-                    <div key={category} className="flex items-center justify-between">
-                      <span className="text-gray-700">{category}</span>
-                      <span className="font-semibold text-gray-900">${amount.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Sidebar */}
           <div className="space-y-6">
-            {/* Rewards Summary */}
+            {/* Card Info */}
             <div className="bg-white rounded-xl p-6 shadow-lg">
               <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-yellow-500" />
-                Rewards Program
+                <CreditCard className="w-5 h-5 text-blue-500" />
+                Card Details
               </h3>
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-600">Type</p>
-                  <p className="font-semibold text-gray-900">{currentCard.rewards.type}</p>
+                  <p className="text-sm text-gray-600">Card Name</p>
+                  <p className="font-semibold text-gray-900">{currentCard.card_name || currentCard.card_type}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Rate</p>
-                  <p className="font-semibold text-gray-900">{currentCard.rewards.rate}</p>
+                  <p className="text-sm text-gray-600">Card Type</p>
+                  <p className="font-semibold text-gray-900">{currentCard.card_type}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Categories</p>
-                  <p className="font-semibold text-gray-900">{currentCard.rewards.categories.join(', ')}</p>
+                  <p className="text-sm text-gray-600">APR</p>
+                  <p className="font-semibold text-gray-900">{currentCard.apr}%</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Sign-up Bonus</p>
-                  <p className="font-semibold text-gray-900">{currentCard.rewards.signupBonus}</p>
+                  <p className="text-sm text-gray-600">Credit Limit</p>
+                  <p className="font-semibold text-gray-900">${currentCard.credit_limit.toLocaleString()}</p>
                 </div>
               </div>
             </div>
 
-            {/* Optimization Tips */}
+            {/* Smart Tips */}
             <div className="bg-white rounded-xl p-6 shadow-lg">
               <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-blue-500" />
@@ -381,23 +417,127 @@ const CreditCardScreen = ({ onBack, user }) => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-xl p-6 shadow-lg">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h3>
-              <div className="space-y-3">
-                <button className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors">
-                  Make Payment
-                </button>
-                <button className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-200 transition-colors">
-                  View Statement
-                </button>
-                <button className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-200 transition-colors">
-                  Set Alerts
-                </button>
-              </div>
+      {/* Add Card Modal */}
+      {showAddModal && (
+        <AddCardModal
+          newCard={newCard}
+          setNewCard={setNewCard}
+          onSave={handleAddCard}
+          onCancel={() => setShowAddModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Add Card Modal Component
+const AddCardModal = ({ newCard, setNewCard, onSave, onCancel }) => {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Add New Card</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Card Type *</label>
+            <input
+              type="text"
+              value={newCard.card_type}
+              onChange={(e) => setNewCard({ ...newCard, card_type: e.target.value })}
+              placeholder="e.g., Chase Freedom Unlimited"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Card Name (optional)</label>
+            <input
+              type="text"
+              value={newCard.card_name}
+              onChange={(e) => setNewCard({ ...newCard, card_name: e.target.value })}
+              placeholder="e.g., My Travel Card"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">APR (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={newCard.apr}
+                onChange={(e) => setNewCard({ ...newCard, apr: e.target.value })}
+                placeholder="18.99"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Credit Limit</label>
+              <input
+                type="number"
+                value={newCard.credit_limit}
+                onChange={(e) => setNewCard({ ...newCard, credit_limit: e.target.value })}
+                placeholder="15000"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Current Balance</label>
+              <input
+                type="number"
+                value={newCard.current_balance}
+                onChange={(e) => setNewCard({ ...newCard, current_balance: e.target.value })}
+                placeholder="1234.56"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Payment Due</label>
+              <input
+                type="number"
+                value={newCard.amount_to_pay}
+                onChange={(e) => setNewCard({ ...newCard, amount_to_pay: e.target.value })}
+                placeholder="35"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+            <input
+              type="date"
+              value={newCard.due_date}
+              onChange={(e) => setNewCard({ ...newCard, due_date: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            disabled={!newCard.card_type}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            Add Card
+          </button>
         </div>
       </div>
     </div>

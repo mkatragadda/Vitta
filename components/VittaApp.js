@@ -2,10 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet } from 'lucide-react';
 import CreditCardScreen from './CreditCardScreen';
 import PaymentOptimizer from './PaymentOptimizer';
-import Dashboard from './Dashboard';
+import DashboardWithTabs from './DashboardWithTabs';
+import VittaChatInterface from './VittaChatInterface';
+import { saveGoogleUser } from '../services/userService';
+import { getUserCards } from '../services/cardService';
+import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
 
 // Component to render message content with clickable links and tables
-const MessageContent = ({ content }) => {
+const MessageContent = ({ content, onNavigate }) => {
   // Parse markdown-style links [text](url)
   const parseMarkdownLinks = (text) => {
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -18,33 +22,56 @@ const MessageContent = ({ content }) => {
       if (match.index > lastIndex) {
         parts.push(text.slice(lastIndex, match.index));
       }
-      
-      // Add the link
-      parts.push(
-        <a 
-          key={match.index}
-          href={match[2]} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 underline font-medium"
-        >
-          {match[1]}
-        </a>
-      );
-      
+
+      const linkText = match[1];
+      const linkUrl = match[2];
+
+      // Check if it's a deep link (vitta://)
+      if (linkUrl.startsWith('vitta://navigate/')) {
+        const screenPath = linkUrl.replace('vitta://navigate/', '');
+        parts.push(
+          <a
+            key={match.index}
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              if (onNavigate) {
+                onNavigate(screenPath);
+              }
+            }}
+            className="text-blue-600 hover:text-blue-800 underline font-medium cursor-pointer"
+          >
+            {linkText}
+          </a>
+        );
+      } else {
+        // External link
+        parts.push(
+          <a
+            key={match.index}
+            href={linkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline font-medium"
+          >
+            {linkText}
+          </a>
+        );
+      }
+
       lastIndex = match.index + match[0].length;
     }
-    
+
     // Add remaining text
     if (lastIndex < text.length) {
       parts.push(text.slice(lastIndex));
     }
-    
+
     return parts.length > 0 ? parts : text;
   };
 
   // Check if content contains a table
-  const isTable = content.includes('|') && content.includes('---');
+  const isTable = content && content.includes('|') && content.includes('---');
   
   if (isTable) {
     const lines = content.split('\n');
@@ -159,18 +186,19 @@ const VittaApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [userCards, setUserCards] = useState([]);
   const fileInputRef = useRef(null);
 
   // Login handler
   const handleLogin = (email, password) => {
     // Mock authentication - in real app, this would be actual auth
-    setUser({ 
-      email, 
+    setUser({
+      email,
       name: email.split('@')[0],
       joinDate: new Date()
     });
     setIsAuthenticated(true);
-    
+
     // Add welcome message
     setMessages(prev => [...prev, {
       type: 'bot',
@@ -180,22 +208,38 @@ const VittaApp = () => {
   };
 
   // Google OAuth handler
-  const handleGoogleSignIn = (response) => {
+  const handleGoogleSignIn = async (response) => {
     try {
       console.log('[Vitta] Google OAuth Success!', response);
       const payload = JSON.parse(atob(response.credential.split('.')[1]));
       console.log('[Vitta] Decoded payload:', payload);
-      setUser({
+
+      // Save user to Supabase (or run in demo mode if not configured)
+      const savedUser = await saveGoogleUser({
         email: payload.email,
         name: payload.name,
         picture: payload.picture,
-        joinDate: new Date(),
-        provider: 'google'
+        sub: payload.sub // Google user ID
       });
+
+      console.log('[Vitta] User saved to database:', savedUser);
+
+      // Set user state with database ID
+      setUser({
+        id: savedUser.id,
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture,
+        joinDate: savedUser.created_at ? new Date(savedUser.created_at) : new Date(),
+        provider: 'google',
+        isDemoMode: savedUser.isDemoMode || false
+      });
+
       setIsAuthenticated(true);
+
       setMessages(prev => [...prev, {
         type: 'bot',
-        content: `Welcome back, ${payload.name}! I'm ready to help you with your financial documents and credit card optimization. What would you like to know?`,
+        content: `Welcome back, ${payload.name}! I'm ready to help you choose the best credit card for every purchase and optimize your payments. What would you like to know?`,
         timestamp: new Date()
       }]);
     } catch (error) {
@@ -302,6 +346,31 @@ const VittaApp = () => {
       clearTimeout(timeoutId);
     };
   }, []);
+
+  // Reusable function to refresh cards from database
+  const refreshCards = async () => {
+    if (user && user.id) {
+      try {
+        console.log('[VittaApp] Refreshing cards from database...');
+        const cards = await getUserCards(user.id);
+        setUserCards(cards || []);
+        console.log('[VittaApp] Cards refreshed:', cards?.length || 0, 'cards');
+        return cards;
+      } catch (error) {
+        console.error('[Vitta] Error loading user cards:', error);
+        setUserCards([]);
+        return [];
+      }
+    }
+    return [];
+  };
+
+  // Load user cards when user logs in
+  useEffect(() => {
+    if (user && user.id) {
+      refreshCards();
+    }
+  }, [user]);
 
   // Ensure official Google button renders once initialized and ref is ready
   useEffect(() => {
@@ -411,26 +480,29 @@ const VittaApp = () => {
                   return;
                 }
 
-                // Try to initialize if not ready
-                const ready = initializeGsiIfNeeded();
-
-                if (typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id) {
-                  try {
-                    console.log('[Vitta] Triggering Google prompt');
-                    window.google.accounts.id.prompt({
-                      hd: undefined, // Allow any domain
-                      use_fedcm_for_prompt: false // Disable FedCM
-                    });
-                  } catch (error) {
-                    console.error('[Vitta] Error triggering Google prompt:', error);
-                    alert('Google Sign-In error: ' + error.message);
+                // Check if Google Sign-In button is available
+                if (gsiButtonRef.current) {
+                  // Try to click the official Google button
+                  const googleButton = gsiButtonRef.current.querySelector('div[role="button"]');
+                  if (googleButton) {
+                    console.log('[Vitta] Clicking official Google button');
+                    googleButton.click();
+                  } else {
+                    console.log('[Vitta] Official button not found, using prompt fallback');
+                    // Fallback: try prompt if available
+                    if (window.google?.accounts?.id?.prompt) {
+                      try {
+                        window.google.accounts.id.prompt();
+                      } catch (error) {
+                        console.error('[Vitta] Prompt error:', error);
+                        alert('Please use the official "Continue with Google" button above.');
+                      }
+                    } else {
+                      alert('Please use the official "Continue with Google" button above.');
+                    }
                   }
-                } else if (!ready) {
-                  console.warn('[Vitta] Google Sign-In not ready');
-                  alert('Google Sign-In is still loading. Please try again in a moment.');
                 } else {
-                  console.error('[Vitta] Google GSI library not available');
-                  alert('Google Sign-In library failed to load. Please refresh the page.');
+                  alert('Google Sign-In is still loading. Please try again in a moment.');
                 }
               }}
               className="mt-3 w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -455,12 +527,15 @@ const VittaApp = () => {
                     return;
                   }
 
-                  const ready = initializeGsiIfNeeded();
-                  if (typeof window !== 'undefined' && window.google && window.google.accounts && window.google.accounts.id) {
-                    window.google.accounts.id.prompt({
-                      use_fedcm_for_prompt: false // Disable FedCM
-                    });
-                  } else if (!ready) {
+                  // Try to click the official button
+                  if (gsiButtonRef.current) {
+                    const googleButton = gsiButtonRef.current.querySelector('div[role="button"]');
+                    if (googleButton) {
+                      googleButton.click();
+                    } else {
+                      alert('Please wait for Google Sign-In to load, then use the button above.');
+                    }
+                  } else {
                     alert('Google Sign-In is still loading. Please try again in a moment.');
                   }
                 }}
@@ -829,28 +904,52 @@ const VittaApp = () => {
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
-    
+
     const userMessage = {
       type: 'user',
       content: input,
       timestamp: new Date()
     };
-    
+
     setMessages(prev => [...prev, userMessage]);
+    const queryText = input;
     setInput('');
     setIsLoading(true);
-    
-    // Simulate AI processing time
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const response = generateResponse(input, uploadedDocs);
-    
-    setMessages(prev => [...prev, {
-      type: 'bot',
-      content: response,
-      timestamp: new Date()
-    }]);
-    
+
+    try {
+      console.log('[VittaApp] Processing query with conversation engine');
+      console.log('[VittaApp] Current userCards in state:', userCards?.length || 0, 'cards');
+
+      // Use cached cards from state (already refreshed on login and after add/update/delete)
+      const userData = {
+        cards: userCards || []
+      };
+
+      // Load conversation history for context
+      const history = loadConversationHistory();
+      const context = {
+        history: history.slice(-5), // Last 5 exchanges for context
+        previousIntent: history.length > 0 ? history[history.length - 1].intent : null
+      };
+
+      // Process query through intelligent conversation engine
+      const response = await processQuery(queryText, userData, context);
+
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: response,
+        timestamp: new Date()
+      }]);
+
+    } catch (error) {
+      console.error('[VittaApp] Error processing query:', error);
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date()
+      }]);
+    }
+
     setIsLoading(false);
   };
 
@@ -861,15 +960,32 @@ const VittaApp = () => {
     }
   };
 
+  // Navigation handler for deep links in chat
+  const handleChatNavigate = (screenPath) => {
+    console.log('[VittaApp] Navigating to:', screenPath);
+    // Map screen paths to currentScreen values
+    const screenMapping = {
+      'chat': 'main',
+      'cards': 'creditCards',
+      'optimizer': 'paymentOptimizer',
+      'dashboard': 'dashboard',
+      'expenses': 'main' // Default to main if not implemented
+    };
+
+    const targetScreen = screenMapping[screenPath] || 'main';
+    setCurrentScreen(targetScreen);
+    setIsOpen(false); // Close chat when navigating
+  };
+
   const sampleQuestions = [
-    "Recommend a credit card with 0% APR for my Europe trip",
-    "What's the best travel rewards credit card for Europe?",
-    "Suggest a credit card with no annual fee and travel rewards",
-    "Show me credit card options in a table format",
-    "What's my total tax liability?",
-    "When are my credit card payments due?",
-    "Show me my business expenses",
-    "Give me a financial summary"
+    "What cards are in my wallet?",
+    "Which card should I use at Costco?",
+    "Best card for groceries?",
+    "Any payments due next week?",
+    "Show me my card balances",
+    "Which card should I use for dining?",
+    "Optimize my payments",
+    "Navigate me to add a card"
   ];
 
   // If not authenticated, show login screen
@@ -879,7 +995,13 @@ const VittaApp = () => {
 
   // If credit card screen is active, show it
   if (currentScreen === 'creditCards') {
-    return <CreditCardScreen onBack={() => setCurrentScreen('main')} user={user} />;
+    return (
+      <CreditCardScreen
+        onBack={() => setCurrentScreen('main')}
+        user={user}
+        onCardsChanged={refreshCards} // Refresh cards when add/update/delete happens
+      />
+    );
   }
 
   // If payment optimizer screen is active, show it
@@ -920,9 +1042,23 @@ const VittaApp = () => {
     );
   }
 
-  // If dashboard screen is active, show it
-  if (currentScreen === 'dashboard') {
-    return <Dashboard onBack={() => setCurrentScreen('main')} user={user} />;
+  // Main interface after login - Use VittaChatInterface for all users
+  if (isAuthenticated && user) {
+    return (
+      <VittaChatInterface
+        user={user}
+        onLogout={handleLogout}
+        messages={messages}
+        input={input}
+        setInput={setInput}
+        isLoading={isLoading}
+        handleSendMessage={handleSendMessage}
+        handleKeyPress={handleKeyPress}
+        MessageContent={MessageContent}
+        isDemoMode={user.provider !== 'google'}
+        onCardsChanged={refreshCards}
+      />
+    );
   }
 
   return (
@@ -1088,12 +1224,12 @@ const VittaApp = () => {
                         }
                       </div>
                       <div className={`p-3 rounded-xl ${
-                        message.type === 'user' 
-                          ? 'bg-blue-600 text-white rounded-br-md' 
+                        message.type === 'user'
+                          ? 'bg-blue-600 text-white rounded-br-md'
                           : 'bg-gray-50 text-gray-900 rounded-bl-md'
                       }`}>
                         <div className="whitespace-pre-line text-sm leading-relaxed">
-                          <MessageContent content={message.content} />
+                          <MessageContent content={message.content} onNavigate={handleChatNavigate} />
                         </div>
                         <div className="text-xs opacity-70 mt-1">
                           {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}

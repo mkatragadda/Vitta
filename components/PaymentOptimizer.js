@@ -67,10 +67,36 @@ const computePlan = (cards, budget) => {
   return { allocations, interestIfMin, interestIfPlan, saved, totalMin, remainingBudget: Math.max(0, remaining) };
 };
 
-const PaymentOptimizer = () => {
-  const persisted = readPersistedCards();
-  const [cards, setCards] = useState(persisted || defaultCards);
+const PaymentOptimizer = ({ cards: propCards, isDemoMode = false }) => {
+  // Transform cards from DB format to optimizer format
+  const transformedCards = useMemo(() => {
+    // For demo mode, always use default cards
+    if (isDemoMode) {
+      return defaultCards;
+    }
+
+    // For Google login users, use their actual cards from DB
+    if (!propCards || propCards.length === 0) {
+      return [];
+    }
+    return propCards.map(card => ({
+      id: card.id,
+      name: card.card_name || card.card_type,
+      balance: card.current_balance || 0,
+      apr: card.apr || 0,
+      min: card.amount_to_pay || 0
+    }));
+  }, [propCards, isDemoMode]);
+
+  const [cards, setCards] = useState(transformedCards);
   const [budget, setBudget] = useState(500);
+
+  // Update cards when prop changes (only for non-demo mode)
+  useEffect(() => {
+    if (!isDemoMode) {
+      setCards(transformedCards);
+    }
+  }, [transformedCards, isDemoMode]);
 
   useEffect(() => {
     try { if (typeof window !== 'undefined') localStorage.setItem('vitta_cards', JSON.stringify(cards)); } catch {}

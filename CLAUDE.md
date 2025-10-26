@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Vitta Document Chat is a Next.js 14 demo application showcasing Vitta's family financial intelligence platform. The app demonstrates AI-powered document analysis, credit card management, and payment optimization features.
+Vitta is a Next.js 14 application - your intelligent credit card platform. Vitta is like chatGPT of your wallet.The app helps users choose the best credit card for every purchase, optimize payments to minimize interest, and maximize rewards with AI-powered insights. Users will interact with app through chat interaface .
 
 ## Architecture
 
@@ -121,26 +121,33 @@ Based on impact, feasibility for MVP/demo, and market differentiation, here are 
 
 ### 💳 Core Features
 
-1. **Auto-Optimized Credit Card Payment Recommendations**
-   - Suggest monthly payment amounts per card based on APR, balance, and user's total budget
-   - Key value driver to minimize interest and save money
-   - Example: If user pays $1000/month for credit cards across 3 cards, Vitta suggests optimal distribution based on APR, available balance, and debt clearance strategy
 
-2. **Best Card Recommendation (Based on Statement Cycle)**
-   - For upcoming purchases, Vitta suggests which card is "cheapest" to use:
-     - Avoiding interest by using cards still in the grace period
-     - Maximizing rewards (cashback, points, miles)
-     - Reducing risk of hitting high APR cards.
+1   **Chatinterface**
 
-3. **Chatbot Assistant**
-   - User can ask in plain English:
-     - *"Which card should I use at Costco today?"*
-     - *"What's my best card for groceries this week?"*
-     - *"Which card will keep me interest-free if I pay late?"*
+-User: “Add $50 cash grocery expense from yesterday.”
+-Chatbot: Uses NLU to parse amount, category, date; stores in memory.
+-User: “What cash expenses did I record this month?”
+-Chatbot: Fetches matching entries from memory, summarizes conversationally.
+-User: “Which card should I use at Amazon?”
+-Chatbot: Runs payment reward logic, explains reasoning, offers direct link to card details.
+-User: “Take me to privacy settings.”
+-Chatbot: Presents deep link; user clicks, routed immediately.
+  
    - Chatbot replies based on:
      - Cards in the user's wallet (manually added types)
      - Known reward categories per card type
      - Payment statement cycles + APR
+
+2. **Auto-Optimized Credit Card Payment Recommendations**
+   - Suggest monthly payment amounts per card based on APR, balance, and user's total budget
+   - Key value driver to minimize interest and save money
+   - Example: If user pays $1000/month for credit cards across 3 cards, Vitta suggests optimal distribution based on APR, available balance, and debt clearance strategy
+
+3. **Best Card Recommendation (Based on Statement Cycle)**
+   - For upcoming purchases, Vitta suggests which card is "cheapest" to use:
+     - Avoiding interest by using cards still in the grace period
+     - Maximizing rewards (cashback, points, miles)
+     - Reducing risk of hitting high APR cards.
 
 ### 🧠 Differentiators in MVP
 

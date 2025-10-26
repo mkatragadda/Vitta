@@ -1,19 +1,14 @@
-# Vitta Document Chat - AI-Powered Financial Assistant
+# Vitta - Your Intelligent Credit Card Platform
 
-A Next.js demo application showcasing Vitta's family financial intelligence platform with AI-powered document analysis and credit card optimization.
+Vitta helps you choose the best credit card for every purchase, optimize payments to minimize interest, and maximize rewards with AI-powered insights.
 
 ## Features
 
 ### 🔐 Authentication System
-- Demo login system (enter any email/password combination)
-- User session management
-- Secure logout functionality
-
-### 📄 AI Document Chat
-- Upload financial documents (PDF, PNG, JPG, JPEG)
-- AI-powered document analysis and data extraction
-- Natural language queries about your financial documents
-- Support for W-2, 1099, bank statements, credit card statements, and receipts
+- **Demo Login**: Test the app with any email/password
+- **Google OAuth**: Sign in with your Google account
+- **User Persistence**: Supabase database integration for Google login users
+- Secure session management and logout
 
 ### 💳 Credit Card Management Dashboard
 - **Multi-card support**: Manage multiple credit cards in one interface
@@ -24,11 +19,11 @@ A Next.js demo application showcasing Vitta's family financial intelligence plat
 - **Smart recommendations**: AI-powered tips for optimal card usage
 - **Quick actions**: Make payments, view statements, set alerts
 
-### 🎯 Smart Recommendations
-- Credit card selection guidance for different spending categories
-- Interest savings calculations
-- Credit score optimization tips
-- Family spending coordination insights
+### 🤖 AI Assistant
+- **Best Card Recommendations**: Ask which card to use for any purchase
+- **Smart Payment Strategy**: Optimize payments across all cards to minimize interest
+- **Rewards Maximization**: Get recommendations to maximize cashback and points
+- Natural language chat interface for all your card questions
 
 ### 📱 Modern UI/UX
 - Responsive design with Tailwind CSS
@@ -46,7 +41,7 @@ A Next.js demo application showcasing Vitta's family financial intelligence plat
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd vitta-document-chat
+cd vitta
 
 # Install dependencies
 npm install
@@ -57,27 +52,39 @@ npm run dev
 
 ### Usage
 1. Open [http://localhost:3000](http://localhost:3000)
-2. Enter any email and password combination to access the demo
-3. Upload financial documents or start chatting with the Vitta AI Assistant
-4. Click "Credit Cards" to access the comprehensive credit card management dashboard
-5. Explore different cards, analyze spending patterns, and get optimization tips
+2. Sign in with:
+   - **Demo Login**: Enter any email and password
+   - **Google OAuth**: Click "Continue with Google"
+3. Explore the features:
+   - **Dashboard**: View smart payment recommendations and best card suggestions
+   - **My Cards**: Manage your credit card wallet (add cards by type, no card numbers needed)
+   - **Smart Payments**: Optimize monthly payments to minimize interest
+   - **AI Assistant**: Ask which card to use for any purchase
 
 ## Technology Stack
 
 - **Frontend**: Next.js 14, React 18
 - **Styling**: Tailwind CSS
 - **Icons**: Lucide React
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Google OAuth + Demo mode
 - **Build Tool**: Next.js built-in bundler
 
 ## Project Structure
 
 ```
-vitta-document-chat/
+vitta/
 ├── components/
 │   ├── VittaApp.js             # Main application component
-│   └── CreditCardScreen.js     # Credit card management dashboard
+│   ├── Dashboard.js            # Smart payment recommendations dashboard
+│   ├── CreditCardScreen.js     # Credit card wallet management
+│   └── PaymentOptimizer.js     # Payment strategy optimizer
+├── config/
+│   └── supabase.js             # Supabase client configuration
+├── services/
+│   └── userService.js          # User database operations
 ├── pages/
-│   ├── _app.js                 # App wrapper
+│   ├── _app.js                 # App wrapper with Google OAuth
 │   ├── _document.js            # Document wrapper
 │   └── index.js                # Home page
 ├── styles/
@@ -314,26 +321,25 @@ Vitta is the first AI-powered platform built specifically for families managing 
 
 This comprehensive feature list showcases Vitta as a sophisticated, family-first financial intelligence platform that goes far beyond traditional budgeting apps to provide real-time optimization, coordination, and AI-powered insights for modern families managing complex financial lives.
 
-## Demo Features
+## Configuration
 
-### Document Processing
-- Simulated AI document analysis
-- Multiple document type support
-- Extracted data visualization
-- Sample questions and responses
+### Supabase Setup
 
-### Credit Card Simulation
-- 3 sample credit cards with realistic data
-- Chase Freedom Unlimited (Visa)
-- Amex Gold Card (American Express)
-- Citi Double Cash (Mastercard)
-- Dynamic spending patterns and balances
+To enable user persistence with Google OAuth:
 
-### Vitta AI Assistant
-- Context-aware responses
-- Document-specific insights
-- Credit card optimization advice
-- Financial summary generation
+1. Follow the detailed guide in `SUPABASE_SETUP.md`
+2. Create a Supabase project and users table
+3. Add your credentials to `.env.local`:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your-project-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+### Google OAuth Setup
+
+See `GOOGLE_OAUTH_SETUP.md` for detailed instructions on configuring Google Sign-In.
+
+**Note**: The app works in demo mode even without Supabase configured. Google login users will work but won't be persisted to a database.
 
 ## Development
 
@@ -351,17 +357,18 @@ This comprehensive feature list showcases Vitta as a sophisticated, family-first
 
 ## Future Enhancements
 
-- Real API integration for document processing
-- Live credit card data synchronization
+- Live credit card data synchronization via Plaid
 - Advanced spending analytics and forecasting
 - Family member management and sharing
 - Mobile app development
 - Real-time notifications and alerts
+- BNPL (Buy Now, Pay Later) integration
+- Community fraud intelligence
 
 ## Contributing
 
-This is a demo application showcasing Vitta's financial platform capabilities. For questions or contributions, please contact the development team.
+Vitta is an intelligent credit card platform helping users make smarter financial decisions. For questions or contributions, please contact the development team.
 
 ## License
 
-This project is for demonstration purposes only.
+This project is proprietary.
