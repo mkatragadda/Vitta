@@ -63,15 +63,10 @@ npm run lint
 - Demo authentication (accepts any email/password)
 - Google OAuth integration via Google Sign-In API
 - User state managed in main component
-- No backend integration - purely frontend demo
 
-### Document Processing
-- Supports PDF, PNG, JPG, JPEG uploads
-- Simulated AI analysis (no actual OCR in demo)
-- Sample responses for common financial document types
 
 ### Credit Card Management
-- Mock data for 3 sample cards (Chase, Amex, Citi)
+- Mock data for 3 sample cards (Chase, Amex, Citi) for demo flow 
 - Real-time balance and utilization calculations
 - Payment optimization recommendations
 

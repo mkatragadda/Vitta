@@ -5,6 +5,15 @@ import CreditCardScreen from './CreditCardScreen';
 import { getUserCards, addCard, deleteCard, calculateUtilization } from '../services/cardService';
 
 const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoading, handleSendMessage, handleKeyPress, MessageContent, isDemoMode = false, onCardsChanged }) => {
+
+  // Helper function to send a quick action message directly
+  const sendQuickAction = (query) => {
+    setInput(query);
+    // Use setTimeout to ensure state is updated before sending
+    setTimeout(() => {
+      handleSendMessage();
+    }, 0);
+  };
   const [currentView, setCurrentView] = useState('chat'); // 'chat', 'optimizer', 'cards'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -251,28 +260,28 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
             <p className="text-sm text-gray-600 mb-3 font-medium">Quick actions:</p>
             <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => { setInput('list my cards'); handleSendMessage(); }}
+                  onClick={() => sendQuickAction('list my cards')}
                   className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                   disabled={isLoading}
                 >
                   📋 List my cards
                 </button>
                 <button
-                  onClick={() => { setInput('show my balances'); handleSendMessage(); }}
+                  onClick={() => sendQuickAction('show my balances')}
                   className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                   disabled={isLoading}
                 >
                   💰 Show balances
                 </button>
                 <button
-                  onClick={() => { setInput('card with lowest APR'); handleSendMessage(); }}
+                  onClick={() => sendQuickAction('card with lowest APR')}
                   className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                   disabled={isLoading}
                 >
                   📊 Lowest APR card
                 </button>
                 <button
-                  onClick={() => { setInput('when are my payments due'); handleSendMessage(); }}
+                  onClick={() => sendQuickAction('when are my payments due')}
                   className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                   disabled={isLoading}
                 >

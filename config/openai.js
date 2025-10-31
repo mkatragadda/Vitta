@@ -1,10 +1,8 @@
 /**
  * OpenAI Configuration
  * For GPT-3.5 fallback when local NLP can't handle the query
+ * NOTE: API key is now accessed server-side only via API routes
  */
-
-// API key should be stored in .env.local file
-export const OPENAI_API_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY || '';
 
 export const OPENAI_CONFIG = {
   model: 'gpt-3.5-turbo',

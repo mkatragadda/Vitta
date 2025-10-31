@@ -6,7 +6,7 @@
 import { getCachedEmbedding, findSimilarIntents, logIntentDetection } from '../embedding/embeddingService.js';
 import { extractEntities } from './entityExtractor.js';
 import { generateResponse } from './responseGenerator.js';
-import { OPENAI_API_KEY, OPENAI_CONFIG } from '../../config/openai.js';
+import { OPENAI_CONFIG } from '../../config/openai.js';
 import { formatIntentsForGPT } from '../../config/intentDefinitions.js';
 
 // Similarity thresholds for intent matching
@@ -107,12 +107,6 @@ async function processWithGPT(query, userData, context, topMatch = null, localRe
     console.log('[ConversationEngineV2] Including local response data for conversational formatting');
   }
 
-  // Check if API key is available
-  if (!OPENAI_API_KEY) {
-    console.warn('[ConversationEngineV2] OpenAI API key not configured');
-    return generateFallbackResponse(query, topMatch, userData);
-  }
-
   try {
     // Build enhanced system prompt with intent definitions
     const intentContext = formatIntentsForGPT();
@@ -150,7 +144,7 @@ IMPORTANT:
 
     if (localResponse) {
       // Include structured data from local handler for conversational formatting
-      contextualQuery += `\n\n[System: The system has this data to answer the user's query. Please format it conversationally and naturally:\n${localResponse}\n]`;
+      contextualQuery += `\n\n[System: The system has this data to answer the user's query. Please use this EXACT response, preserving all markdown tables and formatting. You may add a brief conversational intro (1 sentence max) before the data:\n${localResponse}\n]`;
     } else if (topMatch) {
       // No local data, but we have an intent hint
       contextualQuery += `\n\n[System note: This might be related to "${topMatch.intent_id}" (${(topMatch.similarity * 100).toFixed(0)}% confidence)]`;
@@ -160,13 +154,13 @@ IMPORTANT:
 
     messages.push({ role: 'user', content: contextualQuery });
 
-    console.log('[ConversationEngineV2] Calling OpenAI API...');
+    console.log('[ConversationEngineV2] Calling OpenAI API via server route...');
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call our API route instead of OpenAI directly
+    const response = await fetch('/api/chat/completions', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: OPENAI_CONFIG.model,
@@ -177,7 +171,8 @@ IMPORTANT:
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API error: ${response.status} - ${errorData.error || 'Unknown error'}`);
     }
 
     const data = await response.json();
