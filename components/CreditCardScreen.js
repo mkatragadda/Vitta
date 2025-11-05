@@ -31,6 +31,10 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
       const cards = await getUserCards(user.id);
       setCreditCards(cards || []);
       console.log('[CreditCardScreen] Loaded cards:', cards?.length || 0);
+      console.log('[CreditCardScreen] First card:', cards && cards[0]);
+      if (cards && cards[0]) {
+        console.log('[CreditCardScreen] First card has nickname?', cards[0].nickname);
+      }
     } catch (error) {
       console.error('[CreditCardScreen] Error loading cards:', error);
       setCreditCards([]);
@@ -236,25 +240,29 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
 
         {/* Card Selection Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {creditCards.map((card, index) => (
-            <button
-              key={card.id}
-              onClick={() => setSelectedCard(index)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl whitespace-nowrap transition-all ${
-                selectedCard === index
-                  ? 'bg-white shadow-lg text-blue-600'
-                  : 'bg-white/50 hover:bg-white/80 text-gray-600'
-              }`}
-            >
-              <CreditCard className={`w-5 h-5 ${
-                selectedCard === index ? 'text-blue-600' : 'text-gray-400'
-              }`} />
-              <span className="font-medium">{card.card_name || card.card_type}</span>
-              <div className={`w-3 h-3 rounded-full ${
-                card.current_balance > 0 ? 'bg-red-500' : 'bg-green-500'
-              }`}></div>
-            </button>
-          ))}
+          {creditCards.map((card, index) => {
+            const displayName = card.nickname || card.card_name || card.card_type;
+
+            return (
+              <button
+                key={card.id}
+                onClick={() => setSelectedCard(index)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl whitespace-nowrap transition-all ${
+                  selectedCard === index
+                    ? 'bg-white shadow-lg text-blue-600'
+                    : 'bg-white/50 hover:bg-white/80 text-gray-600'
+                }`}
+              >
+                <CreditCard className={`w-5 h-5 ${
+                  selectedCard === index ? 'text-blue-600' : 'text-gray-400'
+                }`} />
+                <span className="font-medium">{displayName}</span>
+                <div className={`w-3 h-3 rounded-full ${
+                  card.current_balance > 0 ? 'bg-red-500' : 'bg-green-500'
+                }`}></div>
+              </button>
+            );
+          })}
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
@@ -373,14 +381,28 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
                 Card Details
               </h3>
               <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600">Card Name</p>
-                  <p className="font-semibold text-gray-900">{currentCard.card_name || currentCard.card_type}</p>
+                {/* Card Identity - Nickname (large) with official name (subtitle) */}
+                <div className="pb-3 border-b border-gray-200">
+                  {currentCard.nickname ? (
+                    <>
+                      <h4 className="text-2xl font-bold text-gray-900 mb-1">{currentCard.nickname}</h4>
+                      <p className="text-sm text-gray-600">{currentCard.card_name || currentCard.card_type}</p>
+                    </>
+                  ) : (
+                    <h4 className="text-2xl font-bold text-gray-900">{currentCard.card_name || currentCard.card_type}</h4>
+                  )}
+
+                  {/* Network and Issuer on same line */}
+                  {(currentCard.card_network || currentCard.issuer) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {currentCard.card_network}
+                      {currentCard.card_network && currentCard.issuer && ' • '}
+                      {currentCard.issuer}
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Card Type</p>
-                  <p className="font-semibold text-gray-900">{currentCard.card_type}</p>
-                </div>
+
+                {/* Account Details */}
                 <div>
                   <p className="text-sm text-gray-600">APR</p>
                   <p className="font-semibold text-gray-900">{currentCard.apr}%</p>

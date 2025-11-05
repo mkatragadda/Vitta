@@ -1,20 +1,29 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MessageCircle, CreditCard, TrendingUp, LogOut, Send, Bot, User, Menu, X, Wallet, Plus, Trash2 } from 'lucide-react';
+import { MessageCircle, CreditCard, TrendingUp, LogOut, Send, Bot, User, Menu, X, Wallet, Plus, Trash2, Sparkles } from 'lucide-react';
 import PaymentOptimizer from './PaymentOptimizer';
 import CreditCardScreen from './CreditCardScreen';
+import RecommendationScreen from './RecommendationScreen';
+import AddCardFlow from './AddCardFlow';
 import { getUserCards, addCard, deleteCard, calculateUtilization } from '../services/cardService';
 
 const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoading, handleSendMessage, handleKeyPress, MessageContent, isDemoMode = false, onCardsChanged }) => {
+  const [quickActionTrigger, setQuickActionTrigger] = useState(false);
 
   // Helper function to send a quick action message directly
   const sendQuickAction = (query) => {
     setInput(query);
-    // Use setTimeout to ensure state is updated before sending
-    setTimeout(() => {
-      handleSendMessage();
-    }, 0);
+    setQuickActionTrigger(true);
   };
-  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'optimizer', 'cards'
+
+  // Effect to trigger send after input is set by quick action
+  useEffect(() => {
+    if (quickActionTrigger && input) {
+      handleSendMessage();
+      setQuickActionTrigger(false);
+    }
+  }, [quickActionTrigger, input]);
+
+  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'optimizer', 'cards', 'add-card'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Navigation handler for deep links
@@ -168,6 +177,18 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         >
           <CreditCard className="w-5 h-5" />
           <span>Cards</span>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('recommendations')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            currentView === 'recommendations'
+              ? 'bg-white/20 text-white shadow-lg'
+              : 'text-blue-100 hover:bg-white/10'
+          }`}
+        >
+          <Sparkles className="w-5 h-5" />
+          <span>Card Discovery</span>
         </button>
       </div>
 
@@ -350,14 +371,13 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
             <div className="flex justify-between items-center">
               <p className="text-gray-600">Manage your credit cards without entering sensitive information</p>
               <button
-                onClick={() => setShowAddCard(!showAddCard)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => setCurrentView('add-card')}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl font-semibold"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-5 h-5" />
                 Add Card
               </button>
             </div>
-
             {/* Add Card Form */}
             {showAddCard && (
               <div className="bg-white rounded-xl p-6 shadow-lg">
@@ -473,8 +493,15 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
                     <div key={card.id} className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow">
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <h3 className="text-lg font-bold text-gray-900">{card.card_name || card.card_type}</h3>
-                          <p className="text-sm text-gray-600">{card.card_type}</p>
+                          <h3 className="text-lg font-bold text-gray-900">{card.nickname || card.card_name || card.card_type}</h3>
+                          {card.nickname && <p className="text-sm text-gray-600">{card.card_name || card.card_type}</p>}
+                          {(card.card_network || card.issuer) && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {card.card_network}
+                              {card.card_network && card.issuer && ' • '}
+                              {card.issuer}
+                            </p>
+                          )}
                         </div>
                         <button
                           onClick={() => handleDeleteCard(card.id)}
@@ -485,6 +512,21 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
                       </div>
 
                       <div className="space-y-3">
+                        {/* Show reward structure if available */}
+                        {card.reward_structure && typeof card.reward_structure === 'object' && Object.keys(card.reward_structure).length > 0 && (
+                          <div className="bg-blue-50 rounded-lg p-3 mb-3">
+                            <p className="text-xs font-semibold text-blue-900 mb-2">Rewards</p>
+                            <div className="space-y-1">
+                              {Object.entries(card.reward_structure).map(([category, multiplier]) => (
+                                <div key={category} className="flex justify-between text-xs">
+                                  <span className="text-blue-700 capitalize">{category}:</span>
+                                  <span className="font-semibold text-blue-900">{multiplier}x points</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex justify-between">
                           <span className="text-sm text-gray-600">APR:</span>
                           <span className="text-sm font-semibold text-gray-900">{card.apr}%</span>
@@ -560,6 +602,29 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         {currentView === 'chat' && ChatView}
         {currentView === 'optimizer' && OptimizerView}
         {currentView === 'cards' && CardsView}
+        {currentView === 'recommendations' && (
+          <RecommendationScreen
+            onBack={() => setCurrentView('chat')}
+            user={user}
+            userCards={cards}
+          />
+        )}
+        {currentView === 'add-card' && (
+          <AddCardFlow
+            user={user}
+            onComplete={(newCard) => {
+              // Refresh cards list
+              loadCards();
+              // Notify parent if callback provided
+              if (onCardsChanged) {
+                onCardsChanged();
+              }
+              // Go back to cards view
+              setCurrentView('cards');
+            }}
+            onCancel={() => setCurrentView('cards')}
+          />
+        )}
       </div>
     </div>
   );

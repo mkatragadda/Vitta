@@ -57,12 +57,3 @@ CREATE TRIGGER update_user_credit_cards_updated_at
   BEFORE UPDATE ON user_credit_cards
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
-
-  ALTER TABLE user_credit_cards
-  ADD COLUMN IF NOT EXISTS issuer TEXT,
-  ADD COLUMN IF NOT EXISTS network TEXT,
-  ADD COLUMN IF NOT EXISTS reward_structure JSONB,
-  ADD COLUMN IF NOT EXISTS grace_period_days INTEGER DEFAULT 25,
-  ADD COLUMN IF NOT EXISTS last_statement_balance NUMERIC DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS last_payment_amount NUMERIC DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS paid_in_full_last_month BOOLEAN DEFAULT true;

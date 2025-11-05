@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet } from 'lucide-react';
+import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet, Sparkles } from 'lucide-react';
 import CreditCardScreen from './CreditCardScreen';
 import PaymentOptimizer from './PaymentOptimizer';
 import DashboardWithTabs from './DashboardWithTabs';
 import VittaChatInterface from './VittaChatInterface';
+import RecommendationScreen from './RecommendationScreen';
 import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
@@ -171,7 +172,7 @@ const VittaApp = () => {
   const [user, setUser] = useState(null);
   
   // Screen navigation state
-  const [currentScreen, setCurrentScreen] = useState('main'); // 'main', 'creditCards', 'paymentOptimizer', 'dashboard'
+  const [currentScreen, setCurrentScreen] = useState('main'); // 'main', 'creditCards', 'paymentOptimizer', 'dashboard', 'recommendations'
   
   // Existing states
   const [messages, setMessages] = useState([
@@ -969,6 +970,7 @@ const VittaApp = () => {
       'cards': 'creditCards',
       'optimizer': 'paymentOptimizer',
       'dashboard': 'dashboard',
+      'recommendations': 'recommendations',
       'expenses': 'main' // Default to main if not implemented
     };
 
@@ -1039,6 +1041,17 @@ const VittaApp = () => {
           <PaymentOptimizer />
         </div>
       </div>
+    );
+  }
+
+  // If recommendations screen is active, show it
+  if (currentScreen === 'recommendations') {
+    return (
+      <RecommendationScreen
+        onBack={() => setCurrentScreen('main')}
+        user={user}
+        userCards={cards}
+      />
     );
   }
 
@@ -1153,6 +1166,14 @@ const VittaApp = () => {
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">AI Assistant</h3>
             <p className="text-gray-600">Ask which card to use at Costco, for groceries, or any purchase. Get instant, personalized recommendations.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('recommendations')}>
+            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4">
+              <Sparkles className="w-6 h-6 text-orange-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Card Discovery</h3>
+            <p className="text-gray-600">Discover new credit cards that could improve your rewards and fit your spending patterns.</p>
           </div>
         </div>
 

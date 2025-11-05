@@ -193,10 +193,14 @@ const showAllBalances = (cards) => {
 };
 
 const showDueDates = (cards) => {
-  const cardsWithDates = cards.filter(c => c.due_date);
+  // Use new payment cycle utilities
+  const { getUpcomingPayments, getPaymentUrgencyEmoji, getPaymentStatusMessage } = require('../../utils/paymentCycleUtils');
 
-  if (cardsWithDates.length === 0) {
-    return "No upcoming payment dates found. Check [My Wallet](vitta://navigate/cards) for details.";
+  // Get upcoming payments (automatically filters out $0 balance cards)
+  const upcomingPayments = getUpcomingPayments(cards, 30);
+
+  if (upcomingPayments.length === 0) {
+    return "You don't have any payments due in the next 30 days. 🎉";
   }
 
   let response = `**Upcoming Payment Due Dates:**\n\n`;
@@ -204,17 +208,22 @@ const showDueDates = (cards) => {
   response += '| Card | Due Date | Days Left | Amount | Status |\n';
   response += '|------|----------|-----------|--------|--------|\n';
 
-  const sorted = [...cardsWithDates].sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+  upcomingPayments.forEach(payment => {
+    const cardName = payment.card.nickname || payment.card.card_name || payment.card.card_type;
+    const dueDate = payment.paymentDueDate.toLocaleDateString();
 
-  sorted.forEach(card => {
-    const dueDate = new Date(card.due_date);
-    const today = new Date();
-    const daysUntil = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+    // Format days left - show as "N/A" for cards with $0 balance (won't appear anyway)
+    const daysLeftText = payment.daysUntilDue < 0
+      ? `${Math.abs(payment.daysUntilDue)} days`  // Overdue
+      : `${payment.daysUntilDue} days`;
 
-    const urgency = daysUntil <= 2 ? '🔴 Urgent' : daysUntil <= 5 ? '🟡 Soon' : '🟢 OK';
-    const amount = `$${card.amount_to_pay?.toLocaleString() || card.current_balance.toLocaleString()}`;
+    const urgency = payment.isOverdue ? '🔴 Urgent' :
+                    payment.isUrgent ? '🟡 Soon' :
+                    '🟢 OK';
 
-    response += `| ${card.card_name || card.card_type} | ${dueDate.toLocaleDateString()} | ${daysUntil} days | ${amount} | ${urgency} |\n`;
+    const amount = `$${payment.amount.toLocaleString()}`;
+
+    response += `| ${cardName} | ${dueDate} | ${daysLeftText} | ${amount} | ${urgency} |\n`;
   });
 
   return response.trim();

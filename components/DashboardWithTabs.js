@@ -290,8 +290,30 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
               <div key={card.id} className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{card.card_name || card.card_type}</h3>
-                    <p className="text-sm text-gray-600">{card.card_type}</p>
+                    {card.nickname ? (
+                      <>
+                        <h3 className="text-lg font-bold text-gray-900">{card.nickname}</h3>
+                        <p className="text-sm text-gray-600">{card.card_name || card.card_type}</p>
+                        {(card.card_network || card.issuer) && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {card.card_network}
+                            {card.card_network && card.issuer && ' • '}
+                            {card.issuer}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-lg font-bold text-gray-900">{card.card_name || card.card_type}</h3>
+                        {(card.card_network || card.issuer) && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {card.card_network}
+                            {card.card_network && card.issuer && ' • '}
+                            {card.issuer}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
                   <button
                     onClick={() => handleDeleteCard(card.id)}
@@ -412,7 +434,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
                 {card ? (
                   <div className="space-y-2">
                     <p className="text-sm text-gray-600">Best card to use:</p>
-                    <p className="font-bold text-blue-600 text-lg">{card.card_name || card.card_type}</p>
+                    <p className="font-bold text-blue-600 text-lg">{card.nickname || card.card_name || card.card_type}</p>
                     <div className="pt-3 space-y-1 text-sm">
                       <p className="text-gray-600">Available Credit: <span className="font-semibold text-green-600">${(card.credit_limit - card.current_balance).toLocaleString()}</span></p>
                       <p className="text-gray-600">APR: <span className="font-semibold">{card.apr}%</span></p>

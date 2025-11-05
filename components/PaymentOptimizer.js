@@ -81,7 +81,7 @@ const PaymentOptimizer = ({ cards: propCards, isDemoMode = false }) => {
     }
     return propCards.map(card => ({
       id: card.id,
-      name: card.card_name || card.card_type,
+      name: card.nickname || card.card_name || card.card_type,
       balance: card.current_balance || 0,
       apr: card.apr || 0,
       min: card.amount_to_pay || 0
@@ -218,6 +218,7 @@ const PaymentOptimizer = ({ cards: propCards, isDemoMode = false }) => {
 };
 
 export default PaymentOptimizer;
+
 
 
 

@@ -134,23 +134,16 @@ const generateRecommendationReason = (card, rewardMultiplier, category) => {
 
 /**
  * Find upcoming payment due dates
+ * Uses new payment cycle utilities to show BOTH previous and current payments
  */
 export const findUpcomingPayments = (cards, daysAhead = 7) => {
   if (!cards || cards.length === 0) return [];
 
-  const today = new Date();
-  const futureDate = new Date();
-  futureDate.setDate(today.getDate() + daysAhead);
+  // Import payment cycle utilities
+  const { getUpcomingPayments } = require('../utils/paymentCycleUtils');
 
-  return cards
-    .filter(card => card.due_date)
-    .map(card => ({
-      ...card,
-      dueDate: new Date(card.due_date),
-      daysUntilDue: Math.ceil((new Date(card.due_date) - today) / (1000 * 60 * 60 * 24))
-    }))
-    .filter(card => card.dueDate >= today && card.dueDate <= futureDate)
-    .sort((a, b) => a.dueDate - b.dueDate);
+  // Use new utility that handles both previous and current payments
+  return getUpcomingPayments(cards, daysAhead);
 };
 
 /**
@@ -204,6 +197,7 @@ export const generateBestCardResponse = (merchant, cards) => {
 
 /**
  * Generate response for upcoming payments
+ * Now shows urgency levels and handles overdue payments
  */
 export const generatePaymentDueResponse = (cards, daysAhead = 7) => {
   const upcomingPayments = findUpcomingPayments(cards, daysAhead);
@@ -212,14 +206,35 @@ export const generatePaymentDueResponse = (cards, daysAhead = 7) => {
     return `You don't have any payments due in the next ${daysAhead} days. 🎉`;
   }
 
-  let response = `You have ${upcomingPayments.length} payment${upcomingPayments.length > 1 ? 's' : ''} due in the next ${daysAhead} days:\n\n`;
+  let response = `You have ${upcomingPayments.length} payment${upcomingPayments.length > 1 ? 's' : ''} requiring attention:\n\n`;
 
   upcomingPayments.forEach(payment => {
-    const urgency = payment.daysUntilDue <= 2 ? '⚠️ URGENT' : payment.daysUntilDue <= 5 ? '⏰' : '📅';
-    response += `${urgency} **${payment.card_name || payment.card_type}**\n`;
-    response += `   - Amount Due: $${payment.amount_to_pay.toLocaleString()}\n`;
-    response += `   - Due Date: ${payment.dueDate.toLocaleDateString()} (${payment.daysUntilDue} day${payment.daysUntilDue !== 1 ? 's' : ''})\n`;
-    response += `   - Current Balance: $${payment.current_balance.toLocaleString()}\n\n`;
+    const cardName = payment.card.nickname || payment.card.card_name || payment.card.card_type;
+
+    // Get urgency emoji
+    let emoji = '📅';
+    if (payment.isOverdue) {
+      emoji = '🔴';
+    } else if (payment.isUrgent) {
+      emoji = '🟡';
+    } else {
+      emoji = '🟢';
+    }
+
+    response += `${emoji} **${cardName}**\n`;
+
+    // Show status message
+    if (payment.isOverdue) {
+      response += `   - ⚠️ **OVERDUE by ${Math.abs(payment.daysUntilDue)} day${Math.abs(payment.daysUntilDue) !== 1 ? 's' : ''}!**\n`;
+    } else if (payment.isUrgent) {
+      response += `   - ⏰ **Due in ${payment.daysUntilDue} day${payment.daysUntilDue !== 1 ? 's' : ''}**\n`;
+    } else {
+      response += `   - Due in ${payment.daysUntilDue} day${payment.daysUntilDue !== 1 ? 's' : ''}\n`;
+    }
+
+    response += `   - Amount: $${payment.amount.toLocaleString()}\n`;
+    response += `   - Due Date: ${payment.paymentDueDate.toLocaleDateString()}\n`;
+    response += `   - Status: ${payment.status}\n\n`;
   });
 
   return response.trim();
