@@ -204,7 +204,7 @@ const CardDetailsForm = ({ selectedCard, onBack, onSubmit, isSubmitting }) => {
               Your Account Details
             </h3>
             <p className="text-gray-600">
-              Let's personalize this card with your account information
+              Let&apos;s personalize this card with your account information
             </p>
           </div>
 
@@ -361,7 +361,7 @@ const CardDetailsForm = ({ selectedCard, onBack, onSubmit, isSubmitting }) => {
                 ) : (
                   <p className="mt-1 text-sm text-gray-600 flex items-center gap-1">
                     <Info className="w-4 h-4" />
-                    Select any date from your recent statement (e.g., Jan 15, 2025). We'll extract the day (15th) and apply it monthly.
+                    Select any date from your recent statement (e.g., Jan 15, 2025). We&apos;ll extract the day (15th) and apply it monthly.
                   </p>
                 )}
               </div>

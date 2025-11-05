@@ -97,7 +97,7 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
             Add Your First Card
           </h1>
           <p className="text-lg text-gray-600">
-            Let's start building your smart wallet
+            Let&apos;s start building your smart wallet
           </p>
         </div>
 
@@ -178,7 +178,7 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
             <div className="mt-12 text-center">
               <div className="inline-block bg-white rounded-2xl shadow-lg p-6 max-w-md">
                 <p className="text-gray-700 mb-4">
-                  Can't find your card in the list?
+                  Can&apos;t find your card in the list?
                 </p>
                 <button
                   onClick={onManualEntry}

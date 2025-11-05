@@ -199,7 +199,7 @@ const CardSelectorModal = ({ isOpen, onClose, onSelect, onManualEntry, userId })
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600">
-              Can't find your card in the list?
+              Can&apos;t find your card in the list?
             </div>
             <button
               onClick={handleManualEntry}
