@@ -33,8 +33,8 @@ async function main() {
   console.log('');
 
   // Check if API key is configured
-  if (!process.env.NEXT_PUBLIC_OPENAI_API_KEY) {
-    console.error('❌ Error: NEXT_PUBLIC_OPENAI_API_KEY not found in environment');
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('❌ Error: OPENAI_API_KEY not found in environment');
     console.error('   Please add your OpenAI API key to .env.local');
     process.exit(1);
   }

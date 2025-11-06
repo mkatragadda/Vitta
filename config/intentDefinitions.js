@@ -100,6 +100,33 @@ export const INTENT_DEFINITIONS = {
       "Help me",
       "How can you help?"
     ]
+  },
+
+  card_recommendation: {
+    name: "Card Recommendation / Purchase Optimization",
+    description: "User wants personalized recommendation for which card to use for a specific purchase",
+    capabilities: [
+      "Recommend best card for specific merchant or category",
+      "Maximize rewards (points, cashback, miles)",
+      "Minimize interest charges (APR optimization)",
+      "Optimize cash flow timing (float strategy)",
+      "Compare all strategies for a purchase",
+      "Explain reasoning behind recommendations",
+      "Consider APR, rewards, statement cycles, and grace periods",
+      "Provide coaching tips for better card usage"
+    ],
+    examples: [
+      "Which card should I use at Costco?",
+      "Best card for groceries?",
+      "I want to maximize rewards for dining",
+      "Which card avoids interest for $500 purchase?",
+      "Help me choose a card for my trip",
+      "Best card to use today?",
+      "Compare all strategies for this purchase",
+      "Which card has longest grace period?",
+      "Lowest interest card for $1000?",
+      "Maximize cashback for Target"
+    ]
   }
 };
 

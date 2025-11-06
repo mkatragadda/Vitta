@@ -1,6 +1,7 @@
 /**
  * Conversation Engine V2 - Embedding-Based Intent Detection
  * Uses OpenAI embeddings + vector similarity search for intent detection
+ * Enhanced with user profile context for personalized responses
  */
 
 import { getCachedEmbedding, findSimilarIntents, logIntentDetection } from '../embedding/embeddingService.js';
@@ -8,6 +9,8 @@ import { extractEntities } from './entityExtractor.js';
 import { generateResponse } from './responseGenerator.js';
 import { OPENAI_CONFIG } from '../../config/openai.js';
 import { formatIntentsForGPT } from '../../config/intentDefinitions.js';
+import { getUserProfile, shouldIncludeProfile, formatProfileForGPT } from '../userProfileService.js';
+import { INTENT_CATEGORIES } from '../embedding/intentEmbeddings.js';
 
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
@@ -17,35 +20,119 @@ const THRESHOLDS = {
 };
 
 /**
+ * Classify query into high-level category using zero-shot LLM
+ * Stage 1 of hierarchical classification
+ * @param {string} query - User query
+ * @returns {Promise<string>} - Category: 'TASK' | 'GUIDANCE' | 'CHAT'
+ */
+async function classifyCategory(query) {
+  try {
+    console.log('[ConversationEngineV2] Stage 1: Classifying category...');
+
+    const response = await fetch('/api/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{
+          role: 'system',
+          content: `You are a query classifier. Classify the user's query into exactly ONE category:
+
+TASK - User wants to perform a specific action with their credit cards:
+- Choose which card to use for a purchase
+- View card information, balances, or payments
+- Split payments across cards
+- Add or remove cards
+- Navigate to a specific screen
+
+GUIDANCE - User wants financial advice or strategy:
+- How to reduce debt or pay off balances
+- Credit score improvement tips
+- Understanding credit concepts (APR, utilization, grace periods)
+- General financial coaching or best practices
+
+CHAT - Casual conversation:
+- Greetings (hi, hello, hey)
+- Thanks or affirmations
+- Small talk
+
+Respond with ONLY the category name: TASK, GUIDANCE, or CHAT`
+        }, {
+          role: 'user',
+          content: query
+        }],
+        temperature: 0,
+        max_tokens: 10
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Category classification API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const category = data.choices[0].message.content.trim().toUpperCase();
+
+    // Validate category
+    if (!['TASK', 'GUIDANCE', 'CHAT'].includes(category)) {
+      console.warn('[ConversationEngineV2] Invalid category returned:', category, '- defaulting to TASK');
+      return 'TASK';
+    }
+
+    console.log('[ConversationEngineV2] Category classified:', category);
+    return category;
+
+  } catch (error) {
+    console.error('[ConversationEngineV2] Error classifying category:', error);
+    // Default to TASK on error (most common category)
+    return 'TASK';
+  }
+}
+
+/**
  * Process user query using embedding-based intent detection
+ * Now with hierarchical two-stage classification for better accuracy
  */
 export const processQuery = async (query, userData = {}, context = {}) => {
   console.log('[ConversationEngineV2] Processing query:', query);
 
   try {
-    // STEP 1: Generate query embedding
-    console.log('[ConversationEngineV2] Step 1: Generating query embedding...');
+    // STEP 1: Classify into high-level category (TASK / GUIDANCE / CHAT)
+    const category = await classifyCategory(query);
+    const allowedIntents = INTENT_CATEGORIES[category] || [];
+    console.log('[ConversationEngineV2] Category:', category, '- Allowed intents:', allowedIntents);
+
+    // STEP 2: Generate query embedding
+    console.log('[ConversationEngineV2] Step 2: Generating query embedding...');
     const queryEmbedding = await getCachedEmbedding(query);
 
     if (!queryEmbedding) {
       console.error('[ConversationEngineV2] Failed to generate embedding, using GPT fallback');
-      return await processWithGPT(query, userData, context, null);
+      return await processWithGPT(query, userData, context, null, category);
     }
 
-    // STEP 2: Find similar intents via vector search
-    console.log('[ConversationEngineV2] Step 2: Searching for similar intents...');
-    const matches = await findSimilarIntents(queryEmbedding, THRESHOLDS.LOW_CONFIDENCE, 3);
+    // STEP 3: Find similar intents via vector search (filtered by category)
+    console.log('[ConversationEngineV2] Step 3: Searching for similar intents within category...');
+    const matches = await findSimilarIntents(
+      queryEmbedding,
+      THRESHOLDS.LOW_CONFIDENCE,
+      3,
+      { filterIntents: allowedIntents }
+    );
 
     if (!matches || matches.length === 0) {
       console.log('[ConversationEngineV2] No matches found, using GPT fallback');
-      return await processWithGPT(query, userData, context, null);
+      return await processWithGPT(query, userData, context, null, category);
     }
 
     const topMatch = matches[0];
     console.log('[ConversationEngineV2] Top match:', {
       intent: topMatch.intent_id,
       similarity: topMatch.similarity.toFixed(3),
-      example: topMatch.example_query
+      example: topMatch.example_query,
+      category
     });
 
     // Log intent detection
@@ -66,10 +153,20 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Get structured data from local intent handler
       const entities = extractEntities(query);
       const classification = { intent: topMatch.intent_id };
-      const localResponse = generateResponse(classification, entities, userData, context);
+      let localResponse = generateResponse(classification, entities, userData, context);
+
+      // Handle async responses (e.g., from recommendation handler)
+      if (localResponse instanceof Promise) {
+        localResponse = await localResponse;
+      }
+
+      // Handle recommendation handler response format
+      if (localResponse && typeof localResponse === 'object' && localResponse.response) {
+        localResponse = localResponse.response;
+      }
 
       // Pass to GPT for conversational formatting
-      return await processWithGPT(query, userData, context, topMatch, localResponse);
+      return await processWithGPT(query, userData, context, topMatch, localResponse, category);
 
     } else if (topMatch.similarity >= THRESHOLDS.MEDIUM_CONFIDENCE) {
       // Medium confidence - get local data, then use GPT for conversational formatting
@@ -79,16 +176,26 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Get structured data from local intent handler
       const entities = extractEntities(query);
       const classification = { intent: topMatch.intent_id };
-      const localResponse = generateResponse(classification, entities, userData, context);
+      let localResponse = generateResponse(classification, entities, userData, context);
+
+      // Handle async responses (e.g., from recommendation handler)
+      if (localResponse instanceof Promise) {
+        localResponse = await localResponse;
+      }
+
+      // Handle recommendation handler response format
+      if (localResponse && typeof localResponse === 'object' && localResponse.response) {
+        localResponse = localResponse.response;
+      }
 
       // Pass to GPT for conversational formatting
-      return await processWithGPT(query, userData, context, topMatch, localResponse);
+      return await processWithGPT(query, userData, context, topMatch, localResponse, category);
 
     } else {
       // Low confidence - use GPT fallback
       console.log('[ConversationEngineV2] Low confidence, using GPT fallback');
       console.log('[ConversationEngineV2] Similarity:', topMatch.similarity, 'Threshold:', THRESHOLDS.MEDIUM_CONFIDENCE);
-      return await processWithGPT(query, userData, context, topMatch);
+      return await processWithGPT(query, userData, context, topMatch, null, category);
     }
 
   } catch (error) {
@@ -100,8 +207,9 @@ export const processQuery = async (query, userData = {}, context = {}) => {
 /**
  * Process with GPT - uses local intent data when available for conversational formatting
  * @param {string} localResponse - Optional: structured data from local intent handler to format conversationally
+ * @param {string} category - Query category (TASK/GUIDANCE/CHAT) for context-aware prompting
  */
-async function processWithGPT(query, userData, context, topMatch = null, localResponse = null) {
+async function processWithGPT(query, userData, context, topMatch = null, localResponse = null, category = 'TASK') {
   console.log('[ConversationEngineV2] Using GPT fallback');
   if (localResponse) {
     console.log('[ConversationEngineV2] Including local response data for conversational formatting');
@@ -110,11 +218,41 @@ async function processWithGPT(query, userData, context, topMatch = null, localRe
   try {
     // Build enhanced system prompt with intent definitions
     const intentContext = formatIntentsForGPT();
+    
+    // Category-specific guidance
+    const categoryGuidance = {
+      GUIDANCE: `
+GUIDANCE MODE: The user is seeking financial advice or strategy.
+- Focus on education, best practices, and actionable steps
+- Be empathetic and supportive (debt can be stressful)
+- Provide concrete numbers and examples using their card data
+- Keep responses concise (max 5-6 bullets)
+- Don't recommend specific cards unless they ask
+- Prioritize: strategy > tactics > specific actions`,
+      
+      CHAT: `
+CHAT MODE: The user is making casual conversation.
+- Be friendly, warm, and brief
+- Acknowledge their message naturally
+- Offer to help if appropriate
+- Keep it short (1-2 sentences)`,
+      
+      TASK: `
+TASK MODE: The user wants to perform a specific action.
+- Be direct and action-oriented
+- Provide clear next steps
+- Use their card data for personalized recommendations`
+    };
+
     const enhancedSystemPrompt = `${OPENAI_CONFIG.systemPrompt}
 
 ---
 
 ${intentContext}
+
+---
+
+${categoryGuidance[category] || categoryGuidance.TASK}
 
 IMPORTANT:
 - If the user's query clearly matches one of the intents above, help them with that specific task
@@ -151,6 +289,16 @@ IMPORTANT:
     }
 
     contextualQuery += `\n\n[User's wallet data: ${userDataSummary}]`;
+
+    // Add user profile for personalized context (if available and relevant)
+    if (topMatch && userData.user_id) {
+      const userProfile = await getUserProfile(userData.user_id);
+      if (shouldIncludeProfile(topMatch.intent_id, userProfile)) {
+        const profileContext = formatProfileForGPT(userProfile);
+        contextualQuery += `\n\n[User profile: ${profileContext}]`;
+        console.log('[ConversationEngineV2] Including user profile context');
+      }
+    }
 
     messages.push({ role: 'user', content: contextualQuery });
 

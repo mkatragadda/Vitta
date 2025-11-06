@@ -81,9 +81,11 @@ export async function getCachedEmbedding(text) {
  * @param {number[]} queryEmbedding - Query embedding vector
  * @param {number} threshold - Similarity threshold (0-1)
  * @param {number} limit - Max number of results
+ * @param {Object} options - Optional filters
+ * @param {string[]} options.filterIntents - Array of intent_ids to filter by (for hierarchical classification)
  * @returns {Promise<Array>} - Matching intents with similarity scores
  */
-export async function findSimilarIntents(queryEmbedding, threshold = 0.75, limit = 3) {
+export async function findSimilarIntents(queryEmbedding, threshold = 0.75, limit = 3, options = {}) {
   try {
     const { data, error } = await supabase.rpc('match_intents', {
       query_embedding: queryEmbedding,
@@ -96,8 +98,16 @@ export async function findSimilarIntents(queryEmbedding, threshold = 0.75, limit
       throw error;
     }
 
-    console.log('[EmbeddingService] Found', data?.length || 0, 'similar intents');
-    return data || [];
+    let results = data || [];
+
+    // Apply intent filtering if specified (for hierarchical classification)
+    if (options.filterIntents && Array.isArray(options.filterIntents) && options.filterIntents.length > 0) {
+      console.log('[EmbeddingService] Filtering to intents:', options.filterIntents);
+      results = results.filter(match => options.filterIntents.includes(match.intent_id));
+    }
+
+    console.log('[EmbeddingService] Found', results.length, 'similar intents');
+    return results;
 
   } catch (error) {
     console.error('[EmbeddingService] Error finding similar intents:', error);
@@ -115,8 +125,15 @@ export async function findSimilarIntents(queryEmbedding, threshold = 0.75, limit
  */
 export async function logIntentDetection(query, intent, similarity, method, userId = null) {
   try {
+    // Skip logging for demo mode (demo user IDs don't exist in DB)
+    if (userId && userId.startsWith('demo-')) {
+      console.log('[EmbeddingService] Skipping intent log (demo mode)');
+      return;
+    }
+
+    // Log with user_id (can be null for unauthenticated users)
     const { error } = await supabase.from('intent_logs').insert({
-      user_id: userId,
+      user_id: userId || null,
       query,
       matched_intent: intent,
       similarity_score: similarity,

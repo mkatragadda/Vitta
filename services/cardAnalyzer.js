@@ -73,7 +73,7 @@ export const findBestCardForMerchant = (merchant, cards) => {
 
   // Score each card
   const scoredCards = cards.map(card => {
-    const cardTypeLower = card.card_type.toLowerCase();
+    const cardTypeLower = (card.card_type || card.card_name || '').toLowerCase();
     let rewardMultiplier = 1;
 
     // Check if we have reward data for this card

@@ -1,0 +1,430 @@
+/**
+ * Recommendation Chat Handler
+ * Conversational AI Financial Coach for card recommendations
+ *
+ * Philosophy: Act like a knowledgeable friend who understands your full portfolio
+ * and gives personalized, context-aware advice - not robotic responses.
+ */
+
+import { getRecommendationForPurchase, getAllStrategyRecommendations } from '../recommendations/recommendationEngine.js';
+import { calculateFloatDays } from '../../utils/paymentCycleUtils.js';
+
+/**
+ * Handle card recommendation queries with conversational intelligence
+ *
+ * Examples:
+ * - "Which card should I use at Costco?"
+ * - "Best card for groceries today?"
+ * - "I want to maximize rewards for dining"
+ * - "Which card avoids interest for a $500 purchase?"
+ * - "Help me choose a card for my trip next week"
+ */
+export const handleRecommendation = async (userCards, entities, query, userId) => {
+  console.log('[RecommendationChatHandler] Handling recommendation', {
+    cardsCount: userCards?.length || 0,
+    entities,
+    userId
+  });
+
+  // Guard: No cards in wallet
+  if (!userCards || userCards.length === 0) {
+    return {
+      response: "I'd love to help you choose the best card, but you haven't added any cards to your wallet yet!\n\n" +
+                "**Let's fix that:**\n" +
+                "Add your first card in [My Wallet](vitta://navigate/cards) and I'll become your personal card coach — " +
+                "helping you maximize rewards, avoid interest, and optimize every purchase.\n\n" +
+                "**What I'll help you with:**\n" +
+                "• Best card for each store or category\n" +
+                "• Maximize rewards and cashback\n" +
+                "• Minimize interest charges\n" +
+                "• Optimize payment timing (float strategy)",
+      hasRecommendation: false
+    };
+  }
+
+  // Build purchase context from entities and query
+  const context = buildPurchaseContext(entities, query);
+
+  console.log('[RecommendationChatHandler] Purchase context:', context);
+
+  // Determine user's goal from query
+  const userGoal = detectUserGoal(query, context);
+
+  console.log('[RecommendationChatHandler] Detected goal:', userGoal);
+
+  // Get recommendation based on goal
+  let recommendation;
+
+  if (userGoal.compareAll) {
+    // User wants to compare strategies
+    recommendation = await getAllStrategyRecommendations(userId, context);
+    return formatMultiStrategyResponse(recommendation, context, query);
+  } else {
+    // Single recommendation with specific strategy
+    context.strategy = userGoal.strategy;
+    recommendation = await getRecommendationForPurchase(userId, context);
+    return formatSingleRecommendation(recommendation, context, query, userGoal);
+  }
+};
+
+/**
+ * Build purchase context from extracted entities and query
+ */
+const buildPurchaseContext = (entities, query) => {
+  const context = {
+    date: new Date() // Default to today
+  };
+
+  // Extract amount
+  if (entities.amount) {
+    context.amount = parseFloat(entities.amount);
+  }
+
+  // Extract category or merchant
+  if (entities.merchant) {
+    context.merchant = entities.merchant;
+    context.category = inferCategoryFromMerchant(entities.merchant);
+  } else if (entities.category) {
+    context.category = entities.category;
+  }
+
+  // Extract date/timing context
+  if (entities.timeframe) {
+    context.date = parseDateFromTimeframe(entities.timeframe, query);
+  }
+
+  return context;
+};
+
+/**
+ * Detect what the user is trying to optimize
+ * Returns: { strategy: 'REWARDS_MAXIMIZER' | 'APR_MINIMIZER' | 'CASHFLOW_OPTIMIZER', compareAll: boolean, reasoning: string }
+ */
+const detectUserGoal = (query, context) => {
+  const lowerQuery = query.toLowerCase();
+
+  // Check for comparison request
+  if (lowerQuery.includes('compare') || lowerQuery.includes('show all') || lowerQuery.includes('all strategies')) {
+    return {
+      strategy: null,
+      compareAll: true,
+      reasoning: 'User wants to see all strategies'
+    };
+  }
+
+  // Detect specific optimization goals
+  const goals = {
+    // Rewards optimization
+    rewards: /reward|point|cashback|cash back|maximize|earn|miles|bonus/i.test(query),
+
+    // APR/interest minimization
+    apr: /interest|apr|cheap|save money|avoid.*interest|minimize.*cost|lowest.*rate|don't.*pay.*interest|no.*interest/i.test(query),
+
+    // Cashflow/float optimization
+    cashflow: /float|cash flow|payment.*due|time|delay|longest.*grace|furthest.*due|postpone|later/i.test(query)
+  };
+
+  // Priority order: APR > Rewards > Cashflow
+  // (APR is most important if user mentions it)
+  if (goals.apr) {
+    return {
+      strategy: 'APR_MINIMIZER',
+      compareAll: false,
+      reasoning: 'User wants to minimize interest/APR'
+    };
+  }
+
+  if (goals.rewards) {
+    return {
+      strategy: 'REWARDS_MAXIMIZER',
+      compareAll: false,
+      reasoning: 'User wants to maximize rewards'
+    };
+  }
+
+  if (goals.cashflow) {
+    return {
+      strategy: 'CASHFLOW_OPTIMIZER',
+      compareAll: false,
+      reasoning: 'User wants to optimize cash flow timing'
+    };
+  }
+
+  // Default: Rewards maximizer (most common use case)
+  return {
+    strategy: 'REWARDS_MAXIMIZER',
+    compareAll: false,
+    reasoning: 'Default to rewards (most popular strategy)'
+  };
+};
+
+/**
+ * Format single recommendation response with conversational tone
+ */
+const formatSingleRecommendation = (recommendation, context, query, userGoal) => {
+  if (!recommendation.primary) {
+    return {
+      response: "I couldn't find the best card for that purchase right now. Let me help you add more details!\n\n" +
+                "**What I need to know:**\n" +
+                "• Where are you shopping? (e.g., 'Costco', 'gas station', 'restaurant')\n" +
+                "• How much are you spending? (optional but helpful)\n" +
+                "• What's your goal? (rewards, avoiding interest, or cash flow)\n\n" +
+                "**Try asking:**\n" +
+                "• 'Best card for $200 at Target'\n" +
+                "• 'Which card for dining to maximize rewards'\n" +
+                "• 'Lowest interest card for $1000 purchase'",
+      hasRecommendation: false
+    };
+  }
+
+  const card = recommendation.primary;
+  const cardName = card.nickname || card.card_name || card.card_type;
+
+  // Build conversational intro based on goal
+  let intro = '';
+
+  if (userGoal.strategy === 'REWARDS_MAXIMIZER') {
+    intro = `💎 **Great choice asking!** To maximize your rewards${context.merchant ? ` at **${context.merchant}**` : ''}${context.category ? ` on **${context.category}**` : ''}, use your:`;
+  } else if (userGoal.strategy === 'APR_MINIMIZER') {
+    intro = `💰 **Smart thinking!** To minimize interest charges${context.amount ? ` on this $${context.amount} purchase` : ''}, use your:`;
+  } else if (userGoal.strategy === 'CASHFLOW_OPTIMIZER') {
+    intro = `📅 **Optimizing your cash flow!** For maximum float time${context.amount ? ` on $${context.amount}` : ''}, use your:`;
+  } else {
+    intro = `✨ Based on your wallet, here's my recommendation${context.merchant ? ` for **${context.merchant}**` : ''}:`;
+  }
+
+  // Card recommendation with emoji
+  let response = `${intro}\n\n`;
+  response += `## 💳 ${cardName}\n\n`;
+
+  // Why this card? (reasoning)
+  response += `**Why this card?**\n`;
+  response += `${recommendation.reasoning}\n\n`;
+
+  // Add specific benefits based on strategy
+  if (userGoal.strategy === 'REWARDS_MAXIMIZER' && context.amount) {
+    const estimatedValue = estimateRewardValue(card, context);
+    if (estimatedValue > 0) {
+      response += `💵 **Estimated value:** ~$${estimatedValue.toFixed(2)} in rewards\n\n`;
+    }
+  }
+
+  if (userGoal.strategy === 'CASHFLOW_OPTIMIZER' && card.statement_close_day && card.grace_period_days) {
+    const floatDays = calculateFloatDays(card, context.date || new Date());
+    if (floatDays > 0) {
+      response += `⏰ **Payment timing:** You'll have **${floatDays} days** before payment is due\n\n`;
+    }
+  }
+
+  if (userGoal.strategy === 'APR_MINIMIZER') {
+    if (card.apr === 0) {
+      response += `🎉 **No interest!** This card has 0% APR — use it guilt-free!\n\n`;
+    } else {
+      response += `📊 **APR:** ${card.apr}% — lowest in your wallet\n\n`;
+    }
+  }
+
+  // Show alternatives if available
+  if (recommendation.alternatives && recommendation.alternatives.length > 0) {
+    response += `**Other options:**\n`;
+    recommendation.alternatives.slice(0, 2).forEach((altCard, idx) => {
+      const altName = altCard.nickname || altCard.card_name || altCard.card_type;
+      response += `${idx + 2}. **${altName}**`;
+
+      // Brief reason why it's alternative
+      if (altCard.score && card.score) {
+        const scoreDiff = ((altCard.score / card.score) * 100).toFixed(0);
+        if (scoreDiff >= 80) {
+          response += ` — also excellent (${scoreDiff}% as good)`;
+        }
+      }
+      response += `\n`;
+    });
+    response += `\n`;
+  }
+
+  // Coaching tip based on user's portfolio
+  const tip = generateCoachingTip(recommendation, context, userGoal);
+  if (tip) {
+    response += `💡 **Coach's tip:** ${tip}\n\n`;
+  }
+
+  // Call to action
+  response += `**Want to explore more?**\n`;
+  response += `• [See full analysis](vitta://navigate/recommendations)\n`;
+  response += `• Ask me: "Compare all strategies for this purchase"\n`;
+  response += `• Or: "Why not use [another card name]?"`;
+
+  return {
+    response: response.trim(),
+    hasRecommendation: true,
+    recommendedCard: card,
+    strategy: userGoal.strategy
+  };
+};
+
+/**
+ * Format multi-strategy comparison response
+ */
+const formatMultiStrategyResponse = (recommendations, context, query) => {
+  let response = `📊 **Let me show you all three ways to optimize this purchase:**\n\n`;
+
+  if (context.merchant || context.category || context.amount) {
+    response += `**Purchase details:** `;
+    const details = [];
+    if (context.merchant) details.push(context.merchant);
+    if (context.category) details.push(context.category);
+    if (context.amount) details.push(`$${context.amount}`);
+    response += details.join(' • ') + '\n\n';
+  }
+
+  response += `---\n\n`;
+
+  // Strategy 1: Maximize Rewards
+  const rewardsRec = recommendations.REWARDS_MAXIMIZER;
+  if (rewardsRec?.primary) {
+    const card1 = rewardsRec.primary;
+    response += `### 💎 1. Maximize Rewards\n`;
+    response += `**Use:** ${card1.nickname || card1.card_name || card1.card_type}\n`;
+    response += `**Why:** ${rewardsRec.reasoning}\n\n`;
+  }
+
+  // Strategy 2: Minimize Interest
+  const aprRec = recommendations.APR_MINIMIZER;
+  if (aprRec?.primary) {
+    const card2 = aprRec.primary;
+    response += `### 💰 2. Minimize Interest\n`;
+    response += `**Use:** ${card2.nickname || card2.card_name || card2.card_type}\n`;
+    response += `**Why:** ${aprRec.reasoning}\n\n`;
+  }
+
+  // Strategy 3: Optimize Cash Flow
+  const cashflowRec = recommendations.CASHFLOW_OPTIMIZER;
+  if (cashflowRec?.primary) {
+    const card3 = cashflowRec.primary;
+    response += `### 📅 3. Optimize Cash Flow\n`;
+    response += `**Use:** ${card3.nickname || card3.card_name || card3.card_type}\n`;
+    response += `**Why:** ${cashflowRec.reasoning}\n\n`;
+  }
+
+  response += `---\n\n`;
+  response += `**My recommendation?** `;
+
+  // Smart default recommendation
+  if (rewardsRec?.primary && aprRec?.primary) {
+    if (rewardsRec.primary.id === aprRec.primary.id) {
+      response += `Looks like **${rewardsRec.primary.nickname || rewardsRec.primary.card_name}** wins on both rewards AND interest — use it!\n\n`;
+    } else {
+      response += `If you pay in full each month, go with **rewards**. If you'll carry a balance, choose **interest minimization**.\n\n`;
+    }
+  }
+
+  response += `[See detailed analysis](vitta://navigate/recommendations)`;
+
+  return {
+    response: response.trim(),
+    hasRecommendation: true,
+    multiStrategy: true
+  };
+};
+
+/**
+ * Generate personalized coaching tip based on user's situation
+ */
+const generateCoachingTip = (recommendation, context, userGoal) => {
+  const card = recommendation.primary;
+
+  // Warning: No grace period
+  if (card._noGracePeriod) {
+    return "⚠️ This card is carrying a balance, so you'll start paying interest immediately on new purchases. Consider paying it off first!";
+  }
+
+  // Warning: High utilization
+  const utilization = (card.current_balance / card.credit_limit) * 100;
+  if (utilization > 50) {
+    return `This card is at ${utilization.toFixed(0)}% utilization. Keep it under 30% for a better credit score.`;
+  }
+
+  // Tip: Multiple cards with good rewards
+  if (userGoal.strategy === 'REWARDS_MAXIMIZER' && recommendation.alternatives?.length > 0) {
+    const topAlt = recommendation.alternatives[0];
+    if (topAlt.score >= card.score * 0.9) {
+      return `Your ${topAlt.nickname || topAlt.card_name} is almost as good for this! You have great reward cards.`;
+    }
+  }
+
+  // Tip: APR optimization
+  if (userGoal.strategy === 'APR_MINIMIZER' && card.apr > 0) {
+    return `Consider paying this off before the statement closes to avoid the ${card.apr}% APR.`;
+  }
+
+  // Tip: Float optimization
+  if (userGoal.strategy === 'CASHFLOW_OPTIMIZER') {
+    return "Remember: float only works if you pay in full each month. Carrying balances means immediate interest!";
+  }
+
+  return null;
+};
+
+/**
+ * Estimate reward value for a purchase
+ */
+const estimateRewardValue = (card, context) => {
+  if (!context.amount) return 0;
+
+  const category = context.category || 'default';
+  const rewardStructure = card.reward_structure || {};
+  const multiplier = rewardStructure[category] || rewardStructure.default || 1;
+
+  // Assume 1 point = $0.01
+  return (context.amount * multiplier) / 100;
+};
+
+/**
+ * Infer category from merchant name
+ */
+const inferCategoryFromMerchant = (merchant) => {
+  const lowerMerchant = merchant.toLowerCase();
+
+  const categoryMap = {
+    'groceries': ['costco', 'whole foods', 'trader joe', 'safeway', 'kroger', 'walmart', 'target', 'grocery'],
+    'dining': ['restaurant', 'chipotle', 'mcdonald', 'starbucks', 'cafe', 'pizza', 'burger'],
+    'gas': ['gas', 'shell', 'chevron', 'exxon', 'bp', 'fuel'],
+    'travel': ['airline', 'hotel', 'airbnb', 'uber', 'lyft', 'flight'],
+    'online': ['amazon', 'ebay', 'online']
+  };
+
+  for (const [category, keywords] of Object.entries(categoryMap)) {
+    if (keywords.some(keyword => lowerMerchant.includes(keyword))) {
+      return category;
+    }
+  }
+
+  return 'default';
+};
+
+/**
+ * Parse date from timeframe entity
+ */
+const parseDateFromTimeframe = (timeframe, query) => {
+  const today = new Date();
+  const lowerTimeframe = timeframe.toLowerCase();
+
+  if (lowerTimeframe.includes('today') || lowerTimeframe.includes('now')) {
+    return today;
+  }
+
+  if (lowerTimeframe.includes('tomorrow')) {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow;
+  }
+
+  if (lowerTimeframe.includes('next week')) {
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    return nextWeek;
+  }
+
+  return today; // Default to today
+};

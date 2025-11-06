@@ -6,6 +6,29 @@
 import { getEmbedding } from './embeddingService.js';
 import { supabase } from '../../config/supabase.js';
 
+/**
+ * Intent Category Mapping
+ * Maps high-level categories to specific intents for hierarchical classification
+ */
+export const INTENT_CATEGORIES = {
+  TASK: [
+    'card_recommendation',
+    'query_card_data',
+    'split_payment',
+    'add_card',
+    'remove_card',
+    'navigate_screen'
+  ],
+  GUIDANCE: [
+    'debt_guidance',
+    'money_coaching',
+    'help'
+  ],
+  CHAT: [
+    'chit_chat'
+  ]
+};
+
 // Example queries for each intent (diverse phrasing to improve matching)
 export const INTENT_EXAMPLES = {
   query_card_data: [
@@ -22,14 +45,14 @@ export const INTENT_EXAMPLES = {
     "when do I need to pay",
     "what's my credit utilization",
     "how much credit am I using",
-    "best card for groceries",
-    "which card should I use at Costco",
-    "recommend a card for Target",
     "show available credit",
     "how much can I spend",
     "what's my credit limit",
     "show payment amounts",
-    "how much do I owe"
+    "how much do I owe",
+    "what's my balance on Chase",
+    "show me all card balances",
+    "list my payment due dates"
   ],
   add_card: [
     "add new card",
@@ -71,6 +94,212 @@ export const INTENT_EXAMPLES = {
     "what are your capabilities",
     "how can you help",
     "what commands do you know"
+  ],
+  card_recommendation: [
+    // Merchant-specific
+    "which card should I use at Costco",
+    "best card for Target",
+    "what card for Whole Foods",
+    "recommend card for Amazon",
+    "which card at Starbucks",
+
+    // Category-based
+    "best card for groceries",
+    "which card for dining",
+    "best card for gas",
+    "card for travel",
+    "which card for online shopping",
+
+    // Rewards optimization
+    "maximize rewards for this purchase",
+    "which card earns most points at Walmart",
+    "best cashback card for gas",
+    "maximize cashback at restaurants",
+    "earn most rewards on this transaction",
+    "get most points for this purchase",
+
+    // APR/Interest minimization (purchase-specific)
+    "which card has lowest interest for this purchase",
+    "avoid interest on this transaction",
+    "cheapest card to use at Target",
+    "lowest interest rate card for shopping",
+
+    // Cash flow optimization (purchase-specific)
+    "which card has longest grace period for this purchase",
+    "maximize float for this transaction",
+    "delay payment the longest for this purchase",
+    "which card payment is furthest out for this",
+    "best card for payment timing on this purchase",
+
+    // Purchase-specific with amounts
+    "best card for $500 purchase",
+    "which card for $200 at Target",
+    "recommend card for $1000 expense",
+
+    // Comparison requests
+    "compare all strategies for this purchase",
+    "show all options for this purchase",
+    "which card is best for this transaction",
+    "compare rewards vs interest for this purchase",
+
+    // General recommendation (purchase-focused)
+    "which card should I use for this",
+    "recommend a card for this purchase",
+    "help me choose a card for shopping",
+    "what card to use at the store",
+    "best card to use right now for this"
+  ],
+
+  debt_guidance: [
+    // General debt reduction
+    "how to reduce my debt",
+    "how can I pay off my credit card debt",
+    "best way to eliminate debt",
+    "strategies to pay down balances",
+    "help me get out of debt",
+    "how to become debt free",
+    "reduce my credit card balances",
+
+    // Payment strategies
+    "should I use avalanche or snowball method",
+    "what's the best debt payoff strategy",
+    "how to prioritize debt payments",
+    "which balance should I pay first",
+    "how to pay off debt faster",
+    "accelerate debt payoff",
+
+    // Interest reduction
+    "how to minimize interest charges",
+    "reduce interest on my balances",
+    "save money on interest",
+    "lower my interest payments",
+    "stop paying so much interest",
+
+    // Budget allocation
+    "how should I allocate my payment budget",
+    "distribute payments across cards",
+    "optimize my monthly payments",
+    "best way to split payment budget",
+
+    // Debt consolidation
+    "should I consolidate my debt",
+    "debt consolidation options",
+    "combine credit card balances",
+
+    // General financial stress
+    "overwhelmed by credit card debt",
+    "too much debt what should I do",
+    "drowning in credit card payments",
+    "can't keep up with payments",
+
+    // Payoff timeline
+    "how long to pay off my debt",
+    "when will I be debt free",
+    "calculate debt payoff timeline",
+    "how many months to clear balances"
+  ],
+
+  money_coaching: [
+    // Credit score
+    "how to improve my credit score",
+    "what affects credit score",
+    "boost my credit rating",
+    "credit score tips",
+    "why is my credit score low",
+    "increase credit score fast",
+
+    // Utilization
+    "what is credit utilization",
+    "how does utilization affect credit",
+    "keep utilization low",
+    "utilization ratio explained",
+    "why is high utilization bad",
+
+    // Financial habits
+    "how to build good credit habits",
+    "financial best practices",
+    "credit card management tips",
+    "responsible credit card use",
+    "avoid credit card mistakes",
+
+    // General advice
+    "how to manage multiple credit cards",
+    "credit card dos and don'ts",
+    "smart credit card strategies",
+    "financial wellness tips",
+    "improve financial health",
+
+    // Grace periods
+    "what is a grace period",
+    "how does grace period work",
+    "when do I pay interest",
+    "avoid interest charges",
+
+    // APR education
+    "what is APR",
+    "how is interest calculated",
+    "understand credit card interest",
+    "why is my APR so high",
+
+    // Balance transfers
+    "should I do a balance transfer",
+    "balance transfer pros and cons",
+    "0% APR offers worth it",
+
+    // Rewards optimization (general)
+    "how to maximize credit card rewards",
+    "best practices for earning points",
+    "cashback strategies",
+    "rewards program tips"
+  ],
+
+  chit_chat: [
+    // Greetings
+    "hello",
+    "hi",
+    "hey",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "hi there",
+    "hey vitta",
+
+    // Thanks
+    "thank you",
+    "thanks",
+    "thanks a lot",
+    "appreciate it",
+    "that helps",
+    "perfect",
+    "great",
+    "awesome",
+
+    // Casual
+    "how are you",
+    "what's up",
+    "how's it going",
+    "nice to meet you",
+
+    // Goodbye
+    "bye",
+    "goodbye",
+    "see you",
+    "talk to you later",
+    "have a good day",
+
+    // Affirmations
+    "yes",
+    "ok",
+    "sure",
+    "got it",
+    "understood",
+    "makes sense",
+
+    // Small talk
+    "you're helpful",
+    "you're great",
+    "nice job",
+    "good work"
   ]
 };
 

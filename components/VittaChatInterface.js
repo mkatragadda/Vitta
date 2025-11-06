@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MessageCircle, CreditCard, TrendingUp, LogOut, Send, Bot, User, Menu, X, Wallet, Plus, Trash2, Sparkles } from 'lucide-react';
 import PaymentOptimizer from './PaymentOptimizer';
 import CreditCardScreen from './CreditCardScreen';
@@ -8,6 +8,7 @@ import { getUserCards, addCard, deleteCard, calculateUtilization } from '../serv
 
 const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoading, handleSendMessage, handleKeyPress, MessageContent, isDemoMode = false, onCardsChanged }) => {
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
+  const textareaRef = useRef(null);
 
   // Helper function to send a quick action message directly
   const sendQuickAction = (query) => {
@@ -45,6 +46,15 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
     statement_cycle_start: '',
     statement_cycle_end: ''
   });
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      const el = textareaRef.current;
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    }
+  }, [input]);
 
   // Load cards for Google users
   useEffect(() => {
@@ -323,14 +333,16 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       {/* Input Area */}
       <div className="border-t border-gray-200 p-4 bg-white">
         <div className="max-w-3xl mx-auto">
-          <div className="flex gap-3">
-            <input
-              type="text"
+          <div className="flex gap-3 items-end">
+            <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               placeholder="Ask me about your cards, payments, or which card to use..."
-              className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={1}
+              wrap="soft"
+              className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40"
               disabled={isLoading}
             />
             <button

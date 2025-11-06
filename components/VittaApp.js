@@ -923,6 +923,7 @@ const VittaApp = () => {
 
       // Use cached cards from state (already refreshed on login and after add/update/delete)
       const userData = {
+        user_id: user?.id || null,
         cards: userCards || []
       };
 

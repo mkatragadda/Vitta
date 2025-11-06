@@ -5,6 +5,10 @@
 
 import { findBestCardForMerchant, findUpcomingPayments } from '../cardAnalyzer';
 import { handleCardDataQuery } from './cardDataQueryHandler';
+import { handleRecommendation } from './recommendationChatHandler.js';
+import { handleDebtGuidance } from './debtGuidanceHandler.js';
+import { handleMoneyCoaching } from './moneyCoachingHandler.js';
+import { handleChitChat } from './chitChatHandler.js';
 
 /**
  * Generate response based on classified intent
@@ -18,8 +22,25 @@ export const generateResponse = (classification, entities, userData, context) =>
   // Route to appropriate handler based on intent
   switch (intent) {
     case 'query_card_data':
-      // NEW: Smart handler that answers ANY card-related question
+      // Smart handler that answers ANY card-related question
       return handleCardDataQuery(cards, entities, context?.lastQuery || '');
+
+    case 'card_recommendation':
+      // AI Financial Coach for card recommendations
+      // Returns async - conversation engine will handle the promise
+      return handleRecommendation(cards, entities, context?.lastQuery || '', userData.user_id);
+
+    case 'debt_guidance':
+      // NEW: Debt payoff strategies and guidance
+      return handleDebtGuidance(cards, entities, context?.lastQuery || '');
+
+    case 'money_coaching':
+      // NEW: Financial education and credit card best practices
+      return handleMoneyCoaching(cards, entities, context?.lastQuery || '');
+
+    case 'chit_chat':
+      // NEW: Casual conversation and greetings
+      return handleChitChat(cards, entities, context?.lastQuery || '');
 
     case 'add_card':
       return handleAddCard();
