@@ -334,7 +334,7 @@ const CardDetailsForm = ({ selectedCard, onBack, onSubmit, isSubmitting, isManua
                     step="1"
                   />
                 </div>
-                <p className="mt-1 text-sm text-gray-500">Enter 0 if there's no annual fee</p>
+                <p className="mt-1 text-sm text-gray-500">Enter 0 if there&apos;s no annual fee</p>
               </div>
             </>
           )}

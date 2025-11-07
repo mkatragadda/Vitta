@@ -748,7 +748,7 @@ const AddCardModal = ({ newCard, setNewCard, onSave, onCancel }) => {
                 <h4 className="font-semibold text-blue-900 mb-2">How Statement Cycles Work</h4>
                 <p className="text-sm text-blue-800">
                   Provide any recent statement close date and payment due date from your credit card statement.
-                  We'll automatically calculate the recurring monthly pattern (which day of month it closes and the grace period).
+                  We&apos;ll automatically calculate the recurring monthly pattern (which day of month it closes and the grace period).
                 </p>
               </div>
 
@@ -806,7 +806,7 @@ const AddCardModal = ({ newCard, setNewCard, onSave, onCancel }) => {
               <div className="border-t border-gray-200 pt-5">
                 <h4 className="font-semibold text-gray-900 mb-3">Alternative: One-Time Due Date (Not Recommended)</h4>
                 <p className="text-sm text-gray-600 mb-4">
-                  Only use this if you don't know your statement cycle. This will need to be updated manually each month.
+                  Only use this if you don&apos;t know your statement cycle. This will need to be updated manually each month.
                 </p>
                 <div>
                   <label className={labelClass}>Next Due Date</label>
@@ -828,7 +828,7 @@ const AddCardModal = ({ newCard, setNewCard, onSave, onCancel }) => {
                 <h4 className="font-semibold text-purple-900 mb-2">Reward Multipliers</h4>
                 <p className="text-sm text-purple-800">
                   Enter the cashback percentage or points multiplier for each category.
-                  For example, "3" means 3% cashback or 3x points. Default is 1% for all purchases.
+                  For example, &quot;3&quot; means 3% cashback or 3x points. Default is 1% for all purchases.
                 </p>
               </div>
 
