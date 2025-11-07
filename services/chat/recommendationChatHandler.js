@@ -7,6 +7,8 @@
  */
 
 import { getRecommendationForPurchase, getAllStrategyRecommendations } from '../recommendations/recommendationEngine.js';
+import { getAllStrategies } from '../recommendations/recommendationStrategies.js';
+import { formatMultiStrategyRecommendations } from '../recommendations/recommendationFormatter.js';
 import { calculateFloatDays } from '../../utils/paymentCycleUtils.js';
 
 /**
@@ -56,9 +58,30 @@ export const handleRecommendation = async (userCards, entities, query, userId) =
   let recommendation;
 
   if (userGoal.compareAll) {
-    // User wants to compare strategies
-    recommendation = await getAllStrategyRecommendations(userId, context);
-    return formatMultiStrategyResponse(recommendation, context, query);
+    // NEW ARCHITECTURE: Multi-strategy comparison with plain text format
+    // IMPORTANT: Using plain text formatter because chat UI only supports ONE table per message
+    console.log('[RecommendationHandler] Using NEW multi-strategy architecture (plain text)');
+    const { formatMultiStrategyRecommendations: formatPlainText } = await import('../recommendations/recommendationFormatterPlainText.js');
+    
+    // Default to $1000 if no amount specified - crucial for showing dollar calculations
+    const defaultAmount = context.amount || 1000;
+    
+    const strategies = getAllStrategies(
+      userCards,
+      context.category || context.merchant || 'general',
+      defaultAmount
+    );
+    const formattedResponse = formatPlainText(
+      userCards,
+      strategies,
+      context.category || context.merchant || 'general',
+      defaultAmount
+    );
+    return {
+      response: formattedResponse,
+      hasRecommendation: true,
+      recommendation: strategies
+    };
   } else {
     // Single recommendation with specific strategy
     context.strategy = userGoal.strategy;
@@ -104,57 +127,53 @@ const detectUserGoal = (query, context) => {
   const lowerQuery = query.toLowerCase();
 
   // Check for comparison request
-  if (lowerQuery.includes('compare') || lowerQuery.includes('show all') || lowerQuery.includes('all strategies')) {
-    return {
-      strategy: null,
-      compareAll: true,
-      reasoning: 'User wants to see all strategies'
-    };
-  }
-
-  // Detect specific optimization goals
+  // DEFAULT: Show all 3 strategies (new architecture)
+  // This gives users complete visibility into their best options
+  // Only show single strategy if user explicitly asks for it
+  
+  // Detect if user wants ONLY a specific strategy (very explicit queries only)
   const goals = {
-    // Rewards optimization
-    rewards: /reward|point|cashback|cash back|maximize|earn|miles|bonus/i.test(query),
+    // Rewards optimization ONLY (explicit)
+    rewardsOnly: /only.*reward|just.*reward|exclusively.*reward|specifically.*reward/i.test(query),
 
-    // APR/interest minimization
-    apr: /interest|apr|cheap|save money|avoid.*interest|minimize.*cost|lowest.*rate|don't.*pay.*interest|no.*interest/i.test(query),
+    // APR/interest minimization ONLY (explicit)
+    aprOnly: /only.*interest|just.*apr|only.*lowest.*rate|specifically.*apr/i.test(query),
 
-    // Cashflow/float optimization
-    cashflow: /float|cash flow|payment.*due|time|delay|longest.*grace|furthest.*due|postpone|later/i.test(query)
+    // Cashflow/float optimization ONLY (explicit)
+    cashflowOnly: /only.*float|just.*cash flow|only.*grace.*period/i.test(query)
   };
 
-  // Priority order: APR > Rewards > Cashflow
-  // (APR is most important if user mentions it)
-  if (goals.apr) {
+  // If user is VERY explicit about wanting only one strategy, show that
+  if (goals.aprOnly) {
     return {
       strategy: 'APR_MINIMIZER',
       compareAll: false,
-      reasoning: 'User wants to minimize interest/APR'
+      reasoning: 'User specifically wants only APR strategy'
     };
   }
 
-  if (goals.rewards) {
+  if (goals.rewardsOnly) {
     return {
       strategy: 'REWARDS_MAXIMIZER',
       compareAll: false,
-      reasoning: 'User wants to maximize rewards'
+      reasoning: 'User specifically wants only rewards strategy'
     };
   }
 
-  if (goals.cashflow) {
+  if (goals.cashflowOnly) {
     return {
       strategy: 'CASHFLOW_OPTIMIZER',
       compareAll: false,
-      reasoning: 'User wants to optimize cash flow timing'
+      reasoning: 'User specifically wants only cashflow strategy'
     };
   }
 
-  // Default: Rewards maximizer (most common use case)
+  // DEFAULT: Show all 3 strategies for complete visibility
+  // This includes queries like "best card for X", "which card", "suggest card", etc.
   return {
-    strategy: 'REWARDS_MAXIMIZER',
-    compareAll: false,
-    reasoning: 'Default to rewards (most popular strategy)'
+    strategy: null,
+    compareAll: true,
+    reasoning: 'Showing all strategies for complete visibility'
   };
 };
 

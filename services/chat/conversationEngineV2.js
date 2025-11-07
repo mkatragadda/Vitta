@@ -56,13 +56,28 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
 
       console.log('[DirectRoute] Purchase context for comparison:', purchaseContext);
 
-      // Get all strategies with context entities
-      const recommendations = await getAllStrategyRecommendations(userData.user_id, purchaseContext);
-
-      // Format multi-strategy response
-      const { formatMultiStrategyResponse } = await import('./recommendationChatHandler.js');
-      const result = formatMultiStrategyResponse(recommendations, entities, rewritten);
-      response = result.response;
+      // NEW ARCHITECTURE: Use separate strategies with user profile detection
+      // IMPORTANT: Using plain text formatter because chat UI only supports ONE table per message
+      const { getAllStrategies } = await import('../recommendations/recommendationStrategies.js');
+      const { formatMultiStrategyRecommendations } = await import('../recommendations/recommendationFormatterPlainText.js');
+      
+      // Default to $1000 if no amount specified - crucial for showing dollar calculations
+      const defaultAmount = purchaseContext.amount || 1000;
+      
+      const strategies = getAllStrategies(
+        userData.cards || [],
+        purchaseContext.category || purchaseContext.merchant || 'general',
+        defaultAmount
+      );
+      
+      const formattedResponse = formatMultiStrategyRecommendations(
+        userData.cards || [],
+        strategies,
+        purchaseContext.category || purchaseContext.merchant || 'general',
+        defaultAmount
+      );
+      
+      response = formattedResponse;
 
       // Log intent
       await logIntentDetection(rewritten, intent, 0.95, 'direct_route', userData.user_id);
@@ -203,16 +218,19 @@ async function classifyCategory(query) {
 
 TASK - User wants to perform a specific action with their credit cards:
 - Choose which card to use for a purchase
+- Compare cards or compare strategies for a purchase
 - View card information, balances, or payments
 - Split payments across cards
 - Add or remove cards
 - Navigate to a specific screen
+- Get card recommendations
 
-GUIDANCE - User wants financial advice or strategy:
+GUIDANCE - User wants financial advice or education (NOT purchase-related):
 - How to reduce debt or pay off balances
 - Credit score improvement tips
 - Understanding credit concepts (APR, utilization, grace periods)
 - General financial coaching or best practices
+- Debt payoff strategies
 
 CHAT - Casual conversation:
 - Greetings (hi, hello, hey)
