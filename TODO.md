@@ -1,3 +1,32 @@
+# TODO: Active Tasks
+
+## Context-Aware Follow-Up Handling (MVP - In Progress)
+
+**Status:** 🚧 In Progress  
+**Priority:** P0 (Critical UX issue)  
+**Estimated Effort:** 4 hours  
+**Approach:** Option A - Session-Based Context
+
+### Problem
+"compare all strategies" after "which card for groceries" loses context and routes to wrong intent.
+
+### Solution
+Implement conversation context manager to track last N turns and active entities.
+
+### Tasks
+- [x] Create ConversationContext class (services/chat/conversationContext.js)
+- [x] Implement query rewriter with follow-up detection (services/chat/queryRewriter.js)
+- [x] Integrate context manager into conversationEngineV2.js
+- [x] Update recommendation handler to accept context
+- [x] Handle "compare all strategies" follow-up (card_recommendation)
+- [x] Handle "show alternatives" follow-up (card_recommendation)
+- [x] Handle "why not use X" follow-up (card_recommendation)
+- [x] Extend to ALL intents (debt_guidance, money_coaching, split_payment, query_card_data)
+- [ ] Test follow-up scenarios for all intents (USER TESTING REQUIRED)
+- [ ] Update documentation
+
+---
+
 # TODO: Future Optimizations
 
 ## Option B: Logistic Regression Category Classifier (Performance Optimization)

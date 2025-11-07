@@ -28,7 +28,8 @@ export const getRecommendationForPurchase = async (userId, context = {}) => {
     throw error;
   }
 
-  if (context.amount !== undefined && (typeof context.amount !== 'number' || context.amount < 0)) {
+  // Only validate amount if it's provided and not null
+  if (context.amount !== undefined && context.amount !== null && (typeof context.amount !== 'number' || context.amount < 0)) {
     const error = new Error('Invalid amount in purchase context');
     logger.error('Invalid amount', { amount: context.amount });
     throw error;
@@ -232,22 +233,32 @@ const scoreForCashflow = (card, context) => {
   const purchaseDate = new Date(context.date || Date.now());
   const amount = context.amount || 0;
 
+  const cardName = card.nickname || card.card_name || card.card_type;
+  const hasBalance = card.current_balance > 0;
+
+  logger.debug('Cashflow scoring start', {
+    cardName,
+    balance: card.current_balance,
+    hasBalance,
+    gracePeriodCheck: hasGracePeriod(card)
+  });
+
   // ⚠️ CRITICAL CHECK: Does this card have a grace period?
   // Cards lose grace period if they carried a balance from previous statement
   if (!hasGracePeriod(card)) {
     logger.warn('No grace period available for cashflow optimization', {
-      cardName: card.card_name,
+      cardName,
+      balance: card.current_balance,
       reason: 'carrying balance'
     });
 
     // Heavy penalty - cash flow optimization doesn't work without grace period
     // Interest accrues IMMEDIATELY on new purchases
-    score -= 200;
-
-    // Mark this card as problematic for cash flow strategy
+    // Return 0 immediately - card is NOT eligible for cashflow
     card._noGracePeriod = true;
-
-    return Math.max(0, score);
+    
+    logger.debug('Cashflow score (no grace period)', { cardName, score: 0 });
+    return 0;  // Changed from Math.max(0, score - 200) to just 0
   }
 
   // Grace period exists - proceed with normal cash flow scoring
@@ -296,7 +307,10 @@ const scoreForCashflow = (card, context) => {
   // Small bonus for lower APR (still matters if carrying balance)
   score += (30 - (card.apr || 20)) * 0.5;
 
-  return Math.max(0, score);
+  const finalScore = Math.max(0, score);
+  logger.debug('Cashflow score (final)', { cardName, score: finalScore });
+
+  return finalScore;
 };
 
 /**

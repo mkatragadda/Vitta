@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS card_catalog (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   card_name TEXT NOT NULL,
   issuer TEXT NOT NULL,
-  network TEXT, -- Visa, Mastercard, Amex, Discover
+  card_network TEXT, -- Visa, Mastercard, Amex, Discover
   category TEXT[] DEFAULT '{}', -- ['travel', 'dining', 'cashback', 'business', 'student']
 
   -- Fees and APR
@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_history_date ON user_payment_history(paym
 -- Note: statement_cycle_end already exists, so we don't add statement_close_date
 ALTER TABLE user_credit_cards
   ADD COLUMN IF NOT EXISTS issuer TEXT,
-  ADD COLUMN IF NOT EXISTS network TEXT,
+  ADD COLUMN IF NOT EXISTS card_network TEXT,
   ADD COLUMN IF NOT EXISTS reward_structure JSONB,
   ADD COLUMN IF NOT EXISTS grace_period_days INTEGER DEFAULT 25,
   ADD COLUMN IF NOT EXISTS last_statement_balance NUMERIC DEFAULT 0,
@@ -122,7 +122,7 @@ LEFT JOIN user_behavior_profile ubp ON ucc.user_id = ubp.user_id;
 
 -- Seed some popular cards (run after table creation)
 -- You can expand this with more cards from the YAML API
-INSERT INTO card_catalog (card_name, issuer, network, category, annual_fee, apr_min, apr_max, reward_structure, sign_up_bonus, benefits, popularity_score)
+INSERT INTO card_catalog (card_name, issuer, card_network, category, annual_fee, apr_min, apr_max, reward_structure, sign_up_bonus, benefits, popularity_score)
 VALUES
   -- Chase Cards
   ('Chase Sapphire Preferred', 'Chase', 'Visa', ARRAY['travel', 'dining'], 95, 19.74, 26.74,

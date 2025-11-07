@@ -21,10 +21,8 @@ const AddCardFlow = ({ user, onComplete, onCancel }) => {
   };
 
   const handleManualEntry = () => {
+    setSelectedCard(null); // No catalog card selected
     setStep('manual');
-    // For now, just show a message - you can create a manual form later
-    alert('Manual card entry coming soon! For now, please select from the catalog.');
-    setStep('browse');
   };
 
   const handleBack = () => {
@@ -111,7 +109,7 @@ const AddCardFlow = ({ user, onComplete, onCancel }) => {
     );
   }
 
-  // Step 2: Enter Details
+  // Step 2: Enter Details (from catalog)
   if (step === 'details' && selectedCard) {
     return (
       <CardDetailsForm
@@ -119,6 +117,19 @@ const AddCardFlow = ({ user, onComplete, onCancel }) => {
         onBack={handleBack}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
+      />
+    );
+  }
+
+  // Step 3: Manual Entry (no catalog card)
+  if (step === 'manual') {
+    return (
+      <CardDetailsForm
+        selectedCard={null}
+        onBack={handleBack}
+        onSubmit={handleSubmit}
+        isSubmitting={isSubmitting}
+        isManualEntry={true}
       />
     );
   }

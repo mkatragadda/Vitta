@@ -264,12 +264,19 @@ export const addCardFromCatalog = async (userId, catalogId, userDetails) => {
       reward_structure: catalogCard.reward_structure,
       apr: userDetails.apr !== undefined ? userDetails.apr : catalogCard.apr_min,
       annual_fee: catalogCard.annual_fee,
-      grace_period_days: catalogCard.grace_period_days,
+
+      // Statement Cycle - Use user-provided values if available, else catalog defaults
+      statement_close_day: userDetails.statement_close_day || null,
+      payment_due_day: userDetails.payment_due_day || null,
+      grace_period_days: userDetails.grace_period_days || catalogCard.grace_period_days,
+
       is_manual_entry: false,
       // User-specific fields
       credit_limit: userDetails.credit_limit || 0,
       current_balance: userDetails.current_balance || 0,
       amount_to_pay: userDetails.amount_to_pay || 0,
+
+      // Legacy date fields (for backward compatibility)
       due_date: userDetails.due_date || null,
       statement_cycle_start: userDetails.statement_cycle_start || null,
       statement_cycle_end: userDetails.statement_cycle_end || null

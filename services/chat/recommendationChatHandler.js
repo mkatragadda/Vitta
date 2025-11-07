@@ -265,61 +265,193 @@ const formatSingleRecommendation = (recommendation, context, query, userGoal) =>
 
 /**
  * Format multi-strategy comparison response
+ * Exported for use in direct routing (follow-up handling)
  */
-const formatMultiStrategyResponse = (recommendations, context, query) => {
-  let response = `📊 **Let me show you all three ways to optimize this purchase:**\n\n`;
+export const formatMultiStrategyResponse = (recommendations, context, query) => {
+  console.log('[FormatMultiStrategy] Context:', context);
+  console.log('[FormatMultiStrategy] Recommendations:', {
+    rewards: recommendations.REWARDS_MAXIMIZER?.primary?.nickname,
+    apr: recommendations.APR_MINIMIZER?.primary?.nickname,
+    cashflow: recommendations.CASHFLOW_OPTIMIZER?.primary?.nickname
+  });
 
-  if (context.merchant || context.category || context.amount) {
-    response += `**Purchase details:** `;
-    const details = [];
-    if (context.merchant) details.push(context.merchant);
-    if (context.category) details.push(context.category);
-    if (context.amount) details.push(`$${context.amount}`);
-    response += details.join(' • ') + '\n\n';
+  // Build purchase context header
+  let purchaseContext = '';
+  if (context.merchant || context.category) {
+    purchaseContext = context.merchant || context.category;
+    if (context.amount) {
+      purchaseContext += ` ($${context.amount})`;
+    }
+  } else if (context.amount) {
+    purchaseContext = `$${context.amount} purchase`;
+  } else {
+    purchaseContext = 'this purchase';
   }
 
-  response += `---\n\n`;
+  // Map merchant/category to reward category FIRST
+  const categoryMapping = {
+    'groceries': 'groceries',
+    'grocery': 'groceries',
+    'supermarket': 'groceries',
+    'dining': 'dining',
+    'restaurant': 'dining',
+    'gas': 'gas',
+    'fuel': 'gas',
+    'travel': 'travel',
+    'flight': 'travel',
+    'hotel': 'travel'
+  };
+  
+  const merchantLower = (context.merchant || context.category || '').toLowerCase();
+  const rewardCategory = categoryMapping[merchantLower] || 'default';
+  
+  console.log('[FormatMultiStrategy] Reward category:', rewardCategory);
 
-  // Strategy 1: Maximize Rewards
+  // Start response with header AND table together (no line breaks)
+  let response = `**Comparison for ${purchaseContext}:**\n\n`;
+  response += `*Each row shows the best card for that optimization strategy*\n\n`;
+  response += `| Strategy | Card | Rewards | Cashback | Utilization | APR |\n`;
+  response += `|----------|------|---------|----------|-------------|-----|\n`;
+
+  const strategies = [
+    { key: 'REWARDS_MAXIMIZER', label: '💎 Rewards', rec: recommendations.REWARDS_MAXIMIZER },
+    { key: 'APR_MINIMIZER', label: '💰 Low APR', rec: recommendations.APR_MINIMIZER },
+    { key: 'CASHFLOW_OPTIMIZER', label: '📅 Cashflow', rec: recommendations.CASHFLOW_OPTIMIZER }
+  ];
+
+  // Track which cards are recommended for which strategies
+  const cardStrategies = new Map();
+
+  // Add each strategy to table
+  strategies.forEach(({ label, key, rec }) => {
+    if (rec?.primary) {
+      const card = rec.primary;
+      const cardName = card.nickname || card.card_name || card.card_type;
+      
+      // Track this card's strategies
+      if (!cardStrategies.has(card.id)) {
+        cardStrategies.set(card.id, { name: cardName, strategies: [], hasBalance: card.current_balance > 0 });
+      }
+      cardStrategies.get(card.id).strategies.push(key);
+      
+      // Get reward multiplier from reward_structure for the specific category
+      const rewardStructure = card.reward_structure || {};
+      const rewardMultiplier = rewardStructure[rewardCategory] || rewardStructure['default'] || 1;
+      const rewards = `${rewardMultiplier.toFixed(1)}x`;
+      
+      console.log('[FormatMultiStrategy] Card:', cardName, 'Category:', rewardCategory, 'Multiplier:', rewardMultiplier, 'Structure:', rewardStructure, 'Balance:', card.current_balance);
+      
+      // Calculate cashback (rewards are in % cashback, so divide by 100)
+      const amount = context.amount || 100; // Default to $100 for display
+      const cashbackAmount = amount * (rewardMultiplier / 100);
+      const cashback = `$${cashbackAmount.toFixed(2)}`;
+      
+      // Calculate utilization impact
+      const currentUtil = (card.current_balance / card.credit_limit) * 100;
+      const newBalance = card.current_balance + amount;
+      const newUtil = (newBalance / card.credit_limit) * 100;
+      const utilization = `${currentUtil.toFixed(0)}% → ${newUtil.toFixed(0)}%`;
+      
+      // APR
+      const apr = card.apr !== undefined ? `${card.apr.toFixed(2)}%` : 'N/A';
+      
+      // Warning for cashflow with balance
+      let cardDisplayName = cardName;
+      if (key === 'CASHFLOW_OPTIMIZER' && card.current_balance > 0) {
+        cardDisplayName = `⚠️ ${cardName}`;
+      }
+      
+      response += `| ${label} | ${cardDisplayName} | ${rewards} | ${cashback} | ${utilization} | ${apr} |\n`;
+    }
+  });
+
+  response += `\n`;
+
+  // Add notes about warnings and duplicate cards
+  let hasWarnings = false;
+  let hasDuplicates = false;
+  
+  cardStrategies.forEach((info, cardId) => {
+    if (info.strategies.includes('CASHFLOW_OPTIMIZER') && info.hasBalance) {
+      hasWarnings = true;
+    }
+    if (info.strategies.length > 1) {
+      hasDuplicates = true;
+    }
+  });
+
+  if (hasWarnings || hasDuplicates) {
+    response += `**Notes:**\n`;
+    
+    if (hasWarnings) {
+      response += `- ⚠️ = Card has a balance, so **no grace period** available. Interest charges immediately on new purchases. Not ideal for cashflow optimization.\n`;
+    }
+    
+    if (hasDuplicates) {
+      cardStrategies.forEach((info, cardId) => {
+        if (info.strategies.length > 1) {
+          const strategyNames = info.strategies.map(s => {
+            if (s === 'REWARDS_MAXIMIZER') return 'Rewards';
+            if (s === 'APR_MINIMIZER') return 'Low APR';
+            if (s === 'CASHFLOW_OPTIMIZER') return 'Cashflow';
+            return s;
+          });
+          response += `- **${info.name}** wins for ${strategyNames.length} strategies: ${strategyNames.join(' + ')}\n`;
+        }
+      });
+    }
+    
+    response += `\n`;
+  }
+
+  // Add detailed recommendations
+  response += `**Recommendation:**\n\n`;
+
   const rewardsRec = recommendations.REWARDS_MAXIMIZER;
-  if (rewardsRec?.primary) {
-    const card1 = rewardsRec.primary;
-    response += `### 💎 1. Maximize Rewards\n`;
-    response += `**Use:** ${card1.nickname || card1.card_name || card1.card_type}\n`;
-    response += `**Why:** ${rewardsRec.reasoning}\n\n`;
-  }
-
-  // Strategy 2: Minimize Interest
   const aprRec = recommendations.APR_MINIMIZER;
-  if (aprRec?.primary) {
-    const card2 = aprRec.primary;
-    response += `### 💰 2. Minimize Interest\n`;
-    response += `**Use:** ${card2.nickname || card2.card_name || card2.card_type}\n`;
-    response += `**Why:** ${aprRec.reasoning}\n\n`;
-  }
-
-  // Strategy 3: Optimize Cash Flow
   const cashflowRec = recommendations.CASHFLOW_OPTIMIZER;
-  if (cashflowRec?.primary) {
-    const card3 = cashflowRec.primary;
-    response += `### 📅 3. Optimize Cash Flow\n`;
-    response += `**Use:** ${card3.nickname || card3.card_name || card3.card_type}\n`;
-    response += `**Why:** ${cashflowRec.reasoning}\n\n`;
-  }
 
-  response += `---\n\n`;
-  response += `**My recommendation?** `;
+  // Check if same card wins multiple strategies
+  const allSameCard = rewardsRec?.primary && aprRec?.primary && cashflowRec?.primary &&
+                      rewardsRec.primary.id === aprRec.primary.id && 
+                      aprRec.primary.id === cashflowRec.primary.id;
 
-  // Smart default recommendation
-  if (rewardsRec?.primary && aprRec?.primary) {
-    if (rewardsRec.primary.id === aprRec.primary.id) {
-      response += `Looks like **${rewardsRec.primary.nickname || rewardsRec.primary.card_name}** wins on both rewards AND interest — use it!\n\n`;
-    } else {
-      response += `If you pay in full each month, go with **rewards**. If you'll carry a balance, choose **interest minimization**.\n\n`;
+  if (allSameCard) {
+    const winningCard = rewardsRec.primary.nickname || rewardsRec.primary.card_name;
+    response += `**${winningCard}** wins across all strategies! It offers the best rewards, lowest APR, and optimal cash flow for ${purchaseContext}.\n\n`;
+  } else {
+    // Different cards for different strategies
+    let strategyNum = 1;
+    
+    if (rewardsRec?.primary) {
+      const card = rewardsRec.primary;
+      const rewardStructure = card.reward_structure || {};
+      const multiplier = rewardStructure[rewardCategory] || rewardStructure['default'] || 1;
+      response += `${strategyNum}. **${card.nickname || card.card_name}** (Rewards): ${multiplier}x cashback = best value for ${purchaseContext}\n\n`;
+      strategyNum++;
+    }
+    
+    if (aprRec?.primary && aprRec.primary.id !== rewardsRec?.primary?.id) {
+      const card = aprRec.primary;
+      response += `${strategyNum}. **${card.nickname || card.card_name}** (Low APR): ${card.apr.toFixed(2)}% APR = best if carrying balance\n\n`;
+      strategyNum++;
+    }
+    
+    if (cashflowRec?.primary && 
+        cashflowRec.primary.id !== rewardsRec?.primary?.id && 
+        cashflowRec.primary.id !== aprRec?.primary?.id) {
+      const card = cashflowRec.primary;
+      response += `${strategyNum}. **${card.nickname || card.card_name}** (Cashflow): Latest due date = maximize float\n\n`;
     }
   }
 
-  response += `[See detailed analysis](vitta://navigate/recommendations)`;
+  // Add coaching tip
+  response += `💡 **Coach's tip:** `;
+  if (allSameCard) {
+    response += `This card is your best choice no matter your goal!`;
+  } else {
+    response += `Pay in full monthly? Choose **Rewards**. Carrying balance? Choose **Low APR**. Want float? Choose **Cashflow**.`;
+  }
 
   return {
     response: response.trim(),

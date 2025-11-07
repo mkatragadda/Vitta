@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Shield, Zap, ArrowRight, Plus, Eye, EyeOff, Trash2, Edit } from 'lucide-react';
+import { CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Shield, Zap, ArrowRight, Plus, Eye, EyeOff, Trash2, Edit, Utensils, ShoppingBag, Plane, Fuel, Star } from 'lucide-react';
 import { getUserCards, addCard, updateCard, deleteCard } from '../services/cardService';
 
 const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
@@ -9,13 +9,40 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCard, setNewCard] = useState({
-    card_type: '',
+    // Card Identity
     card_name: '',
+    nickname: '',
+    issuer: '',
+    card_network: 'Visa',
+    card_type: '', // Legacy field
+
+    // Financial Details
     apr: '',
     credit_limit: '',
     current_balance: '',
     amount_to_pay: '',
-    due_date: ''
+    annual_fee: '0',
+
+    // Statement Cycle - User provides actual dates, we calculate recurring values
+    statement_close_date: '', // Actual date from statement (for calculation only)
+    payment_due_date: '', // Actual due date from statement (for calculation only)
+
+    // These will be calculated from above dates and stored in DB
+    statement_close_day: '', // Day of month (calculated)
+    grace_period_days: '', // Days between close and due (calculated)
+
+    // Legacy date field (for backward compatibility)
+    due_date: '',
+
+    // Rewards
+    reward_dining: '1',
+    reward_groceries: '1',
+    reward_travel: '1',
+    reward_gas: '1',
+    reward_default: '1',
+
+    // Metadata
+    is_manual_entry: true
   });
 
   // Load cards from database on mount
@@ -44,17 +71,85 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
 
   const handleAddCard = async () => {
     try {
+      // Build reward structure from individual fields
+      const rewardStructure = {
+        dining: parseFloat(newCard.reward_dining) || 1,
+        groceries: parseFloat(newCard.reward_groceries) || 1,
+        travel: parseFloat(newCard.reward_travel) || 1,
+        gas: parseFloat(newCard.reward_gas) || 1,
+        default: parseFloat(newCard.reward_default) || 1
+      };
+
+      // Calculate recurring cycle values from actual dates (if provided)
+      // This matches the logic in CardDetailsForm.js for consistency
+      let statementCloseDay = null;
+      let paymentDueDay = null;
+      let gracePeriodDays = null;
+      let statementCycleStart = null;
+
+      if (newCard.statement_close_date && newCard.payment_due_date) {
+        const closeDate = new Date(newCard.statement_close_date);
+        const dueDate = new Date(newCard.payment_due_date);
+
+        // Extract day of month for recurring cycle (same as CardDetailsForm)
+        // Use split to avoid timezone issues with date-only strings
+        statementCloseDay = parseInt(newCard.statement_close_date.split('-')[2], 10);
+        paymentDueDay = parseInt(newCard.payment_due_date.split('-')[2], 10);
+
+        // Calculate grace period (days between close and due)
+        const diffTime = dueDate - closeDate;
+        gracePeriodDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+        // Calculate statement cycle start (typically 30 days before close)
+        statementCycleStart = new Date(closeDate);
+        statementCycleStart.setDate(statementCycleStart.getDate() - 30);
+
+        console.log('[CreditCardScreen] Calculated from dates:', {
+          statementCloseDate: newCard.statement_close_date,
+          paymentDueDate: newCard.payment_due_date,
+          calculatedCloseDay: statementCloseDay,
+          calculatedPaymentDueDay: paymentDueDay,
+          calculatedGracePeriod: gracePeriodDays,
+          calculatedCycleStart: statementCycleStart?.toISOString().split('T')[0]
+        });
+      }
+
       const cardData = {
         user_id: user.id,
-        card_type: newCard.card_type,
-        card_name: newCard.card_name || newCard.card_type,
+
+        // Card Identity
+        card_name: newCard.card_name || 'Unnamed Card',
+        nickname: newCard.nickname || null,
+        issuer: newCard.issuer || null,
+        card_network: newCard.card_network || 'Visa',
+        card_type: newCard.card_type || newCard.card_network, // Legacy compatibility
+
+        // Financial Details
         apr: parseFloat(newCard.apr) || 0,
         credit_limit: parseFloat(newCard.credit_limit) || 0,
         current_balance: parseFloat(newCard.current_balance) || 0,
         amount_to_pay: parseFloat(newCard.amount_to_pay) || 0,
-        due_date: newCard.due_date || null
+        annual_fee: parseFloat(newCard.annual_fee) || 0,
+
+        // Statement Cycle - Recurring values (day-of-month, 1-31)
+        // These match the logic in CardDetailsForm.js and addCardFromCatalog
+        statement_close_day: statementCloseDay,
+        payment_due_day: paymentDueDay,
+        grace_period_days: gracePeriodDays,
+
+        // Legacy date fields (for backward compatibility)
+        due_date: newCard.payment_due_date || null,
+        statement_cycle_start: statementCycleStart ? statementCycleStart.toISOString().split('T')[0] : null,
+        statement_cycle_end: newCard.statement_close_date || null,
+
+        // Rewards
+        reward_structure: rewardStructure,
+
+        // Metadata
+        is_manual_entry: true
       };
 
+      console.log('[CreditCardScreen] Final card data to save:', cardData);
       await addCard(cardData);
       console.log('[CreditCardScreen] Card added successfully');
 
@@ -70,13 +165,27 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
 
       // Reset form and close modal
       setNewCard({
-        card_type: '',
         card_name: '',
+        nickname: '',
+        issuer: '',
+        card_network: 'Visa',
+        card_type: '',
         apr: '',
         credit_limit: '',
         current_balance: '',
         amount_to_pay: '',
-        due_date: ''
+        annual_fee: '0',
+        statement_close_date: '',
+        payment_due_date: '',
+        statement_close_day: '',
+        grace_period_days: '',
+        due_date: '',
+        reward_dining: '1',
+        reward_groceries: '1',
+        reward_travel: '1',
+        reward_gas: '1',
+        reward_default: '1',
+        is_manual_entry: true
       });
       setShowAddModal(false);
     } catch (error) {
@@ -456,110 +565,390 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
   );
 };
 
-// Add Card Modal Component
+// Enhanced Add Card Modal Component with Tabbed Interface
 const AddCardModal = ({ newCard, setNewCard, onSave, onCancel }) => {
+  const [activeTab, setActiveTab] = React.useState('basic');
+
+  const inputClass = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1.5";
+  const helpTextClass = "text-xs text-gray-500 mt-1";
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Add New Card</h2>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-3xl w-full my-8 shadow-2xl">
+        {/* Header with Card Preview */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 rounded-t-2xl">
+          <h2 className="text-2xl font-bold text-white mb-2">Add New Credit Card</h2>
+          <p className="text-blue-100 text-sm">Enter your card details below - all information is stored securely</p>
+        </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Card Type *</label>
-            <input
-              type="text"
-              value={newCard.card_type}
-              onChange={(e) => setNewCard({ ...newCard, card_type: e.target.value })}
-              placeholder="e.g., Chase Freedom Unlimited"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Card Name (optional)</label>
-            <input
-              type="text"
-              value={newCard.card_name}
-              onChange={(e) => setNewCard({ ...newCard, card_name: e.target.value })}
-              placeholder="e.g., My Travel Card"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">APR (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={newCard.apr}
-                onChange={(e) => setNewCard({ ...newCard, apr: e.target.value })}
-                placeholder="18.99"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Credit Limit</label>
-              <input
-                type="number"
-                value={newCard.credit_limit}
-                onChange={(e) => setNewCard({ ...newCard, credit_limit: e.target.value })}
-                placeholder="15000"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Current Balance</label>
-              <input
-                type="number"
-                value={newCard.current_balance}
-                onChange={(e) => setNewCard({ ...newCard, current_balance: e.target.value })}
-                placeholder="1234.56"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Payment Due</label>
-              <input
-                type="number"
-                value={newCard.amount_to_pay}
-                onChange={(e) => setNewCard({ ...newCard, amount_to_pay: e.target.value })}
-                placeholder="35"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-            <input
-              type="date"
-              value={newCard.due_date}
-              onChange={(e) => setNewCard({ ...newCard, due_date: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200 px-6">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab('basic')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'basic'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Basic Info
+            </button>
+            <button
+              onClick={() => setActiveTab('statement')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'statement'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Statement Cycle
+            </button>
+            <button
+              onClick={() => setActiveTab('rewards')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'rewards'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Rewards
+            </button>
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={onCancel}
-            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={!newCard.card_type}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            Add Card
-          </button>
+        <div className="p-6 max-h-[60vh] overflow-y-auto">
+          {/* Basic Info Tab */}
+          {activeTab === 'basic' && (
+            <div className="space-y-5">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Card Name * <span className="text-red-500">Required</span></label>
+                  <input
+                    type="text"
+                    value={newCard.card_name}
+                    onChange={(e) => setNewCard({ ...newCard, card_name: e.target.value })}
+                    placeholder="Chase Sapphire Preferred"
+                    className={inputClass}
+                  />
+                  <p className={helpTextClass}>Official card name from your issuer</p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Nickname (optional)</label>
+                  <input
+                    type="text"
+                    value={newCard.nickname}
+                    onChange={(e) => setNewCard({ ...newCard, nickname: e.target.value })}
+                    placeholder="My Travel Card"
+                    className={inputClass}
+                  />
+                  <p className={helpTextClass}>Personal name to identify this card</p>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Issuer</label>
+                  <input
+                    type="text"
+                    value={newCard.issuer}
+                    onChange={(e) => setNewCard({ ...newCard, issuer: e.target.value })}
+                    placeholder="Chase, Amex, Citi, etc."
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Card Network</label>
+                  <select
+                    value={newCard.card_network}
+                    onChange={(e) => setNewCard({ ...newCard, card_network: e.target.value })}
+                    className={inputClass}
+                  >
+                    <option value="Visa">Visa</option>
+                    <option value="Mastercard">Mastercard</option>
+                    <option value="Amex">American Express</option>
+                    <option value="Discover">Discover</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-5">
+                <h4 className="font-semibold text-gray-900 mb-4">Financial Details</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>APR (%) * <span className="text-red-500">Required</span></label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newCard.apr}
+                      onChange={(e) => setNewCard({ ...newCard, apr: e.target.value })}
+                      placeholder="18.99"
+                      className={inputClass}
+                    />
+                    <p className={helpTextClass}>Annual Percentage Rate (interest rate)</p>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Credit Limit * <span className="text-red-500">Required</span></label>
+                    <input
+                      type="number"
+                      value={newCard.credit_limit}
+                      onChange={(e) => setNewCard({ ...newCard, credit_limit: e.target.value })}
+                      placeholder="15000"
+                      className={inputClass}
+                    />
+                    <p className={helpTextClass}>Total credit limit in dollars</p>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Current Balance</label>
+                    <input
+                      type="number"
+                      value={newCard.current_balance}
+                      onChange={(e) => setNewCard({ ...newCard, current_balance: e.target.value })}
+                      placeholder="0"
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Minimum Payment Due</label>
+                    <input
+                      type="number"
+                      value={newCard.amount_to_pay}
+                      onChange={(e) => setNewCard({ ...newCard, amount_to_pay: e.target.value })}
+                      placeholder="0"
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Annual Fee ($)</label>
+                    <input
+                      type="number"
+                      value={newCard.annual_fee}
+                      onChange={(e) => setNewCard({ ...newCard, annual_fee: e.target.value })}
+                      placeholder="0"
+                      className={inputClass}
+                    />
+                    <p className={helpTextClass}>Enter 0 for no annual fee</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Statement Cycle Tab */}
+          {activeTab === 'statement' && (
+            <div className="space-y-5">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-blue-900 mb-2">How Statement Cycles Work</h4>
+                <p className="text-sm text-blue-800">
+                  Provide any recent statement close date and payment due date from your credit card statement.
+                  We'll automatically calculate the recurring monthly pattern (which day of month it closes and the grace period).
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Statement Close Date</label>
+                  <input
+                    type="date"
+                    value={newCard.statement_close_date}
+                    onChange={(e) => setNewCard({ ...newCard, statement_close_date: e.target.value })}
+                    className={inputClass}
+                  />
+                  <p className={helpTextClass}>From your most recent statement (any month)</p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Payment Due Date</label>
+                  <input
+                    type="date"
+                    value={newCard.payment_due_date}
+                    onChange={(e) => setNewCard({ ...newCard, payment_due_date: e.target.value })}
+                    className={inputClass}
+                  />
+                  <p className={helpTextClass}>Corresponding payment due date</p>
+                </div>
+              </div>
+
+              {/* Show calculated values in real-time */}
+              {newCard.statement_close_date && newCard.payment_due_date && (() => {
+                const closeDate = new Date(newCard.statement_close_date);
+                const dueDate = new Date(newCard.payment_due_date);
+                const dayOfMonth = closeDate.getDate();
+                const gracePeriod = Math.round((dueDate - closeDate) / (1000 * 60 * 60 * 24));
+
+                return (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-green-900 mb-2">✓ Calculated Recurring Pattern</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-green-700 font-medium">Statement Closes On:</p>
+                        <p className="text-green-900 text-lg font-bold">Day {dayOfMonth} of every month</p>
+                      </div>
+                      <div>
+                        <p className="text-green-700 font-medium">Grace Period:</p>
+                        <p className="text-green-900 text-lg font-bold">{gracePeriod} days</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-green-700 mt-2">
+                      Future payments will be calculated automatically based on this pattern
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div className="border-t border-gray-200 pt-5">
+                <h4 className="font-semibold text-gray-900 mb-3">Alternative: One-Time Due Date (Not Recommended)</h4>
+                <p className="text-sm text-gray-600 mb-4">
+                  Only use this if you don't know your statement cycle. This will need to be updated manually each month.
+                </p>
+                <div>
+                  <label className={labelClass}>Next Due Date</label>
+                  <input
+                    type="date"
+                    value={newCard.due_date}
+                    onChange={(e) => setNewCard({ ...newCard, due_date: e.target.value })}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rewards Tab */}
+          {activeTab === 'rewards' && (
+            <div className="space-y-5">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-purple-900 mb-2">Reward Multipliers</h4>
+                <p className="text-sm text-purple-800">
+                  Enter the cashback percentage or points multiplier for each category.
+                  For example, "3" means 3% cashback or 3x points. Default is 1% for all purchases.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Utensils className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700">Dining & Restaurants</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newCard.reward_dining}
+                      onChange={(e) => setNewCard({ ...newCard, reward_dining: e.target.value })}
+                      placeholder="1"
+                      className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <span className="text-sm text-gray-500">%/x</span>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <ShoppingBag className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700">Groceries</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newCard.reward_groceries}
+                      onChange={(e) => setNewCard({ ...newCard, reward_groceries: e.target.value })}
+                      placeholder="1"
+                      className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <span className="text-sm text-gray-500">%/x</span>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Plane className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700">Travel</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newCard.reward_travel}
+                      onChange={(e) => setNewCard({ ...newCard, reward_travel: e.target.value })}
+                      placeholder="1"
+                      className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <span className="text-sm text-gray-500">%/x</span>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Fuel className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700">Gas & Fuel</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newCard.reward_gas}
+                      onChange={(e) => setNewCard({ ...newCard, reward_gas: e.target.value })}
+                      placeholder="1"
+                      className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <span className="text-sm text-gray-500">%/x</span>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg md:col-span-2">
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Star className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700">Everything Else (Default)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newCard.reward_default}
+                      onChange={(e) => setNewCard({ ...newCard, reward_default: e.target.value })}
+                      placeholder="1"
+                      className="w-full mt-1 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <span className="text-sm text-gray-500">%/x</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl flex items-center justify-between">
+          <div className="text-sm text-gray-500">
+            {activeTab === 'basic' && '* Required fields must be filled'}
+            {activeTab === 'statement' && 'Statement cycle is optional but recommended'}
+            {activeTab === 'rewards' && 'Rewards are optional, default is 1% for all'}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={onCancel}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white transition-colors font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSave}
+              disabled={!newCard.card_name || !newCard.apr || !newCard.credit_limit}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+            >
+              Add Card
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -11,6 +11,9 @@ import { OPENAI_CONFIG } from '../../config/openai.js';
 import { formatIntentsForGPT } from '../../config/intentDefinitions.js';
 import { getUserProfile, shouldIncludeProfile, formatProfileForGPT } from '../userProfileService.js';
 import { INTENT_CATEGORIES } from '../embedding/intentEmbeddings.js';
+import { getConversationContext } from './conversationContext.js';
+import { rewriteQueryWithContext, shouldDirectRoute } from './queryRewriter.js';
+import { getSlotFillingState } from './slotFillingManager.js';
 
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
@@ -18,6 +21,164 @@ const THRESHOLDS = {
   MEDIUM_CONFIDENCE: 0.75, // Decent match, use GPT for conversational handling
   LOW_CONFIDENCE: 0.50     // Below this, use GPT fallback
 };
+
+/**
+ * Handle direct routing for high-confidence follow-ups
+ * Bypasses normal classification pipeline
+ * @param {Object} rewriteResult - Result from query rewriter
+ * @param {Object} userData - User data
+ * @param {Object} context - Request context
+ * @param {Object} conversationContext - Conversation context manager
+ * @returns {Promise<string>} - Response
+ */
+async function handleDirectRoute(rewriteResult, userData, context, conversationContext) {
+  const { directRoute, rewritten } = rewriteResult;
+  const { intent, action, entities } = directRoute;
+
+  console.log('[ConversationEngineV2] Direct route handler:', { intent, action });
+
+  try {
+    let response;
+
+    // Route based on intent + action
+    if (intent === 'card_recommendation' && action === 'compare_strategies') {
+      // Import recommendation engine
+      const { getAllStrategyRecommendations } = await import('../recommendations/recommendationEngine.js');
+      
+      // Use entities from context (preserved from original query)
+      // This ensures we have merchant/category from "which card for groceries"
+      const purchaseContext = {
+        merchant: entities.merchant,
+        category: entities.category,
+        amount: entities.amount,
+        date: new Date()
+      };
+
+      console.log('[DirectRoute] Purchase context for comparison:', purchaseContext);
+
+      // Get all strategies with context entities
+      const recommendations = await getAllStrategyRecommendations(userData.user_id, purchaseContext);
+
+      // Format multi-strategy response
+      const { formatMultiStrategyResponse } = await import('./recommendationChatHandler.js');
+      const result = formatMultiStrategyResponse(recommendations, entities, rewritten);
+      response = result.response;
+
+      // Log intent
+      await logIntentDetection(rewritten, intent, 0.95, 'direct_route', userData.user_id);
+    } 
+    else if (intent === 'card_recommendation' && action === 'show_alternatives') {
+      // Show alternative cards (use normal handler with context)
+      const { handleRecommendation } = await import('./recommendationChatHandler.js');
+      const result = await handleRecommendation(
+        userData.cards || [],
+        entities,
+        rewritten,
+        userData.user_id
+      );
+      response = result.response || result;
+    }
+    else if (intent === 'split_payment' && action === 'debt_payoff_plan') {
+      // Create detailed debt payoff plan
+      const { generateResponse } = await import('./responseGenerator.js');
+      const classification = { intent: 'split_payment' };
+      
+      // Extract budget from entities or prompt
+      const budget = entities.amount || 1000; // Default budget
+      const splitEntities = { amount: budget };
+      
+      response = generateResponse(classification, splitEntities, userData, context);
+      
+      await logIntentDetection(rewritten, intent, 0.85, 'direct_route', userData.user_id);
+    }
+    else if (intent === 'split_payment' && (action === 'avalanche' || action === 'calculate_payments')) {
+      // Recalculate with specific strategy
+      const { generateResponse } = await import('./responseGenerator.js');
+      const classification = { intent: 'split_payment' };
+      
+      response = generateResponse(classification, entities, userData, context);
+      
+      await logIntentDetection(rewritten, intent, 0.85, 'direct_route', userData.user_id);
+    }
+    else if (intent === 'debt_guidance' && action === 'snowball_method') {
+      // Show snowball method (let GPT handle with context)
+      response = await processWithGPT(rewritten, userData, context, null, null, 'GUIDANCE');
+    }
+    else if (intent === 'money_coaching') {
+      // Money coaching follow-ups (let GPT handle with context)
+      response = await processWithGPT(rewritten, userData, context, null, null, 'GUIDANCE');
+    }
+    else if (intent === 'query_card_data') {
+      // Card data follow-ups
+      const { handleCardDataQuery } = await import('./cardDataQueryHandler.js');
+      response = handleCardDataQuery(userData.cards || [], entities, rewritten);
+      
+      await logIntentDetection(rewritten, intent, 0.80, 'direct_route', userData.user_id);
+    }
+    else {
+      // Fallback to normal processing
+      console.warn('[ConversationEngineV2] Unknown direct route action:', action);
+      return await processWithGPT(rewritten, userData, context, null, null, 'TASK');
+    }
+
+    // Update conversation context
+    conversationContext.addTurn(rewritten, intent, entities, response);
+
+    return response;
+
+  } catch (error) {
+    console.error('[ConversationEngineV2] Error in direct route handler:', error);
+    // Fallback to normal processing
+    return await processWithGPT(rewritten, userData, context, null, null, 'TASK');
+  }
+}
+
+/**
+ * Execute intent with filled slots
+ * @param {Object} readyIntent - { intent, slots }
+ * @param {Object} userData
+ * @param {Object} context
+ * @returns {Promise<string>}
+ */
+async function executeIntentWithSlots(readyIntent, userData, context) {
+  const { intent, slots } = readyIntent;
+  
+  console.log('[ConversationEngineV2] Executing intent with slots:', { intent, slots });
+
+  try {
+    if (intent === 'split_payment') {
+      const { generateResponse } = await import('./responseGenerator.js');
+      const classification = { intent: 'split_payment' };
+      const entities = { amount: slots.budget };
+      
+      const response = generateResponse(classification, entities, userData, context);
+      
+      // Log intent
+      await logIntentDetection(`split $${slots.budget} payment`, intent, 0.95, 'slot_filled', userData.user_id);
+      
+      return response;
+    }
+    
+    // Add more intent handlers as needed
+    return "I've received your information. Let me process that...";
+    
+  } catch (error) {
+    console.error('[ConversationEngineV2] Error executing intent with slots:', error);
+    return "I understood your answer, but I'm having trouble processing it. Could you try rephrasing?";
+  }
+}
+
+/**
+ * Ask the next question in slot-filling sequence
+ * @param {SlotFillingState} slotFillingState
+ * @param {Object} userData
+ * @returns {Promise<string>}
+ */
+async function askNextQuestion(slotFillingState, userData) {
+  // For now, just confirm what was received
+  const filledSlots = Object.keys(slotFillingState.slots);
+  return `Got it! I've recorded ${filledSlots.join(', ')}. What else would you like to know?`;
+}
 
 /**
  * Classify query into high-level category using zero-shot LLM
@@ -94,13 +255,92 @@ Respond with ONLY the category name: TASK, GUIDANCE, or CHAT`
 /**
  * Process user query using embedding-based intent detection
  * Now with hierarchical two-stage classification for better accuracy
+ * Enhanced with conversation context for follow-up handling
  */
 export const processQuery = async (query, userData = {}, context = {}) => {
   console.log('[ConversationEngineV2] Processing query:', query);
 
   try {
+    // STEP 0A: Check if user is answering a pending question (slot-filling)
+    // THIS MUST HAPPEN FIRST - before any other processing
+    const slotFillingState = getSlotFillingState();
+    
+    if (slotFillingState.hasPendingQuestion()) {
+      console.log('[ConversationEngineV2] ⚠️ PENDING QUESTION DETECTED');
+      console.log('[ConversationEngineV2] Question type:', slotFillingState.pendingQuestion);
+      console.log('[ConversationEngineV2] Target intent:', slotFillingState.targetIntent);
+      console.log('[ConversationEngineV2] User query:', query);
+      
+      const answer = slotFillingState.extractAnswer(query);
+      
+      if (answer && answer.confidence >= 0.80) {
+        console.log('[ConversationEngineV2] ✅ ANSWER DETECTED!', answer);
+        
+        // Fill the slot
+        slotFillingState.fillSlot(answer.slotName, answer.value);
+        
+        // Check if all slots are filled
+        if (slotFillingState.allSlotsFilled()) {
+          const readyIntent = slotFillingState.getReadyIntent();
+          console.log('[ConversationEngineV2] ✅ ALL SLOTS FILLED, EXECUTING:', readyIntent);
+          
+          // Execute the target intent with filled slots
+          const response = await executeIntentWithSlots(readyIntent, userData, context);
+          
+          // Update conversation context
+          const conversationContext = getConversationContext();
+          conversationContext.addTurn(query, readyIntent.intent, readyIntent.slots, response);
+          
+          return response;
+        } else {
+          // More slots needed - ask next question
+          console.log('[ConversationEngineV2] More slots needed, asking next question');
+          return await askNextQuestion(slotFillingState, userData);
+        }
+      } else {
+        // Answer extraction failed - but we have a pending question
+        // This is likely a clarification or unrelated query
+        console.log('[ConversationEngineV2] ⚠️ No clear answer detected (confidence too low or no match)');
+        console.log('[ConversationEngineV2] Clearing slot-filling state and continuing with normal processing');
+        
+        // Clear the pending question state since user didn't answer
+        slotFillingState.clear();
+      }
+    }
+
+    // STEP 0B: Get conversation context and check for follow-ups
+    const conversationContext = getConversationContext();
+    const activeContext = conversationContext.getActiveContext();
+    
+    console.log('[ConversationEngineV2] Context:', {
+      isFollowUp: activeContext.isFollowUp,
+      lastIntent: activeContext.lastIntent,
+      entitiesCount: Object.keys(activeContext.entities).length
+    });
+
+    // Rewrite query with context if it's a follow-up
+    const rewriteResult = rewriteQueryWithContext(query, activeContext);
+    
+    if (rewriteResult.confidence > 0) {
+      console.log('[ConversationEngineV2] Query rewrite:', {
+        original: query,
+        rewritten: rewriteResult.rewritten,
+        confidence: rewriteResult.confidence,
+        reason: rewriteResult.reason
+      });
+    }
+
+    // Check if we should directly route (high-confidence follow-up)
+    if (shouldDirectRoute(rewriteResult)) {
+      console.log('[ConversationEngineV2] Direct routing to:', rewriteResult.directRoute);
+      return await handleDirectRoute(rewriteResult, userData, context, conversationContext);
+    }
+
+    // Use rewritten query for classification if confidence is high enough
+    const queryToClassify = rewriteResult.confidence >= 0.70 ? rewriteResult.rewritten : query;
+
     // STEP 1: Classify into high-level category (TASK / GUIDANCE / CHAT)
-    const category = await classifyCategory(query);
+    const category = await classifyCategory(queryToClassify);
     const allowedIntents = INTENT_CATEGORIES[category] || [];
     console.log('[ConversationEngineV2] Category:', category, '- Allowed intents:', allowedIntents);
 
@@ -166,7 +406,12 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       }
 
       // Pass to GPT for conversational formatting
-      return await processWithGPT(query, userData, context, topMatch, localResponse, category);
+      const response = await processWithGPT(query, userData, context, topMatch, localResponse, category);
+      
+      // Update conversation context
+      conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+      
+      return response;
 
     } else if (topMatch.similarity >= THRESHOLDS.MEDIUM_CONFIDENCE) {
       // Medium confidence - get local data, then use GPT for conversational formatting
@@ -189,13 +434,25 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       }
 
       // Pass to GPT for conversational formatting
-      return await processWithGPT(query, userData, context, topMatch, localResponse, category);
+      const response = await processWithGPT(query, userData, context, topMatch, localResponse, category);
+      
+      // Update conversation context
+      conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+      
+      return response;
 
     } else {
       // Low confidence - use GPT fallback
       console.log('[ConversationEngineV2] Low confidence, using GPT fallback');
       console.log('[ConversationEngineV2] Similarity:', topMatch.similarity, 'Threshold:', THRESHOLDS.MEDIUM_CONFIDENCE);
-      return await processWithGPT(query, userData, context, topMatch, null, category);
+      
+      const response = await processWithGPT(query, userData, context, topMatch, null, category);
+      
+      // Update conversation context (with fallback intent)
+      const entities = extractEntities(query);
+      conversationContext.addTurn(query, 'gpt_fallback', entities, response);
+      
+      return response;
     }
 
   } catch (error) {
@@ -382,7 +639,7 @@ function summarizeUserData(userData) {
 
   const summary = cards.map(card => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
-    return `${card.card_name || card.card_type}: $${card.current_balance}/${card.credit_limit} (${util}% util), APR ${card.apr}%`;
+    return `${card.nickname || card.card_name}: $${card.current_balance}/${card.credit_limit} (${util}% util), APR ${card.apr}%`;
   }).join('; ');
 
   return `${cards.length} cards - ${summary}`;

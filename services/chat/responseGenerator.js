@@ -75,7 +75,7 @@ const handleListCards = (cards, entities) => {
     const available = card.credit_limit - card.current_balance;
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
 
-    response += `**${index + 1}. ${card.card_name || card.card_type}**\n`;
+    response += `**${index + 1}. ${card.nickname || card.card_name}**\n`;
     response += `   • Balance: $${card.current_balance.toLocaleString()} / $${card.credit_limit.toLocaleString()} (${util}% used)\n`;
     response += `   • Available: $${available.toLocaleString()}\n`;
     if (card.due_date) {
@@ -98,7 +98,7 @@ const handleRecommendCard = (cards, entities) => {
     return `I couldn't find a great match for **${entities.merchant}**. Add more cards in [My Wallet](vitta://navigate/cards) to get better recommendations!`;
   }
 
-  let response = `For **${entities.merchant}**, use your **${bestCard.card_name || bestCard.card_type}**!\n\n`;
+  let response = `For **${entities.merchant}**, use your **${bestCard.nickname || bestCard.card_name}**!\n\n`;
   response += `**Why?**\n${bestCard.reason}\n\n`;
   response += `**Available credit:** $${bestCard.availableCredit.toLocaleString()}`;
 
@@ -121,7 +121,7 @@ const handleUpcomingPayments = (cards, entities) => {
 
   upcomingPayments.forEach(payment => {
     const urgency = payment.daysUntilDue <= 2 ? '🔴 URGENT' : payment.daysUntilDue <= 5 ? '🟡' : '🟢';
-    response += `${urgency} **${payment.card_name || payment.card_type}**\n`;
+    response += `${urgency} **${payment.nickname || payment.card_name}**\n`;
     response += `   • Due: ${payment.dueDate.toLocaleDateString()} (${payment.daysUntilDue} day${payment.daysUntilDue !== 1 ? 's' : ''})\n`;
     response += `   • Amount: $${payment.amount_to_pay.toLocaleString()}\n\n`;
   });
@@ -143,7 +143,7 @@ const handleCardBalance = (cards, entities) => {
 
   cards.forEach(card => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
-    response += `• **${card.card_name || card.card_type}**: $${card.current_balance.toLocaleString()} (${util}%)\n`;
+    response += `• **${card.nickname || card.card_name}**: $${card.current_balance.toLocaleString()} (${util}%)\n`;
   });
 
   return response.trim();
@@ -183,7 +183,7 @@ const handleSplitPayment = (cards, entities) => {
   // Transform cards to payment optimizer format
   const paymentCards = cards.map(c => ({
     id: c.id,
-    name: c.card_name || c.card_type,
+    name: c.nickname || c.card_name,
     balance: c.current_balance || 0,
     apr: c.apr || 0,
     min: c.amount_to_pay || 0
@@ -293,7 +293,7 @@ const handleCreditUtilization = (cards, entities) => {
   cards.forEach(card => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
     const emoji = util < 30 ? '✅' : util < 50 ? '⚠️' : '🔴';
-    response += `${emoji} **${card.card_name || card.card_type}**: ${util}%\n`;
+    response += `${emoji} **${card.nickname || card.card_name}**: ${util}%\n`;
   });
 
   response += `\n*Tip: Keep utilization below 30% for best credit score impact.*`;
@@ -311,7 +311,7 @@ const handleAvailableCredit = (cards) => {
 
   cards.forEach(card => {
     const available = card.credit_limit - card.current_balance;
-    response += `• **${card.card_name || card.card_type}**: $${available.toLocaleString()}\n`;
+    response += `• **${card.nickname || card.card_name}**: $${available.toLocaleString()}\n`;
   });
 
   return response.trim();
@@ -326,7 +326,7 @@ const handlePaymentAmount = (cards) => {
 
   cards.forEach(card => {
     if (card.amount_to_pay) {
-      response += `• **${card.card_name || card.card_type}**: $${card.amount_to_pay.toLocaleString()}`;
+      response += `• **${card.nickname || card.card_name}**: $${card.amount_to_pay.toLocaleString()}`;
       if (card.due_date) {
         response += ` (due ${new Date(card.due_date).toLocaleDateString()})`;
       }
@@ -355,7 +355,7 @@ const handleAPRInfo = (cards, entities) => {
 
   cards.forEach(card => {
     const emoji = card.apr < 15 ? '✅' : card.apr < 20 ? '⚠️' : '🔴';
-    response += `${emoji} **${card.card_name || card.card_type}**: ${card.apr}%\n`;
+    response += `${emoji} **${card.nickname || card.card_name}**: ${card.apr}%\n`;
   });
 
   response += `\n*Lower APR = less interest on balances*`;

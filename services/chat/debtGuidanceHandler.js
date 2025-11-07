@@ -4,6 +4,8 @@
  * Focus: Education, actionable steps, empathy
  */
 
+import { getSlotFillingState, QUESTION_TYPES } from './slotFillingManager.js';
+
 /**
  * Handle debt guidance queries
  * @param {Array} cards - User's credit cards
@@ -84,8 +86,19 @@ export const handleDebtGuidance = (cards, entities, query) => {
     response += `💰 **Potential savings:** ~$${potentialSavings.toFixed(2)}/month by paying more than minimums\n\n`;
   }
 
-  // Call to action
+  // Call to action - SET UP SLOT FILLING
   response += `**Want a detailed plan?** Tell me your monthly budget and I'll show you exactly how to split it across your cards for maximum impact.`;
+
+  // Set up slot-filling expectation
+  const slotFillingState = getSlotFillingState();
+  slotFillingState.askQuestion(
+    QUESTION_TYPES.BUDGET_AMOUNT,
+    'split_payment',
+    ['budget'],
+    {}
+  );
+  
+  console.log('[DebtGuidanceHandler] Slot-filling set up for budget question');
 
   return response.trim();
 };

@@ -58,7 +58,7 @@ export const handleCardDataQuery = (cards, entities, query) => {
       if (!bestCard) {
         return `I don't have specific reward data for **${merchant}** yet.\n\n**What would you like to know?**\n• Which specific merchant? (e.g., "Costco", "Target")\n• Or general category? (e.g., "groceries", "gas", "travel")\n\nFor now, check card details in [My Wallet](vitta://navigate/cards).`;
       }
-      return `For **${merchant}**, use your **${bestCard.card_name || bestCard.card_type}**!\n\n**Why?** ${bestCard.reason}\n\n**Other questions?**\n• Want to see all your cards?\n• Need to know due dates or balances?`;
+      return `For **${merchant}**, use your **${bestCard.nickname || bestCard.card_name}**!\n\n**Why?** ${bestCard.reason}\n\n**Other questions?**\n• Want to see all your cards?\n• Need to know due dates or balances?`;
     }
     if (category) {
       return `I can help with **${category}** recommendations!\n\n**Which ${category} merchant?**\n• Costco?\n• Target?\n• Whole Foods?\n• Or another store?\n\nFor general info, check [My Wallet](vitta://navigate/cards).`;
@@ -89,14 +89,14 @@ const findLowestAPRCard = (cards) => {
   const status = lowest.apr === 0 ? '✅ Promo 0%' : lowest.apr < 15 ? '🟢 Excellent' : '🟡 Good';
 
   let response = `**Lowest APR Card**\n\n`;
-  response += `**${lowest.card_name || lowest.card_type}** has the lowest APR at **${lowest.apr}%** ${status}\n\n`;
+  response += `**${lowest.nickname || lowest.card_name}** has the lowest APR at **${lowest.apr}%** ${status}\n\n`;
   response += `- Balance: $${lowest.current_balance.toLocaleString()}\n`;
   response += `- Credit Limit: $${lowest.credit_limit.toLocaleString()}\n`;
 
   if (sorted.length > 1) {
     response += `\n**Other Cards:**\n`;
     sorted.slice(1, 3).forEach(card => {
-      response += `- ${card.card_name || card.card_type}: ${card.apr}% APR\n`;
+      response += `- ${card.nickname || card.card_name}: ${card.apr}% APR\n`;
     });
   }
 
@@ -111,7 +111,7 @@ const findHighestAPRCard = (cards) => {
   const monthlyInterest = (highest.current_balance * (highest.apr / 100) / 12).toFixed(2);
 
   let response = `**Highest APR Card** 🔴\n\n`;
-  response += `**${highest.card_name || highest.card_type}** has the highest APR at **${highest.apr}%**\n\n`;
+  response += `**${highest.nickname || highest.card_name}** has the highest APR at **${highest.apr}%**\n\n`;
   response += `- Balance: $${highest.current_balance.toLocaleString()}\n`;
   response += `- Monthly interest cost: ~$${monthlyInterest}\n`;
   response += `\n💡 **Tip:** Pay this card down first to save on interest!`;
@@ -129,7 +129,7 @@ const showAllAPRs = (cards) => {
   sorted.forEach(card => {
     const emoji = card.apr === 0 ? '✅' : card.apr < 15 ? '🟢' : card.apr < 20 ? '🟡' : '🔴';
     const status = card.apr === 0 ? 'Promo 0%' : card.apr < 15 ? 'Excellent' : card.apr < 20 ? 'Good' : 'High';
-    response += `| ${card.card_name || card.card_type} | ${card.apr}% | ${emoji} ${status} |\n`;
+    response += `| ${card.nickname || card.card_name} | ${card.apr}% | ${emoji} ${status} |\n`;
   });
 
   return response.trim();
@@ -141,7 +141,7 @@ const findHighestBalanceCard = (cards) => {
 
   const util = Math.round((highest.current_balance / highest.credit_limit) * 100);
 
-  let response = `**Highest Balance:** ${highest.card_name || highest.card_type}`;
+  let response = `**Highest Balance:** ${highest.nickname || highest.card_name}`;
   response += `\n\nBalance: $${highest.current_balance.toLocaleString()} / $${highest.credit_limit.toLocaleString()}`;
   response += `\nUtilization: ${util}%`;
   response += `\nAPR: ${highest.apr}%`;
@@ -158,7 +158,7 @@ const findLowestBalanceCard = (cards) => {
 
   const lowest = sorted[0];
 
-  let response = `**Lowest Balance:** ${lowest.card_name || lowest.card_type}`;
+  let response = `**Lowest Balance:** ${lowest.nickname || lowest.card_name}`;
   response += `\n\nBalance: $${lowest.current_balance.toLocaleString()}`;
 
   return response.trim();
@@ -186,7 +186,7 @@ const showAllBalances = (cards) => {
   cards.forEach(card => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
     const utilEmoji = util < 30 ? '✅' : util < 50 ? '⚠️' : '🔴';
-    response += `| ${card.card_name || card.card_type} | $${card.current_balance.toLocaleString()} | $${card.credit_limit.toLocaleString()} | ${util}% ${utilEmoji} |\n`;
+    response += `| ${card.nickname || card.card_name} | $${card.current_balance.toLocaleString()} | $${card.credit_limit.toLocaleString()} | ${util}% ${utilEmoji} |\n`;
   });
 
   return response.trim();
@@ -205,8 +205,8 @@ const showDueDates = (cards) => {
 
   let response = `**Upcoming Payment Due Dates:**\n\n`;
 
-  response += '| Card | Due Date | Days Left | Amount | Status |\n';
-  response += '|------|----------|-----------|--------|--------|\n';
+  response += '| Card | Due Date | Days Left | Current Balance | Min Payment Due | Status |\n';
+  response += '|------|----------|-----------|-----------------|-----------------|--------|\n';
 
   upcomingPayments.forEach(payment => {
     const cardName = payment.card.nickname || payment.card.card_name || payment.card.card_type;
@@ -221,9 +221,11 @@ const showDueDates = (cards) => {
                     payment.isUrgent ? '🟡 Soon' :
                     '🟢 OK';
 
-    const amount = `$${payment.amount.toLocaleString()}`;
+    // Show both current balance and minimum payment due as separate columns
+    const currentBalance = `$${(payment.card.current_balance || 0).toLocaleString()}`;
+    const minPaymentDue = `$${(payment.card.amount_to_pay || 0).toLocaleString()}`;
 
-    response += `| ${cardName} | ${dueDate} | ${daysLeftText} | ${amount} | ${urgency} |\n`;
+    response += `| ${cardName} | ${dueDate} | ${daysLeftText} | ${currentBalance} | ${minPaymentDue} | ${urgency} |\n`;
   });
 
   return response.trim();
@@ -245,7 +247,7 @@ const showAvailableCredit = (cards) => {
 
   cards.forEach(card => {
     const available = card.credit_limit - card.current_balance;
-    response += `| ${card.card_name || card.card_type} | $${available.toLocaleString()} | $${card.credit_limit.toLocaleString()} | $${card.current_balance.toLocaleString()} |\n`;
+    response += `| ${card.nickname || card.card_name} | $${available.toLocaleString()} | $${card.credit_limit.toLocaleString()} | $${card.current_balance.toLocaleString()} |\n`;
   });
 
   const totalAvailable = cards.reduce((sum, card) => sum + (card.credit_limit - card.current_balance), 0);
@@ -269,7 +271,7 @@ const showUtilization = (cards) => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
     const emoji = util < 30 ? '✅' : util < 50 ? '⚠️' : '🔴';
     const status = util < 30 ? 'Excellent' : util < 50 ? 'Fair' : 'High';
-    response += `| ${card.card_name || card.card_type} | $${card.current_balance.toLocaleString()} | $${card.credit_limit.toLocaleString()} | ${util}% | ${emoji} ${status} |\n`;
+    response += `| ${card.nickname || card.card_name} | $${card.current_balance.toLocaleString()} | $${card.credit_limit.toLocaleString()} | ${util}% | ${emoji} ${status} |\n`;
   });
 
   response += `\n*Tip: Keep utilization below 30% for best credit score.*`;
@@ -290,7 +292,7 @@ const showPaymentAmounts = (cards) => {
   response += '|------|---------|----------------|-----|\n';
 
   cardsWithPayments.forEach(card => {
-    response += `| ${card.card_name || card.card_type} | $${card.current_balance.toLocaleString()} | $${card.amount_to_pay.toLocaleString()} | ${card.apr}% |\n`;
+    response += `| ${card.nickname || card.card_name} | $${card.current_balance.toLocaleString()} | $${card.amount_to_pay.toLocaleString()} | ${card.apr}% |\n`;
   });
 
   response += `\nOptimize payments in [Payment Optimizer](vitta://navigate/optimizer)`;
@@ -310,7 +312,7 @@ const listAllCards = (cards) => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
     const utilEmoji = util < 30 ? '✅' : util < 50 ? '⚠️' : '🔴';
 
-    const cardName = card.card_name || card.card_type;
+    const cardName = card.nickname || card.card_name;
     const balance = `$${card.current_balance.toLocaleString()}`;
     const limit = `$${card.credit_limit.toLocaleString()}`;
     const apr = `${card.apr}%`;

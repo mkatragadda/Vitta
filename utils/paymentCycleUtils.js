@@ -10,7 +10,7 @@
  *   Current:  Jan 15 statement → Feb 10 payment (use for float)
  */
 
-import { calculateGracePeriod } from './statementCycleUtils';
+import { calculateGracePeriod, getPaymentDueDate as getPaymentDueDateFromDayOfMonth } from './statementCycleUtils';
 
 /**
  * Get the most recent closed statement date
@@ -38,7 +38,6 @@ export const getMostRecentStatementClose = (statementCloseDay, referenceDate = n
   if (statementCloseDay > dayOfMonth) {
     statementDate = new Date(year, month - 1, statementCloseDay);
   }
-
   return statementDate;
 };
 
@@ -83,12 +82,12 @@ export const getPaymentDueDateForStatement = (statementCloseDate, gracePeriodDay
  * Get BOTH active payment obligations
  * CRITICAL: Returns both previous (due now) and current (due later) payments
  *
- * @param {Object} card - Credit card with statement_close_day and grace_period_days
+ * @param {Object} card - Credit card with statement_close_day and payment_due_day (or grace_period_days for legacy)
  * @param {Date} referenceDate - Today's date
  * @returns {Object} Both payment obligations
  */
 export const getActivePayments = (card, referenceDate = new Date()) => {
-  if (!card.statement_close_day || !card.grace_period_days) {
+  if (!card.statement_close_day) {
     return {
       previousPayment: null,
       currentPayment: null
@@ -103,12 +102,35 @@ export const getActivePayments = (card, referenceDate = new Date()) => {
   const previousStatementClose = getPreviousStatementClose(card.statement_close_day, today);
 
   // Calculate payment due dates
-  const currentPaymentDue = getPaymentDueDateForStatement(currentStatementClose, card.grace_period_days);
-  const previousPaymentDue = getPaymentDueDateForStatement(previousStatementClose, card.grace_period_days);
+  // NEW: Use payment_due_day if available (more accurate for month boundaries)
+  // FALLBACK: Use grace_period_days for backward compatibility with old cards
+  let currentPaymentDue, previousPaymentDue;
+
+  if (card.payment_due_day) {
+    // Modern approach: Use actual payment_due_day (handles month boundaries correctly)
+    currentPaymentDue = getPaymentDueDateFromDayOfMonth(card.statement_close_day, card.payment_due_day, currentStatementClose);
+    previousPaymentDue = getPaymentDueDateFromDayOfMonth(card.statement_close_day, card.payment_due_day, previousStatementClose);
+  } else if (card.grace_period_days) {
+    // Legacy approach: Calculate using grace period (may be off by 1-2 days at month boundaries)
+    currentPaymentDue = getPaymentDueDateForStatement(currentStatementClose, card.grace_period_days);
+    previousPaymentDue = getPaymentDueDateForStatement(previousStatementClose, card.grace_period_days);
+  } else {
+    // No payment schedule configured
+    return {
+      previousPayment: null,
+      currentPayment: null
+    };
+  }
 
   // Calculate days until due (negative = overdue)
   const daysUntilCurrent = currentPaymentDue ? Math.ceil((currentPaymentDue - today) / (1000 * 60 * 60 * 24)) : null;
   const daysUntilPrevious = previousPaymentDue ? Math.ceil((previousPaymentDue - today) / (1000 * 60 * 60 * 24)) : null;
+
+  // Helper to get payment amount - prioritize amount_to_pay (planned), fall back to current_balance
+  const getPaymentAmount = () => {
+    // Use planned payment amount if set, otherwise use current balance
+    return card.amount_to_pay || card.current_balance || 0;
+  };
 
   return {
     // Previous statement payment (likely due soon or overdue)
@@ -118,7 +140,7 @@ export const getActivePayments = (card, referenceDate = new Date()) => {
       daysUntilDue: daysUntilPrevious,
       isOverdue: daysUntilPrevious < 0,
       isUrgent: daysUntilPrevious >= 0 && daysUntilPrevious <= 7,
-      amount: card.current_balance || 0, // User should have this from their statement
+      amount: getPaymentAmount(),
       status: daysUntilPrevious < 0 ? 'OVERDUE' : daysUntilPrevious <= 7 ? 'DUE_SOON' : 'UPCOMING'
     } : null,
 
@@ -127,10 +149,10 @@ export const getActivePayments = (card, referenceDate = new Date()) => {
       statementCloseDate: currentStatementClose,
       paymentDueDate: currentPaymentDue,
       daysUntilDue: daysUntilCurrent,
-      isOverdue: false,
-      isUrgent: false,
-      amount: 0, // Current statement balance not yet known
-      status: 'FUTURE'
+      isOverdue: daysUntilCurrent < 0,
+      isUrgent: daysUntilCurrent >= 0 && daysUntilCurrent <= 7,
+      amount: getPaymentAmount(),
+      status: daysUntilCurrent < 0 ? 'OVERDUE' : daysUntilCurrent <= 7 ? 'DUE_SOON' : 'UPCOMING'
     } : null
   };
 };
@@ -146,12 +168,13 @@ export const getActivePayments = (card, referenceDate = new Date()) => {
 export const getNextDuePayment = (card, referenceDate = new Date()) => {
   const { previousPayment, currentPayment } = getActivePayments(card, referenceDate);
 
-  // If previous payment exists and is not far in the past (>30 days), show it
-  if (previousPayment && previousPayment.daysUntilDue > -30) {
+  // Show the payment that's coming up next (not overdue)
+  // If previous payment is still upcoming or recently overdue (within 7 days), show it
+  if (previousPayment && previousPayment.daysUntilDue >= -7) {
     return previousPayment;
   }
 
-  // Otherwise show current payment
+  // Otherwise show current payment (the next one due)
   if (currentPayment) {
     return currentPayment;
   }
@@ -172,7 +195,7 @@ export const getNextDuePayment = (card, referenceDate = new Date()) => {
       daysUntilDue,
       isOverdue: daysUntilDue < 0,
       isUrgent: daysUntilDue >= 0 && daysUntilDue <= 7,
-      amount: card.current_balance || 0,
+      amount: card.amount_to_pay || card.current_balance || 0,
       status: daysUntilDue < 0 ? 'OVERDUE' : daysUntilDue <= 7 ? 'DUE_SOON' : 'UPCOMING'
     };
   }
@@ -190,7 +213,8 @@ export const getNextDuePayment = (card, referenceDate = new Date()) => {
  * @returns {Date} Payment due date to use for float calculation
  */
 export const getPaymentDueDateForFloat = (card, purchaseDate = new Date()) => {
-  if (!card.statement_close_day || !card.grace_period_days) return null;
+  if (!card.statement_close_day) return null;
+  if (!card.payment_due_day && !card.grace_period_days) return null;
 
   const purchase = new Date(purchaseDate);
   purchase.setHours(0, 0, 0, 0);
@@ -210,7 +234,13 @@ export const getPaymentDueDateForFloat = (card, purchaseDate = new Date()) => {
   }
 
   // Calculate payment due for that statement
-  return getPaymentDueDateForStatement(relevantStatementClose, card.grace_period_days);
+  // NEW: Use payment_due_day if available (more accurate)
+  // FALLBACK: Use grace_period_days for backward compatibility
+  if (card.payment_due_day) {
+    return getPaymentDueDateFromDayOfMonth(card.statement_close_day, card.payment_due_day, relevantStatementClose);
+  } else {
+    return getPaymentDueDateForStatement(relevantStatementClose, card.grace_period_days);
+  }
 };
 
 /**

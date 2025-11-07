@@ -112,7 +112,7 @@ function csvToCardObject(csvCard) {
   return {
     card_name: csvCard.name,
     issuer: normalizeIssuer(csvCard.issuer),
-    network: normalizeNetwork(csvCard.network),
+    card_network: normalizeNetwork(csvCard.network),
     reward_structure: determineRewardStructure(csvCard.name, csvCard.universalCashbackPercent),
     annual_fee: annualFee,
     sign_up_bonus: hasBonus ? {

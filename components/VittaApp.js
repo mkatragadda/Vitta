@@ -921,10 +921,14 @@ const VittaApp = () => {
       console.log('[VittaApp] Processing query with conversation engine');
       console.log('[VittaApp] Current userCards in state:', userCards?.length || 0, 'cards');
 
-      // Use cached cards from state (already refreshed on login and after add/update/delete)
+      // Refresh cards from DB to ensure we have latest data (e.g., after manual DB updates)
+      const latestCards = await refreshCards();
+      console.log('[VittaApp] Refreshed cards from DB:', latestCards?.length || 0, 'cards');
+
+      // Use fresh cards from database
       const userData = {
         user_id: user?.id || null,
-        cards: userCards || []
+        cards: latestCards || userCards || []
       };
 
       // Load conversation history for context

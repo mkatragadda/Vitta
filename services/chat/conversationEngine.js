@@ -176,7 +176,7 @@ const summarizeUserData = (userData) => {
 
   const summary = cards.map(card => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
-    return `${card.card_name || card.card_type}: $${card.current_balance}/${card.credit_limit} (${util}% util), APR ${card.apr}%`;
+    return `${card.nickname || card.card_name}: $${card.current_balance}/${card.credit_limit} (${util}% util), APR ${card.apr}%`;
   }).join('; ');
 
   return `${cards.length} cards - ${summary}`;

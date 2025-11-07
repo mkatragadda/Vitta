@@ -89,23 +89,27 @@ export const getStatementCloseDate = (statementCloseDay, referenceDate = new Dat
 };
 
 /**
- * Get the actual payment due date for a given reference date
+ * Get the actual payment due date for a given statement close date
  * Accounts for month boundaries (payment due in month after statement closes)
  *
  * @param {number} statementCloseDay - Day of month statement closes (1-31)
  * @param {number} paymentDueDay - Day of month payment is due (1-31)
- * @param {Date} referenceDate - Date to calculate from (default: today)
+ * @param {Date} statementCloseDate - The actual statement close date (NOT a reference date)
  * @returns {Date} Actual payment due date
  *
  * @example
- * // Statement closes 25th, payment due 10th (crosses month)
- * // If today is Jan 20:
- * getPaymentDueDate(25, 10) // Returns Feb 10, 2025
+ * // Statement closed on Oct 25, payment due 10th (crosses month)
+ * getPaymentDueDate(25, 10, new Date(2025, 9, 25)) // Returns Nov 10, 2025
  */
-export const getPaymentDueDate = (statementCloseDay, paymentDueDay, referenceDate = new Date()) => {
+export const getPaymentDueDate = (statementCloseDay, paymentDueDay, statementCloseDate) => {
   if (!statementCloseDay || !paymentDueDay) return null;
 
-  const statementDate = getStatementCloseDate(statementCloseDay, referenceDate);
+  // If no specific statement date provided, calculate for today
+  let statementDate = statementCloseDate;
+  if (!statementDate) {
+    statementDate = getStatementCloseDate(statementCloseDay, new Date());
+  }
+  
   if (!statementDate) return null;
 
   const year = statementDate.getFullYear();
@@ -134,7 +138,12 @@ export const getPaymentDueDate = (statementCloseDay, paymentDueDay, referenceDat
  * getDaysUntilPaymentDue(15, 25) // Returns 5
  */
 export const getDaysUntilPaymentDue = (statementCloseDay, paymentDueDay, referenceDate = new Date()) => {
-  const dueDate = getPaymentDueDate(statementCloseDay, paymentDueDay, referenceDate);
+  // First get the statement close date for this reference date
+  const statementDate = getStatementCloseDate(statementCloseDay, referenceDate);
+  if (!statementDate) return null;
+  
+  // Then calculate payment due date based on that statement
+  const dueDate = getPaymentDueDate(statementCloseDay, paymentDueDay, statementDate);
   if (!dueDate) return null;
 
   const today = new Date(referenceDate);
@@ -171,9 +180,11 @@ export const calculateFloatTime = (card, purchaseDate = new Date()) => {
   }
 
   const statementDate = getStatementCloseDate(card.statement_close_day, purchaseDate);
-  const dueDate = getPaymentDueDate(card.statement_close_day, card.payment_due_day, purchaseDate);
-
-  if (!statementDate || !dueDate) return card.grace_period_days || 25;
+  if (!statementDate) return card.grace_period_days || 25;
+  
+  // Calculate payment due date based on the statement close date
+  const dueDate = getPaymentDueDate(card.statement_close_day, card.payment_due_day, statementDate);
+  if (!dueDate) return card.grace_period_days || 25;
 
   // If purchase is after statement close, it goes on NEXT statement
   const purchase = new Date(purchaseDate);
