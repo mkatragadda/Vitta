@@ -8,6 +8,8 @@
  * User: "my budget is 2000" ← This should fill the budget slot
  */
 
+import { extractAmount } from '../../utils/textExtraction';
+
 /**
  * Pending question types
  */
@@ -104,54 +106,32 @@ export class SlotFillingState {
   }
 
   /**
-   * Extract budget amount from query
+   * Extract budget amount from query using common utility
    * Patterns: "2000", "my budget is 2000", "$2000", "I have 2000"
    */
   extractBudgetAmount(query) {
     console.log('[SlotFilling] Extracting budget from:', query);
     
-    // Pattern 1: Just a number (highest confidence)
-    const justNumber = query.match(/^\$?(\d+)$/);
-    if (justNumber) {
-      const amount = parseFloat(justNumber[1]);
-      console.log('[SlotFilling] ✅ Just a number detected:', amount);
-      return {
-        slotName: 'budget',
-        value: amount,
-        confidence: 0.98  // Very high confidence - user just gave a number
-      };
-    }
-
-    // Pattern 2: Number with minimal context
-    const simpleNumber = query.match(/^(?:it'?s |about |around )?[\$]?(\d+)$/i);
-    if (simpleNumber) {
-      const amount = parseFloat(simpleNumber[1]);
-      console.log('[SlotFilling] ✅ Simple number detected:', amount);
-      return {
-        slotName: 'budget',
-        value: amount,
-        confidence: 0.95
-      };
-    }
-
-    // Pattern 3: "my budget is X", "I have X", "I can pay X"
-    const patterns = [
-      /(?:my )?budget (?:is |= )?[\$]?(\d+)/i,
-      /(?:I have|I can pay|I can afford) [\$]?(\d+)/i,
-      /[\$]?(\d+)(?: dollars?| bucks?| per month| monthly)?/i
-    ];
-
-    for (const pattern of patterns) {
-      const match = query.match(pattern);
-      if (match) {
-        const amount = parseFloat(match[1]);
-        console.log('[SlotFilling] ✅ Pattern match detected:', amount);
-        return {
-          slotName: 'budget',
-          value: amount,
-          confidence: 0.90
-        };
+    // Use common extraction utility with flexible minDigits for budget context
+    const amount = extractAmount(query, { minDigits: 1, allowK: true });
+    
+    if (amount) {
+      // Determine confidence based on query structure
+      let confidence = 0.90; // default
+      
+      // Higher confidence for simple number inputs
+      if (/^\$?[\d,]+$/.test(query.trim())) {
+        confidence = 0.98;
+      } else if (/^(?:it'?s |about |around )?[\$]?[\d,]+$/i.test(query.trim())) {
+        confidence = 0.95;
       }
+      
+      console.log('[SlotFilling] ✅ Budget amount detected:', amount, 'confidence:', confidence);
+      return {
+        slotName: 'budget',
+        value: amount,
+        confidence
+      };
     }
 
     console.log('[SlotFilling] ❌ No budget amount found');
@@ -159,26 +139,24 @@ export class SlotFillingState {
   }
 
   /**
-   * Extract payment amount from query
+   * Extract payment amount from query using common utility
    */
   extractPaymentAmount(query) {
-    const patterns = [
-      /(?:pay|paying) [\$]?(\d+)/i,
-      /[\$]?(\d+)(?: dollars?)?/i
-    ];
-
-    for (const pattern of patterns) {
-      const match = query.match(pattern);
-      if (match) {
-        const amount = parseFloat(match[1]);
-        return {
-          slotName: 'amount',
-          value: amount,
-          confidence: 0.85
-        };
-      }
+    console.log('[SlotFilling] Extracting payment amount from:', query);
+    
+    // Use common extraction utility
+    const amount = extractAmount(query, { minDigits: 1, allowK: true });
+    
+    if (amount) {
+      console.log('[SlotFilling] ✅ Payment amount detected:', amount);
+      return {
+        slotName: 'amount',
+        value: amount,
+        confidence: 0.85
+      };
     }
-
+    
+    console.log('[SlotFilling] ❌ No payment amount found');
     return null;
   }
 

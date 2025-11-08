@@ -22,11 +22,13 @@ const THRESHOLDS = {
   LOW_CONFIDENCE: 0.60
 };
 
+// Intents that should use structured responses without GPT formatting
+// Note: Reduced set to allow more natural, conversational responses
 const CRITICAL_INTENTS = new Set([
-  'split_payment',
-  'query_card_data',
-  'payment_optimizer',
-  'debt_guidance_plan'
+  'query_card_data',  // Simple data queries can use templates
+  // 'split_payment' - removed to allow GPT formatting for better UX
+  // 'payment_optimizer' - removed to allow personalized responses
+  // 'debt_guidance_plan' - removed to allow conversational advice
 ]);
 
 /**

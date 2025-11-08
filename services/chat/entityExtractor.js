@@ -5,6 +5,7 @@
 
 import nlp from 'compromise';
 import deeplinksData from '../../data/deeplinks';
+import { extractAmount } from '../../utils/textExtraction';
 
 // Merchant synonyms and common names
 const MERCHANT_PATTERNS = {
@@ -78,7 +79,7 @@ export const extractEntities = (query) => {
   entities.timeframe = extractTimeframe(query, doc);
 
   // Extract amount
-  entities.amount = extractAmount(query, doc);
+  entities.amount = extractAmountFromQuery(query, doc);
 
   // NEW: Extract semantic entities
   entities.queryType = extractQueryType(query, doc);
@@ -210,36 +211,22 @@ const extractTimeframe = (query, doc) => {
 };
 
 /**
- * Extract monetary amount
+ * Extract monetary amount using common utility
+ * This is a wrapper to maintain compatibility with existing code
  */
-const extractAmount = (query, doc) => {
-  // Match various amount patterns: $500, 500 dollars, $1,000.50, 1500, 1.5k
-  const patterns = [
-    /\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // $1500 or $1,500.00
-    /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:dollars?|usd)/i,  // 1500 dollars
-    /(\d+\.?\d*)\s*k/i,  // 1.5k
-    /\b(\d{3,})\b/  // any number 3+ digits (e.g., 1500)
-  ];
-
-  for (const pattern of patterns) {
-    const match = query.match(pattern);
-    if (match) {
-      let amount = match[1].replace(/,/g, '');
-      // Handle "k" notation (e.g., 1.5k = 1500)
-      if (query.match(/k/i)) {
-        amount = parseFloat(amount) * 1000;
-      } else {
-        amount = parseFloat(amount);
-      }
-      console.log('[EntityExtractor] Found amount:', amount);
-      return amount;
-    }
+const extractAmountFromQuery = (query, doc) => {
+  // Use common extraction utility
+  const amount = extractAmount(query, { minDigits: 3, allowK: true });
+  
+  if (amount) {
+    console.log('[EntityExtractor] Found amount:', amount);
+    return amount;
   }
 
-  // Use NLP to find money/values
+  // Fallback: Use NLP to find money/values
   const money = doc.money().out('array');
   if (money.length > 0) {
-    console.log('[EntityExtractor] Found money:', money[0]);
+    console.log('[EntityExtractor] Found money via NLP:', money[0]);
     return money[0];
   }
 
