@@ -210,6 +210,35 @@ const VittaApp = () => {
     }]);
   };
 
+  const processGoogleProfile = useCallback(async ({ email, name, picture, sub }) => {
+    const savedUser = await saveGoogleUser({
+      email,
+      name,
+      picture,
+      sub
+    });
+
+    console.log('[Vitta] User saved to database:', savedUser);
+
+    setUser({
+      id: savedUser.id,
+      email,
+      name,
+      picture,
+      joinDate: savedUser.created_at ? new Date(savedUser.created_at) : new Date(),
+      provider: 'google',
+      isDemoMode: savedUser.isDemoMode || false
+    });
+
+    setIsAuthenticated(true);
+
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `Welcome back, ${name}! I'm ready to help you choose the best credit card for every purchase and optimize your payments. What would you like to know?`,
+      timestamp: new Date()
+    }]);
+  }, []);
+
   // Google OAuth handler
   const handleGoogleSignIn = useCallback(async (response) => {
     try {
@@ -217,34 +246,12 @@ const VittaApp = () => {
       const payload = JSON.parse(atob(response.credential.split('.')[1]));
       console.log('[Vitta] Decoded payload:', payload);
 
-      // Save user to Supabase (or run in demo mode if not configured)
-      const savedUser = await saveGoogleUser({
+      await processGoogleProfile({
         email: payload.email,
         name: payload.name,
         picture: payload.picture,
-        sub: payload.sub // Google user ID
+        sub: payload.sub
       });
-
-      console.log('[Vitta] User saved to database:', savedUser);
-
-      // Set user state with database ID
-      setUser({
-        id: savedUser.id,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        joinDate: savedUser.created_at ? new Date(savedUser.created_at) : new Date(),
-        provider: 'google',
-        isDemoMode: savedUser.isDemoMode || false
-      });
-
-      setIsAuthenticated(true);
-
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        content: `Welcome back, ${payload.name}! I'm ready to help you choose the best credit card for every purchase and optimize your payments. What would you like to know?`,
-        timestamp: new Date()
-      }]);
     } catch (error) {
       console.error('[Vitta] Google sign-in error:', error);
       console.error('[Vitta] Full error details:', error);
@@ -256,13 +263,30 @@ const VittaApp = () => {
         alert('Google sign-in failed. Please try again.');
       }
     }
-  }, []);
+  }, [processGoogleProfile]);
 
   // Initialize Google OAuth (ensure init after script load)
   const [isGsiInitialized, setIsGsiInitialized] = useState(false);
   const [gsiStatus, setGsiStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
   const [hasRenderedGsiButton, setHasRenderedGsiButton] = useState(false);
   const gsiButtonRef = useRef(null);
+  const tokenClientRef = useRef(null);
+
+  const triggerOAuthTokenFlow = useCallback(() => {
+    const tokenClient = tokenClientRef.current;
+    if (!tokenClient) {
+      alert('Google Sign-In is still loading. Please refresh and try again.');
+      return;
+    }
+
+    try {
+      console.log('[Vitta] Launching OAuth token fallback flow…');
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (err) {
+      console.error('[Vitta] Error requesting Google access token:', err);
+      alert('Unable to open Google login. Please ensure pop-ups are allowed and try again.');
+    }
+  }, []);
 
   const initializeGsiIfNeeded = useCallback(() => {
     if (typeof window === 'undefined') return false;
@@ -300,11 +324,49 @@ const VittaApp = () => {
         callback: handleGoogleSignIn,
         auto_select: false,
         cancel_on_tap_outside: true,
-        // Explicitly disable FedCM to avoid conflicts
+        ux_mode: 'popup',
         use_fedcm_for_prompt: false,
-        // Add additional configuration for better compatibility
         itp_support: true
       });
+
+      if (window.google?.accounts?.oauth2) {
+        tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'openid email profile',
+          ux_mode: 'popup',
+          prompt: '',
+          callback: async (tokenResponse) => {
+            try {
+              const accessToken = tokenResponse.access_token;
+              if (!accessToken) {
+                throw new Error('Access token was not returned by Google');
+              }
+
+              const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`
+                }
+              });
+
+              if (!profileResponse.ok) {
+                throw new Error(`Failed to fetch Google profile: ${profileResponse.status}`);
+              }
+
+              const profile = await profileResponse.json();
+              console.log('[Vitta] OAuth2 fallback profile:', profile);
+              await processGoogleProfile({
+                email: profile.email,
+                name: profile.name || profile.given_name || 'Google User',
+                picture: profile.picture,
+                sub: profile.sub
+              });
+            } catch (err) {
+              console.error('[Vitta] OAuth2 fallback failed:', err);
+              alert('Google sign-in could not complete. Please ensure pop-ups are enabled and try again.');
+            }
+          }
+        });
+      }
       setIsGsiInitialized(true);
       setGsiStatus('ready');
       console.log('[Vitta] GSI initialized successfully');
@@ -331,7 +393,58 @@ const VittaApp = () => {
       setGsiStatus('error');
       return false;
     }
-  }, [handleGoogleSignIn, hasRenderedGsiButton, isGsiInitialized]);
+  }, [handleGoogleSignIn, hasRenderedGsiButton, isGsiInitialized, processGoogleProfile]);
+
+  const showGooglePrompt = useCallback(() => {
+    const gsi = window.google?.accounts?.id;
+
+    if (!gsi) {
+      alert('Google Sign-In is still loading. Please refresh and try again.');
+      return;
+    }
+
+    try {
+      gsi.cancel(); // reset any previous dismissal
+    } catch (error) {
+      console.warn('[Vitta] Unable to cancel previous prompt:', error);
+    }
+
+    console.log('[Vitta] Triggering Google Sign-In prompt…');
+    gsi.prompt((notification) => {
+      if (!notification) {
+        return;
+      }
+
+      const momentType = notification.getMomentType?.();
+      if (momentType) {
+        console.log('[Vitta] Prompt moment:', momentType);
+      }
+
+      if (notification.isNotDisplayed?.()) {
+        const reason = notification.getNotDisplayedReason?.();
+        console.warn('[Vitta] Prompt not displayed:', reason);
+
+        if ((reason === 'opt_out_or_no_session' || reason === 'suppressed_by_user') && tokenClientRef.current) {
+          triggerOAuthTokenFlow();
+        }
+      }
+
+      if (notification.isDismissedMoment?.()) {
+        const reason = notification.getDismissedReason?.();
+        console.warn('[Vitta] Prompt dismissed:', reason);
+        if (tokenClientRef.current) {
+          triggerOAuthTokenFlow();
+        }
+      }
+
+      if (notification.isSkippedMoment?.()) {
+        console.warn('[Vitta] Prompt skipped:', notification.getSkippedReason?.());
+        if (tokenClientRef.current) {
+          triggerOAuthTokenFlow();
+        }
+      }
+    });
+  }, [triggerOAuthTokenFlow]);
 
   useEffect(() => {
     // Try immediately
@@ -469,84 +582,29 @@ const VittaApp = () => {
                   {gsiStatus === 'error' && 'Google Sign-In failed to initialize'}
                 </div>
                 <div ref={gsiButtonRef} className="w-full flex items-center justify-center min-h-[46px]" />
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Google will open a secure account chooser. If nothing appears, ensure pop-ups are allowed for this site and refresh the page.
+                </p>
               </div>
-              <button
-              type="button"
-              onClick={() => {
-                const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-                console.log('[Vitta] Manual Google Sign-In attempt');
-                console.log('[Vitta] Client ID:', clientId || 'Not provided');
-                console.log('[Vitta] GSI Status:', gsiStatus);
-
-                if (!clientId) {
-                  alert('Google Sign-In is disabled in demo mode. Please use email/password login.');
-                  return;
-                }
-
-                // Check if Google Sign-In button is available
-                if (gsiButtonRef.current) {
-                  // Try to click the official Google button
-                  const googleButton = gsiButtonRef.current.querySelector('div[role="button"]');
-                  if (googleButton) {
-                    console.log('[Vitta] Clicking official Google button');
-                    googleButton.click();
-                  } else {
-                    console.log('[Vitta] Official button not found, using prompt fallback');
-                    // Fallback: try prompt if available
-                    if (window.google?.accounts?.id?.prompt) {
-                      try {
-                        window.google.accounts.id.prompt();
-                      } catch (error) {
-                        console.error('[Vitta] Prompt error:', error);
-                        alert('Please use the official "Continue with Google" button above.');
-                      }
-                    } else {
-                      alert('Please use the official "Continue with Google" button above.');
-                    }
-                  }
-                } else {
-                  alert('Google Sign-In is still loading. Please try again in a moment.');
-                }
-              }}
-              className="mt-3 w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              Continue with Google
-            </button>
-            <div className="mt-2 text-center">
               <button
                 type="button"
                 onClick={() => {
-                  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-                  console.log('[Vitta] NEXT_PUBLIC_GOOGLE_CLIENT_ID (retry):', clientId || 'Not provided');
-
-                  if (!clientId) {
-                    alert('Google Sign-In is disabled in demo mode. Please use email/password login.');
+                  if (gsiStatus !== 'ready') {
+                    alert('Google Sign-In is still loading. Please wait a moment and try again.');
                     return;
                   }
-
-                  // Try to click the official button
-                  if (gsiButtonRef.current) {
-                    const googleButton = gsiButtonRef.current.querySelector('div[role="button"]');
-                    if (googleButton) {
-                      googleButton.click();
-                    } else {
-                      alert('Please wait for Google Sign-In to load, then use the button above.');
-                    }
-                  } else {
-                    alert('Google Sign-In is still loading. Please try again in a moment.');
-                  }
+                  showGooglePrompt();
                 }}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="mt-3 w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                Having trouble? Try again
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Sign in with Google
               </button>
-            </div>
           </div>
           )}
 
