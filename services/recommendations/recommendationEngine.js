@@ -122,6 +122,27 @@ const scoreCards = (cards, context, strategy) => {
 };
 
 /**
+ * Rank cards for a given strategy and include reasoning
+ * @param {Array} cards - User's credit cards
+ * @param {string} strategy - Strategy to evaluate
+ * @param {Object} context - Optional context for scoring
+ * @returns {Array} Array of { card, score, reasoning }
+ */
+export const rankCardsByStrategy = (cards, strategy, context = {}) => {
+  if (!Array.isArray(cards) || cards.length === 0) {
+    return [];
+  }
+
+  const evaluatedCards = scoreCards(cards, context, strategy);
+
+  return evaluatedCards.map(cardWithScore => ({
+    card: cardWithScore, // includes computed score
+    score: cardWithScore.score,
+    reasoning: generateReasoning(cardWithScore, context, strategy)
+  }));
+};
+
+/**
  * Strategy 1: Maximize Rewards
  * Scores cards based on reward potential
  */

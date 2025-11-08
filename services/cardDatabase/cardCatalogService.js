@@ -64,12 +64,12 @@ export const getCardCatalog = async (options = {}) => {
  * @returns {Promise<Array>} Matching cards
  */
 export const searchCards = async (query, filters = {}) => {
-  if (!isSupabaseConfigured()) {
-    logger.info('Supabase not configured - returning empty results');
+  if (!query || query.length < 2) {
     return [];
   }
 
-  if (!query || query.length < 2) {
+  if (!isSupabaseConfigured()) {
+    logger.info('Supabase not configured - returning empty results');
     return [];
   }
 
@@ -77,10 +77,8 @@ export const searchCards = async (query, filters = {}) => {
     const searchTerm = query.toLowerCase().trim();
 
     // Get all cards and filter client-side for better fuzzy matching
-    // For production, consider using PostgreSQL full-text search
     let cards = await getCardCatalog(filters);
 
-    // Filter by search term
     cards = cards.filter(card => {
       const nameMatch = card.card_name.toLowerCase().includes(searchTerm);
       const issuerMatch = card.issuer.toLowerCase().includes(searchTerm);
@@ -120,7 +118,7 @@ export const searchCards = async (query, filters = {}) => {
     });
 
     // Sort by search score
-    cards.sort((a, b) => b.searchScore - a.searchScore);
+    cards.sort((a, b) => (b.searchScore || 0) - (a.searchScore || 0));
 
     logger.debug('Search completed', { query, resultCount: cards.length });
     return cards;
@@ -229,7 +227,8 @@ export const getTopCards = async (limit = 10) => {
  * @returns {Promise<Array>} No-fee cards
  */
 export const getNoFeeCards = async () => {
-  return getCardCatalog({ maxAnnualFee: 0 });
+  const cards = await getCardCatalog({ maxAnnualFee: 0 });
+  return cards.filter(card => (card.annual_fee || 0) === 0);
 };
 
 /**

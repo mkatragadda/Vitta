@@ -19,10 +19,11 @@ const logger = createLogger('CardDiscovery');
  */
 export const suggestNewCards = async (userId, strategy = STRATEGY_TYPES.REWARDS_MAXIMIZER, options = {}) => {
   try {
-    logger.debug('Finding new cards for strategy', { strategy, userId });
+    const isDemoMode = options.demoMode || !userId;
+    logger.debug('Finding new cards for strategy', { strategy, userId: userId || 'demo-user', demoMode: isDemoMode });
 
     // Get user's current cards
-    const userCards = await getUserCards(userId);
+    const userCards = isDemoMode ? (options.demoUserCards || []) : await getUserCards(userId);
     const userCardNames = userCards.map(c =>
       (c.card_name || c.card_type).toLowerCase()
     );
@@ -40,7 +41,11 @@ export const suggestNewCards = async (userId, strategy = STRATEGY_TYPES.REWARDS_
       !userCardNames.includes(card.card_name.toLowerCase())
     );
 
-    logger.debug('Available cards filtered', { availableCount: availableCards.length, userCardCount: userCards.length });
+    logger.debug('Available cards filtered', {
+      availableCount: availableCards.length,
+      userCardCount: userCards.length,
+      demoMode: isDemoMode
+    });
 
     // Score cards based on strategy
     const scoredCards = availableCards.map(card => ({
@@ -57,7 +62,10 @@ export const suggestNewCards = async (userId, strategy = STRATEGY_TYPES.REWARDS_
       recommendationReason: generateDiscoveryReason(card, strategy)
     }));
 
-    logger.debug('Card discovery completed', { topSuggestion: cardsWithReasons[0]?.card_name, totalSuggestions: cardsWithReasons.length });
+    logger.debug('Card discovery completed', {
+      topSuggestion: cardsWithReasons[0]?.card_name,
+      totalSuggestions: cardsWithReasons.length
+    });
     return cardsWithReasons;
 
   } catch (error) {
