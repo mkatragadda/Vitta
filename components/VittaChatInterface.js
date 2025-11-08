@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { MessageCircle, CreditCard, TrendingUp, LogOut, Send, Bot, User, Menu, X, Wallet, Plus, Trash2, Sparkles } from 'lucide-react';
 import PaymentOptimizer from './PaymentOptimizer';
 import CreditCardScreen from './CreditCardScreen';
@@ -11,10 +11,10 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
   const textareaRef = useRef(null);
 
   // Helper function to send a quick action message directly
-  const sendQuickAction = (query) => {
+  const sendQuickAction = useCallback((query) => {
     setInput(query);
     setQuickActionTrigger(true);
-  };
+  }, [setInput, setQuickActionTrigger]);
 
   // Effect to trigger send after input is set by quick action
   useEffect(() => {
@@ -22,16 +22,16 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       handleSendMessage();
       setQuickActionTrigger(false);
     }
-  }, [quickActionTrigger, input]);
+  }, [quickActionTrigger, input, handleSendMessage]);
 
   const [currentView, setCurrentView] = useState('chat'); // 'chat', 'optimizer', 'cards', 'add-card'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Navigation handler for deep links
-  const handleNavigate = (screenPath) => {
+  const handleNavigate = useCallback((screenPath) => {
     console.log('[VittaChatInterface] Navigating to:', screenPath);
     setCurrentView(screenPath);
-  };
+  }, []);
   const [cards, setCards] = useState([]);
   const [isLoadingCards, setIsLoadingCards] = useState(true);
   const [showAddCard, setShowAddCard] = useState(false);
@@ -57,15 +57,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
   }, [input]);
 
   // Load cards for Google users
-  useEffect(() => {
-    if (!isDemoMode && user?.id) {
-      loadCards();
-    } else {
-      setIsLoadingCards(false);
-    }
-  }, [user, isDemoMode]);
-
-  const loadCards = async () => {
+  const loadCards = useCallback(async () => {
     try {
       setIsLoadingCards(true);
       const userCards = await getUserCards(user.id);
@@ -75,9 +67,17 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
     } finally {
       setIsLoadingCards(false);
     }
-  };
+  }, [user?.id]);
 
-  const handleAddCard = async (e) => {
+  useEffect(() => {
+    if (!isDemoMode && user?.id) {
+      loadCards();
+    } else {
+      setIsLoadingCards(false);
+    }
+  }, [isDemoMode, loadCards, user?.id]);
+
+  const handleAddCard = useCallback(async (e) => {
     e.preventDefault();
     try {
       const newCard = await addCard({
@@ -92,7 +92,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         statement_cycle_start: formData.statement_cycle_start ? parseInt(formData.statement_cycle_start) : null,
         statement_cycle_end: formData.statement_cycle_end ? parseInt(formData.statement_cycle_end) : null
       });
-      setCards([...cards, newCard]);
+      setCards(prev => [...prev, newCard]);
       console.log('[VittaChatInterface] Card added, calling onCardsChanged...');
       if (onCardsChanged) {
         await onCardsChanged();
@@ -114,13 +114,13 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       console.error('Error adding card:', error);
       alert('Failed to add card. Please try again.');
     }
-  };
+  }, [formData, onCardsChanged, user?.id]);
 
-  const handleDeleteCard = async (cardId) => {
+  const handleDeleteCard = useCallback(async (cardId) => {
     if (!confirm('Are you sure you want to delete this card?')) return;
     try {
       await deleteCard(cardId);
-      setCards(cards.filter(c => c.id !== cardId));
+      setCards(prev => prev.filter(c => c.id !== cardId));
       console.log('[VittaChatInterface] Card deleted, calling onCardsChanged...');
       if (onCardsChanged) {
         await onCardsChanged();
@@ -130,7 +130,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       console.error('Error deleting card:', error);
       alert('Failed to delete card. Please try again.');
     }
-  };
+  }, [onCardsChanged]);
 
   // Sidebar Navigation
   const Sidebar = () => (
@@ -357,7 +357,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         </div>
       </div>
     </div>
-  ), [messages, isLoading, input, user, handleKeyPress, handleSendMessage, MessageContent, handleNavigate]);
+  ), [messages, isLoading, input, user, handleKeyPress, handleSendMessage, handleNavigate, sendQuickAction, setInput]);
 
   // Payment Optimizer View
   const OptimizerView = useMemo(() => (
@@ -583,7 +583,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         )}
       </div>
     </div>
-  ), [isDemoMode, cards, isLoadingCards, showAddCard, formData]);
+  ), [cards, formData, handleAddCard, handleDeleteCard, isDemoMode, isLoadingCards, setCurrentView, showAddCard]);
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100">

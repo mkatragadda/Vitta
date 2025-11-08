@@ -1,28 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { TrendingUp, Calendar, CreditCard, Sparkles, ArrowRight, ExternalLink, Info, AlertTriangle, ShoppingBag, Utensils, Plane, Fuel, Star } from 'lucide-react';
 import { getRecommendationForPurchase, getStrategyInfo } from '../services/recommendations/recommendationEngine';
 import { suggestNewCards } from '../services/recommendations/cardDiscoveryService';
 import { STRATEGY_TYPES } from '../services/userBehavior/behaviorAnalyzer';
 
 const RecommendationScreen = ({ onBack, user, userCards }) => {
+  const userId = user?.id;
   const [strategy, setStrategy] = useState(STRATEGY_TYPES.REWARDS_MAXIMIZER);
   const [newCardSuggestions, setNewCardSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (user && user.id) {
-      loadRecommendations();
-    }
-  }, [strategy, user]);
-
-  const loadRecommendations = async () => {
-    if (!user || !user.id) return;
+  const loadRecommendations = useCallback(async () => {
+    if (!userId) return;
 
     setIsLoading(true);
 
     try {
       // Get new card suggestions
-      const suggestions = await suggestNewCards(user.id, strategy);
+      const suggestions = await suggestNewCards(userId, strategy);
       setNewCardSuggestions(suggestions);
 
       console.log('[RecommendationScreen] Recommendations loaded');
@@ -31,7 +27,11 @@ const RecommendationScreen = ({ onBack, user, userCards }) => {
     }
 
     setIsLoading(false);
-  };
+  }, [strategy, userId]);
+
+  useEffect(() => {
+    loadRecommendations();
+  }, [loadRecommendations]);
 
   const handleStrategyChange = (newStrategy) => {
     console.log('[RecommendationScreen] Changing strategy to:', newStrategy);
@@ -374,11 +374,15 @@ const NewCardSuggestion = ({ card }) => {
           <p className="text-sm text-gray-600">{card.issuer}</p>
         </div>
         {card.image_url && (
-          <img
-            src={card.image_url}
-            alt={card.card_name}
-            className="w-12 h-8 object-contain"
-          />
+          <div className="relative w-12 h-8">
+            <Image
+              src={card.image_url}
+              alt={card.card_name}
+              fill
+              sizes="48px"
+              className="object-contain"
+            />
+          </div>
         )}
       </div>
 

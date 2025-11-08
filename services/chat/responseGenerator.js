@@ -211,6 +211,7 @@ const handleSplitPayment = (cards, entities) => {
     id: c.id,
     name: c.name,
     pay: Math.min(c.min, c.balance),
+    minPay: Math.min(c.min, c.balance),
     balance: c.balance,
     apr: c.apr
   }));
@@ -237,27 +238,37 @@ const handleSplitPayment = (cards, entities) => {
   }, 0);
   const saved = Math.max(0, interestIfMin - interestIfPlan);
 
+  const currency = (value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const totalPay = allocations.reduce((sum, a) => sum + a.pay, 0);
+  const budgetRemaining = Math.max(0, budget - totalPay);
+
   // Generate response
-  let response = `**💰 Payment Split for $${budget.toLocaleString()}**\n\n`;
-  response += `Here's the optimal way to split your budget:\n\n`;
+  let response = `**💰 Payment Split for ${currency(budget)}**\n\n`;
+  response += `You need at least ${currency(totalMin)} to cover minimum payments on all cards. Here's the optimized split:\n\n`;
+
+  response += `| Card | Current Balance | Minimum Payment | Pay This Month | Remaining Balance |\n`;
+  response += `| --- | ---:| ---:| ---:| ---:|\n`;
 
   allocations.forEach(a => {
-    const newBalance = Math.max(0, a.balance - a.pay);
-    const percentOfBalance = a.balance > 0 ? Math.round((a.pay / a.balance) * 100) : 0;
-    response += `**${a.name}**\n`;
-    response += `   • Pay: $${a.pay.toFixed(2)} (${percentOfBalance}% of balance)\n`;
-    response += `   • New balance: $${newBalance.toLocaleString()}\n`;
-    if (a.apr > 0) {
-      response += `   • APR: ${a.apr}%\n`;
-    }
-    response += '\n';
+    const remainingBalance = Math.max(0, a.balance - a.pay);
+    response += `| ${a.name} | ${currency(a.balance)} | ${currency(a.minPay)} | ${currency(a.pay)} | ${currency(remainingBalance)} |\n`;
   });
 
+  response += `\n**Totals**: Pay ${currency(totalPay)} this cycle (Budget remaining: ${currency(budgetRemaining)}).`;
+
   if (saved > 0) {
-    response += `\n✅ **Interest saved this month:** $${saved.toFixed(2)}\n`;
+    response += `\n\n✅ **Estimated interest saved this month:** ${currency(saved)}`;
   }
 
-  response += `\nThis strategy prioritizes high APR cards to minimize interest charges. See full analysis in [Payment Optimizer](vitta://navigate/optimizer).`;
+  response += `\n\n**Next Steps:**\n`;
+  response += `1. Make these payments to cover minimums and reduce high-APR balances.\n`;
+  if (budgetRemaining > 0.01) {
+    response += `2. Apply the remaining ${currency(budgetRemaining)} toward the highest APR balance for additional savings.\n`;
+    response += `3. Track progress in [Payment Optimizer](vitta://navigate/optimizer) for ongoing adjustments.`;
+  } else {
+    response += `2. Track progress in [Payment Optimizer](vitta://navigate/optimizer) for ongoing adjustments.`;
+  }
 
   return response.trim();
 };

@@ -17,10 +17,17 @@ import { getSlotFillingState } from './slotFillingManager.js';
 
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
-  HIGH_CONFIDENCE: 0.88,  // Very direct match, use intent immediately
-  MEDIUM_CONFIDENCE: 0.75, // Decent match, use GPT for conversational handling
-  LOW_CONFIDENCE: 0.50     // Below this, use GPT fallback
+  HIGH_CONFIDENCE: 0.87,
+  MEDIUM_CONFIDENCE: 0.72,
+  LOW_CONFIDENCE: 0.60
 };
+
+const CRITICAL_INTENTS = new Set([
+  'split_payment',
+  'query_card_data',
+  'payment_optimizer',
+  'debt_guidance_plan'
+]);
 
 /**
  * Handle direct routing for high-confidence follow-ups
@@ -204,6 +211,24 @@ async function askNextQuestion(slotFillingState, userData) {
 async function classifyCategory(query) {
   try {
     console.log('[ConversationEngineV2] Stage 1: Classifying category...');
+
+    const normalized = (query || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const quickTaskPatterns = [
+      /payment due/,
+      /due dates?/,
+      /when.*payment/,
+      /payment schedule/,
+      /payment reminders?/,
+      /bill due/,
+      /next payment/,
+      /statement close/,
+      /statement dates?/
+    ];
+
+    if (quickTaskPatterns.some((pattern) => pattern.test(normalized))) {
+      console.log('[ConversationEngineV2] Keyword heuristic matched TASK');
+      return 'TASK';
+    }
 
     const response = await fetch('/api/chat/completions', {
       method: 'POST',
@@ -423,6 +448,13 @@ export const processQuery = async (query, userData = {}, context = {}) => {
         localResponse = localResponse.response;
       }
 
+      if (CRITICAL_INTENTS.has(topMatch.intent_id)) {
+        console.log('[ConversationEngineV2] Critical intent detected, returning structured response without GPT');
+        const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
+        conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+        return response;
+      }
+
       // Pass to GPT for conversational formatting
       const response = await processWithGPT(query, userData, context, topMatch, localResponse, category);
       
@@ -449,6 +481,13 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Handle recommendation handler response format
       if (localResponse && typeof localResponse === 'object' && localResponse.response) {
         localResponse = localResponse.response;
+      }
+
+      if (CRITICAL_INTENTS.has(topMatch.intent_id)) {
+        console.log('[ConversationEngineV2] Critical intent detected (medium confidence), returning structured response without GPT');
+        const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
+        conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+        return response;
       }
 
       // Pass to GPT for conversational formatting

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet, Sparkles } from 'lucide-react';
 import CreditCardScreen from './CreditCardScreen';
 import PaymentOptimizer from './PaymentOptimizer';
@@ -189,6 +189,8 @@ const VittaApp = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [userCards, setUserCards] = useState([]);
   const fileInputRef = useRef(null);
+  const [quickActionTrigger, setQuickActionTrigger] = useState(false);
+  const userId = user?.id;
 
   // Login handler
   const handleLogin = (email, password) => {
@@ -209,7 +211,7 @@ const VittaApp = () => {
   };
 
   // Google OAuth handler
-  const handleGoogleSignIn = async (response) => {
+  const handleGoogleSignIn = useCallback(async (response) => {
     try {
       console.log('[Vitta] Google OAuth Success!', response);
       const payload = JSON.parse(atob(response.credential.split('.')[1]));
@@ -254,7 +256,7 @@ const VittaApp = () => {
         alert('Google sign-in failed. Please try again.');
       }
     }
-  };
+  }, []);
 
   // Initialize Google OAuth (ensure init after script load)
   const [isGsiInitialized, setIsGsiInitialized] = useState(false);
@@ -262,7 +264,7 @@ const VittaApp = () => {
   const [hasRenderedGsiButton, setHasRenderedGsiButton] = useState(false);
   const gsiButtonRef = useRef(null);
 
-  const initializeGsiIfNeeded = () => {
+  const initializeGsiIfNeeded = useCallback(() => {
     if (typeof window === 'undefined') return false;
     const gsi = window.google && window.google.accounts && window.google.accounts.id;
     if (!gsi) {
@@ -329,7 +331,7 @@ const VittaApp = () => {
       setGsiStatus('error');
       return false;
     }
-  };
+  }, [handleGoogleSignIn, hasRenderedGsiButton, isGsiInitialized]);
 
   useEffect(() => {
     // Try immediately
@@ -346,14 +348,14 @@ const VittaApp = () => {
       clearInterval(intervalId);
       clearTimeout(timeoutId);
     };
-  }, []);
+  }, [initializeGsiIfNeeded]);
 
   // Reusable function to refresh cards from database
-  const refreshCards = async () => {
-    if (user && user.id) {
+  const refreshCards = useCallback(async () => {
+    if (userId) {
       try {
         console.log('[VittaApp] Refreshing cards from database...');
-        const cards = await getUserCards(user.id);
+        const cards = await getUserCards(userId);
         setUserCards(cards || []);
         console.log('[VittaApp] Cards refreshed:', cards?.length || 0, 'cards');
         return cards;
@@ -364,14 +366,14 @@ const VittaApp = () => {
       }
     }
     return [];
-  };
+  }, [userId]);
 
   // Load user cards when user logs in
   useEffect(() => {
-    if (user && user.id) {
+    if (userId) {
       refreshCards();
     }
-  }, [user]);
+  }, [refreshCards, userId]);
 
   // Ensure official Google button renders once initialized and ref is ready
   useEffect(() => {
@@ -1055,7 +1057,7 @@ const VittaApp = () => {
       <RecommendationScreen
         onBack={() => setCurrentScreen('main')}
         user={user}
-        userCards={cards}
+        userCards={userCards}
       />
     );
   }

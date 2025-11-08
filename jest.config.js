@@ -35,7 +35,7 @@ const customJestConfig = {
   ],
 
   // Coverage thresholds for critical files
-  coverageThresholds: {
+  coverageThreshold: {
     './utils/statementCycleUtils.js': {
       branches: 85,
       functions: 90,

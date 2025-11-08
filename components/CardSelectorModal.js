@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, X, Sparkles, Filter, ChevronRight, AlertCircle, CreditCard as CreditCardIcon } from 'lucide-react';
 import { searchCards, getTopCards, getCardsByCategory } from '../services/cardDatabase/cardCatalogService';
 import { getOwnedCatalogIds } from '../services/cardService';
@@ -28,20 +28,7 @@ const CardSelectorModal = ({ isOpen, onClose, onSelect, onManualEntry, userId })
     { id: 'no-fee', label: 'No Annual Fee' }
   ];
 
-  // Load initial cards and owned cards
-  useEffect(() => {
-    if (isOpen) {
-      loadInitialCards();
-      loadOwnedCards();
-    }
-  }, [isOpen, userId]);
-
-  // Filter cards when search or category changes
-  useEffect(() => {
-    filterCards();
-  }, [searchQuery, selectedCategory, cards, ownedCatalogIds]);
-
-  const loadInitialCards = async () => {
+  const loadInitialCards = useCallback(async () => {
     setIsLoading(true);
     try {
       const popularCards = await getTopCards(20);
@@ -50,9 +37,9 @@ const CardSelectorModal = ({ isOpen, onClose, onSelect, onManualEntry, userId })
       console.error('[CardSelector] Error loading cards:', error);
     }
     setIsLoading(false);
-  };
+  }, []);
 
-  const loadOwnedCards = async () => {
+  const loadOwnedCards = useCallback(async () => {
     if (!userId) return;
     try {
       const owned = await getOwnedCatalogIds(userId);
@@ -60,9 +47,9 @@ const CardSelectorModal = ({ isOpen, onClose, onSelect, onManualEntry, userId })
     } catch (error) {
       console.error('[CardSelector] Error loading owned cards:', error);
     }
-  };
+  }, [userId]);
 
-  const filterCards = async () => {
+  const filterCards = useCallback(async () => {
     let filtered = [...cards];
 
     // Apply search
@@ -83,7 +70,19 @@ const CardSelectorModal = ({ isOpen, onClose, onSelect, onManualEntry, userId })
     }
 
     setFilteredCards(filtered);
-  };
+  }, [cards, searchQuery, selectedCategory]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadInitialCards();
+      loadOwnedCards();
+    }
+  }, [isOpen, loadInitialCards, loadOwnedCards]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    filterCards();
+  }, [filterCards, isOpen]);
 
   const handleCardSelect = (card) => {
     // Check if already owned

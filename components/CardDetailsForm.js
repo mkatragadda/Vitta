@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { ArrowLeft, CreditCard as CreditCardIcon, DollarSign, Calendar, Info, ChevronDown, ChevronUp, Sparkles, CheckCircle } from 'lucide-react';
 import { calculateGracePeriod, formatDayOfMonth } from '../utils/statementCycleUtils';
 
@@ -33,6 +34,11 @@ const CardDetailsForm = ({ selectedCard, onBack, onSubmit, isSubmitting, isManua
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [errors, setErrors] = useState({});
   const [calculatedGracePeriod, setCalculatedGracePeriod] = useState(null);
+  const [cardImageError, setCardImageError] = useState(false);
+
+  useEffect(() => {
+    setCardImageError(false);
+  }, [selectedCard?.id]);
 
   // Calculate grace period when both dates are entered
   useEffect(() => {
@@ -188,12 +194,15 @@ const CardDetailsForm = ({ selectedCard, onBack, onSubmit, isSubmitting, isManua
         {selectedCard && (
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
             <div className="flex items-start gap-4">
-              {selectedCard.image_url ? (
-                <div className="w-20 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 shadow-md">
-                  <img
+              {selectedCard.image_url && !cardImageError ? (
+                <div className="relative w-20 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 shadow-md">
+                  <Image
                     src={selectedCard.image_url}
                     alt={selectedCard.card_name}
-                    className="w-full h-full object-cover"
+                    fill
+                    sizes="80px"
+                    className="object-cover"
+                    onError={() => setCardImageError(true)}
                   />
                 </div>
               ) : (

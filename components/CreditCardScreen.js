@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Shield, Zap, ArrowRight, Plus, Eye, EyeOff, Trash2, Edit, Utensils, ShoppingBag, Plane, Fuel, Star } from 'lucide-react';
 import { getUserCards, addCard, updateCard, deleteCard } from '../services/cardService';
 
 const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
+  const userId = user?.id;
   const [showCardNumbers, setShowCardNumbers] = useState(false);
   const [selectedCard, setSelectedCard] = useState(0);
   const [creditCards, setCreditCards] = useState([]);
@@ -45,17 +46,12 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
     is_manual_entry: true
   });
 
-  // Load cards from database on mount
-  useEffect(() => {
-    loadCards();
-  }, [user]);
-
-  const loadCards = async () => {
-    if (!user || !user.id) return;
+  const loadCards = useCallback(async () => {
+    if (!userId) return;
 
     setIsLoading(true);
     try {
-      const cards = await getUserCards(user.id);
+      const cards = await getUserCards(userId);
       setCreditCards(cards || []);
       console.log('[CreditCardScreen] Loaded cards:', cards?.length || 0);
       console.log('[CreditCardScreen] First card:', cards && cards[0]);
@@ -67,7 +63,11 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
       setCreditCards([]);
     }
     setIsLoading(false);
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    loadCards();
+  }, [loadCards]);
 
   const handleAddCard = async () => {
     try {
@@ -115,7 +115,7 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
       }
 
       const cardData = {
-        user_id: user.id,
+        user_id: userId,
 
         // Card Identity
         card_name: newCard.card_name || 'Unnamed Card',

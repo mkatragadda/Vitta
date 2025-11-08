@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LogOut, Wallet, TrendingUp, Star, Plus, Trash2, Edit2, MessageCircle, X, Minimize2, Send, Bot, User } from 'lucide-react';
 import { getUserCards, addCard, updateCard, deleteCard, calculateUtilization, getCardRecommendations } from '../services/cardService';
 import PaymentOptimizer from './PaymentOptimizer';
 
 const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading: isChatLoading, handleSendMessage, handleKeyPress, MessageContent }) => {
+  const userId = user?.id;
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet'); // 'wallet', 'payments', 'recommendations'
@@ -25,33 +26,34 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
   });
 
   // Load user's cards on mount
-  useEffect(() => {
-    loadCards();
-  }, [user]);
-
-  const loadCards = async () => {
-    if (!user || !user.id) {
+  const loadCards = useCallback(async () => {
+    if (!userId) {
       setIsLoadingCards(false);
       return;
     }
 
     try {
       setIsLoadingCards(true);
-      const userCards = await getUserCards(user.id);
+      const userCards = await getUserCards(userId);
       setCards(userCards);
     } catch (error) {
       console.error('Error loading cards:', error);
     } finally {
       setIsLoadingCards(false);
     }
-  };
+  }, [userId]);
 
-  const handleAddCard = async (e) => {
+  useEffect(() => {
+    loadCards();
+  }, [loadCards]);
+
+  const handleAddCard = useCallback(async (e) => {
     e.preventDefault();
+    if (!userId) return;
 
     try {
       const newCard = await addCard({
-        user_id: user.id,
+        user_id: userId,
         card_type: formData.card_type,
         card_name: formData.card_name || formData.card_type,
         apr: parseFloat(formData.apr),
@@ -63,7 +65,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
         statement_cycle_end: formData.statement_cycle_end ? parseInt(formData.statement_cycle_end) : null
       });
 
-      setCards([...cards, newCard]);
+      setCards(prev => [...prev, newCard]);
       setShowAddCard(false);
       setFormData({
         card_type: '',
@@ -80,19 +82,19 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
       console.error('Error adding card:', error);
       alert('Failed to add card. Please try again.');
     }
-  };
+  }, [formData, userId]);
 
-  const handleDeleteCard = async (cardId) => {
+  const handleDeleteCard = useCallback(async (cardId) => {
     if (!confirm('Are you sure you want to delete this card?')) return;
 
     try {
       await deleteCard(cardId);
-      setCards(cards.filter(c => c.id !== cardId));
+      setCards(prev => prev.filter(c => c.id !== cardId));
     } catch (error) {
       console.error('Error deleting card:', error);
       alert('Failed to delete card. Please try again.');
     }
-  };
+  }, []);
 
   // My Wallet Tab
   const WalletTab = useMemo(() => (
@@ -373,7 +375,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
         </div>
       )}
     </div>
-  ), [cards, isLoadingCards, showAddCard, formData]);
+  ), [cards, formData, handleAddCard, handleDeleteCard, isLoadingCards, showAddCard]);
 
   // Smart Payment Strategy Tab
   const PaymentsTab = useMemo(() => (

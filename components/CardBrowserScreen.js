@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { Search, Sparkles, CreditCard as CreditCardIcon, TrendingUp, DollarSign, Gift, ArrowRight, Zap } from 'lucide-react';
 import { searchCards, getTopCards } from '../services/cardDatabase/cardCatalogService';
 import { getOwnedCatalogIds } from '../services/cardService';
@@ -22,18 +23,7 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
     { id: 'no-fee', label: 'No Annual Fee', icon: Gift }
   ];
 
-  useEffect(() => {
-    loadCards();
-    if (user?.id) {
-      loadOwnedCards();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    filterCards();
-  }, [searchQuery, selectedCategory, cards]);
-
-  const loadCards = async () => {
+  const loadCards = useCallback(async () => {
     setIsLoading(true);
     try {
       const popularCards = await getTopCards(30);
@@ -43,18 +33,19 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
       console.error('[CardBrowser] Error loading cards:', error);
     }
     setIsLoading(false);
-  };
+  }, []);
 
-  const loadOwnedCards = async () => {
+  const loadOwnedCards = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const owned = await getOwnedCatalogIds(user.id);
       setOwnedCatalogIds(owned);
     } catch (error) {
       console.error('[CardBrowser] Error loading owned cards:', error);
     }
-  };
+  }, [user?.id]);
 
-  const filterCards = async () => {
+  const filterCards = useCallback(async () => {
     let filtered = [...cards];
 
     // Apply search
@@ -75,7 +66,19 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
     }
 
     setFilteredCards(filtered);
-  };
+  }, [cards, searchQuery, selectedCategory]);
+
+  useEffect(() => {
+    loadCards();
+  }, [loadCards]);
+
+  useEffect(() => {
+    loadOwnedCards();
+  }, [loadOwnedCards]);
+
+  useEffect(() => {
+    filterCards();
+  }, [filterCards]);
 
   const handleCardClick = (card) => {
     if (ownedCatalogIds.includes(card.id)) {
@@ -198,6 +201,8 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
 
 // Card Tile Component
 const CardTile = ({ card, isOwned, onClick }) => {
+  const [imageError, setImageError] = useState(false);
+
   const getRewardHighlights = () => {
     if (!card.reward_structure) return [];
 
@@ -232,17 +237,16 @@ const CardTile = ({ card, isOwned, onClick }) => {
 
       {/* Card Visual */}
       <div className="mb-4">
-        {card.image_url ? (
-          <div className="w-full h-32 bg-gray-100 rounded-xl overflow-hidden shadow-lg">
-            <img
+        {card.image_url && !imageError ? (
+          <div className="relative w-full h-32 bg-gray-100 rounded-xl overflow-hidden shadow-lg">
+            <Image
               src={card.image_url}
               alt={card.card_name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                // Fallback to gradient if image fails to load
-                e.target.style.display = 'none';
-                e.target.parentElement.innerHTML = '<div class="w-full h-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center"><svg class="w-12 h-12 text-white opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></div>';
-              }}
+              fill
+              sizes="(min-width: 768px) 33vw, 100vw"
+              className="object-cover"
+              onError={() => setImageError(true)}
+              priority={false}
             />
           </div>
         ) : (
