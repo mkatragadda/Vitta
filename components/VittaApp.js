@@ -556,20 +556,7 @@ const VittaApp = () => {
               <span className="text-white font-bold text-2xl">V</span>
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Vitta</h1>
-            <p className="text-gray-600">Your family&apos;s financial intelligence platform</p>
-            <div className="mt-2 text-xs text-gray-500">
-              {clientIdPresent ? (
-                <span>Google Sign-In configured</span>
-              ) : (
-                <span>Google Sign-In not configured</span>
-              )}
-              {gsiStatus && (
-                <span className="ml-2">· Status: {gsiStatus}</span>
-              )}
-              <div className="mt-1">
-                Client ID: {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? 'Set' : 'Not Set'}
-              </div>
-            </div>
+            <p className="text-gray-600">Your personal financial intelligence platform</p>
           </div>
 
           {/* Google OAuth Sign-In */}
