@@ -56,6 +56,7 @@ export const extractEntities = (query) => {
     screenName: null,
     timeframe: null,
     amount: null,
+    tags: [],
 
     // NEW: Semantic entities for smart query handling
     queryType: null,    // 'comparison', 'listing', 'recommendation', 'timeframe', 'calculation'
@@ -80,6 +81,8 @@ export const extractEntities = (query) => {
 
   // Extract amount
   entities.amount = extractAmountFromQuery(query, doc);
+  entities.tags = extractTags(query);
+  entities.isRememberCommand = /^tag\b/i.test(query) || /\bremember\b/i.test(query);
 
   // NEW: Extract semantic entities
   entities.queryType = extractQueryType(query, doc);
@@ -231,6 +234,59 @@ const extractAmountFromQuery = (query, doc) => {
   }
 
   return null;
+};
+
+/**
+ * Extract tags from query
+ * Supports patterns like:
+ *  - "tag gifts"
+ *  - "tags travel, food"
+ *  - "tag with summer travel"
+ *  - "#gifts"
+ */
+const extractTags = (query) => {
+  const lowerQuery = query.toLowerCase();
+  const tags = new Set();
+
+  // Pattern: tag/tagged with ...
+  const tagPattern = /(tag(?:ged)?(?:\s+(?:as|with))?\s+)([^\.,;]+)/gi;
+  let match = tagPattern.exec(lowerQuery);
+  while (match) {
+    const raw = match[2]
+      .replace(/['"]/g, '')
+      .replace(/(?:and|&)/g, ',');
+    raw.split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .forEach(part => tags.add(part));
+    match = tagPattern.exec(lowerQuery);
+  }
+
+  // Pattern: tags: foo, bar
+  const tagColonPattern = /tags?\s*[:=]\s*([^\.,;]+)/gi;
+  match = tagColonPattern.exec(lowerQuery);
+  while (match) {
+    match[1].split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .forEach(part => tags.add(part));
+    match = tagColonPattern.exec(lowerQuery);
+  }
+
+  // Pattern: #hashtag
+  const hashPattern = /#([a-z0-9_\-]+)/gi;
+  match = hashPattern.exec(lowerQuery);
+  while (match) {
+    tags.add(match[1]);
+    match = hashPattern.exec(lowerQuery);
+  }
+
+  return Array.from(tags).map(tag =>
+    tag
+      .replace(/[^a-z0-9\s\-]/gi, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+  ).filter(Boolean);
 };
 
 /**

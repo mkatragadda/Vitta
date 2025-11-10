@@ -9,6 +9,7 @@ import { handleRecommendation } from './recommendationChatHandler.js';
 import { handleDebtGuidance } from './debtGuidanceHandler.js';
 import { handleMoneyCoaching } from './moneyCoachingHandler.js';
 import { handleChitChat } from './chitChatHandler.js';
+import { handleRememberMemory, handleRecallMemory } from './memoryHandler.js';
 
 /**
  * Generate response based on classified intent
@@ -56,6 +57,20 @@ export const generateResponse = (classification, entities, userData, context) =>
 
     case 'help':
       return handleHelp();
+
+    case 'remember_memory':
+      return handleRememberMemory({
+        userId: userData.user_id,
+        query: context?.lastQuery || '',
+        entities,
+        slotFillingState: context?.slotFillingState || null
+      });
+
+    case 'recall_memory':
+      return handleRecallMemory({
+        userId: userData.user_id,
+        entities
+      });
 
     default:
       return handleUnknown(intent, entities);

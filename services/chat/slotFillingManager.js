@@ -9,6 +9,7 @@
  */
 
 import { extractAmount } from '../../utils/textExtraction';
+import { analyzeTags } from '../memory/tagIntelligence';
 
 /**
  * Pending question types
@@ -18,7 +19,8 @@ export const QUESTION_TYPES = {
   PAYMENT_AMOUNT: 'payment_amount',
   CARD_SELECTION: 'card_selection',
   STRATEGY_PREFERENCE: 'strategy_preference',
-  CONFIRMATION: 'confirmation'
+  CONFIRMATION: 'confirmation',
+  MEMORY_TAG: 'memory_tag'
 };
 
 /**
@@ -99,6 +101,9 @@ export class SlotFillingState {
       
       case QUESTION_TYPES.CONFIRMATION:
         return this.extractConfirmation(lowerQuery);
+
+      case QUESTION_TYPES.MEMORY_TAG:
+        return this.extractMemoryTag(query);
       
       default:
         return null;
@@ -219,6 +224,27 @@ export class SlotFillingState {
         slotName: 'confirmed',
         value: false,
         confidence: 0.95
+      };
+    }
+
+    return null;
+  }
+
+  extractMemoryTag(rawQuery) {
+    console.log('[SlotFilling] Extracting memory tag from:', rawQuery);
+
+    const cleaned = rawQuery
+      .replace(/^tag(?:\s+as)?\s+/i, '')
+      .replace(/^it's\s+/i, '')
+      .trim();
+
+    const { normalizedTags } = analyzeTags([cleaned || rawQuery], { allowEmpty: false });
+
+    if (normalizedTags.length > 0) {
+      return {
+        slotName: 'tags',
+        value: normalizedTags,
+        confidence: 0.9
       };
     }
 

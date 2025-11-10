@@ -237,6 +237,13 @@ const VittaApp = () => {
       content: `Welcome back, ${name}! I'm ready to help you choose the best credit card for every purchase and optimize your payments. What would you like to know?`,
       timestamp: new Date()
     }]);
+
+    try {
+      window.google?.accounts?.id?.disableAutoSelect?.();
+      window.google?.accounts?.id?.cancel?.();
+    } catch (err) {
+      console.warn('[Vitta] Unable to disable Google auto select:', err);
+    }
   }, []);
 
   // Google OAuth handler
@@ -273,6 +280,7 @@ const VittaApp = () => {
   const tokenClientRef = useRef(null);
 
   const triggerOAuthTokenFlow = useCallback(() => {
+    if (isAuthenticated) return;
     const tokenClient = tokenClientRef.current;
     if (!tokenClient) {
       alert('Google Sign-In is still loading. Please refresh and try again.');
@@ -393,9 +401,10 @@ const VittaApp = () => {
       setGsiStatus('error');
       return false;
     }
-  }, [handleGoogleSignIn, hasRenderedGsiButton, isGsiInitialized, processGoogleProfile]);
+  }, [handleGoogleSignIn, hasRenderedGsiButton, isGsiInitialized, isAuthenticated, processGoogleProfile]);
 
   const showGooglePrompt = useCallback(() => {
+    if (isAuthenticated) return;
     const gsi = window.google?.accounts?.id;
 
     if (!gsi) {
@@ -423,8 +432,7 @@ const VittaApp = () => {
       if (notification.isNotDisplayed?.()) {
         const reason = notification.getNotDisplayedReason?.();
         console.warn('[Vitta] Prompt not displayed:', reason);
-
-        if ((reason === 'opt_out_or_no_session' || reason === 'suppressed_by_user') && tokenClientRef.current) {
+        if (reason === 'opt_out_or_no_session' && tokenClientRef.current) {
           triggerOAuthTokenFlow();
         }
       }
@@ -432,19 +440,22 @@ const VittaApp = () => {
       if (notification.isDismissedMoment?.()) {
         const reason = notification.getDismissedReason?.();
         console.warn('[Vitta] Prompt dismissed:', reason);
-        if (tokenClientRef.current) {
+        if (reason === 'credential_returned') {
+          // do nothing - user likely completed sign-in
+        } else if (reason === 'user_cancel' && tokenClientRef.current && !isAuthenticated) {
           triggerOAuthTokenFlow();
         }
       }
 
       if (notification.isSkippedMoment?.()) {
-        console.warn('[Vitta] Prompt skipped:', notification.getSkippedReason?.());
-        if (tokenClientRef.current) {
+        const reason = notification.getSkippedReason?.();
+        console.warn('[Vitta] Prompt skipped:', reason);
+        if (reason === 'opt_out_or_no_session' && tokenClientRef.current) {
           triggerOAuthTokenFlow();
         }
       }
     });
-  }, [triggerOAuthTokenFlow]);
+  }, [isAuthenticated, triggerOAuthTokenFlow]);
 
   useEffect(() => {
     // Try immediately

@@ -17,7 +17,9 @@ export const INTENT_CATEGORIES = {
     'split_payment',
     'add_card',
     'remove_card',
-    'navigate_screen'
+    'navigate_screen',
+    'remember_memory',
+    'recall_memory'
   ],
   GUIDANCE: [
     'debt_guidance',
@@ -148,6 +150,40 @@ export const INTENT_EXAMPLES = {
     "help me choose a card for shopping",
     "what card to use at the store",
     "best card to use right now for this"
+  ],
+  remember_memory: [
+    "remember $80 for danny's birthday gift tag gifts",
+    "save a note about paying $45 cash for lunch tag dining",
+    "remember to check travel deals on friday tag travel",
+    "remember i paid $120 cash to bob for supplies tag expenses",
+    "save that my goal is to keep balances under 500 tag goals",
+    "remember i paid daycare 400 tag childcare",
+    "tag my purchase of 200 dollars for groceries",
+    "tag my walmart expense as household supplies"
+  ],
+  recall_memory: [
+    "show memories tagged gifts",
+    "what did i tag as dining this month",
+    "recall notes tagged travel",
+    "list expenses tagged childcare",
+    "what memories are tagged goals",
+    "tell me what i tagged supplies last week"
+  ],
+  remember_memory: [
+    "remember $80 for danny's birthday gift tag gifts",
+    "save a note about paying $45 cash for lunch tag dining",
+    "remember to check travel deals on friday tag travel",
+    "remember i paid $120 cash to bob for supplies tag expenses",
+    "save that my goal is to keep balances under 500 tag goals",
+    "remember i paid daycare 400 tag childcare"
+  ],
+  recall_memory: [
+    "show memories tagged gifts",
+    "what did i tag as dining this month",
+    "recall notes tagged travel",
+    "list expenses tagged childcare",
+    "what memories are tagged goals",
+    "tell me what i tagged supplies last week"
   ],
 
   debt_guidance: [

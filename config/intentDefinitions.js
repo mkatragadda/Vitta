@@ -128,6 +128,38 @@ export const INTENT_DEFINITIONS = {
       "Maximize cashback for Target"
     ]
   }
+
+  ,
+
+  remember_memory: {
+    name: "Save Memory or Note",
+    description: "User wants to save a financial memory, note, or expense with tags for later recall",
+    capabilities: [
+      "Store chat notes with tags",
+      "Associate optional amount, merchant, or category data",
+      "Acknowledge successful capture"
+    ],
+    examples: [
+      "Remember $80 for Danny's birthday gift, tag gifts",
+      "Save a note to check travel deals on Friday, tag travel",
+      "Remember I paid $45 cash for lunch, tag dining"
+    ]
+  },
+
+  recall_memory: {
+    name: "Recall Tagged Memories",
+    description: "User wants to retrieve saved memories or notes by tag or timeframe",
+    capabilities: [
+      "Search memories by tag",
+      "Filter by timeframe (this month, last week, etc.)",
+      "Summarize matching entries"
+    ],
+    examples: [
+      "Show memories tagged gifts",
+      "What expenses did I tag dining this month?",
+      "Recall notes tagged travel deals"
+    ]
+  }
 };
 
 /**

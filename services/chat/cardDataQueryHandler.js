@@ -211,13 +211,18 @@ const showDueDates = (cards) => {
   upcomingPayments.forEach(payment => {
     const cardName = payment.card.nickname || payment.card.card_name || payment.card.card_type;
     const dueDate = payment.paymentDueDate.toLocaleDateString();
+    const absDays = Math.abs(payment.daysUntilDue);
+    let daysLeftText;
 
-    // Format days left - show as "N/A" for cards with $0 balance (won't appear anyway)
-    const daysLeftText = payment.daysUntilDue < 0
-      ? `${Math.abs(payment.daysUntilDue)} days`  // Overdue
-      : `${payment.daysUntilDue} days`;
+    if (payment.daysUntilDue === 0) {
+      daysLeftText = 'Today';
+    } else if (payment.daysUntilDue < 0) {
+      daysLeftText = `Overdue by ${absDays} day${absDays !== 1 ? 's' : ''}`;
+    } else {
+      daysLeftText = `${payment.daysUntilDue} day${payment.daysUntilDue !== 1 ? 's' : ''}`;
+    }
 
-    const urgency = payment.isOverdue ? '🔴 Urgent' :
+    const urgency = payment.isOverdue ? '🔴 Overdue' :
                     payment.isUrgent ? '🟡 Soon' :
                     '🟢 OK';
 

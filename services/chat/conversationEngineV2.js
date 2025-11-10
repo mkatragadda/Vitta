@@ -14,6 +14,7 @@ import { INTENT_CATEGORIES } from '../embedding/intentEmbeddings.js';
 import { getConversationContext } from './conversationContext.js';
 import { rewriteQueryWithContext, shouldDirectRoute } from './queryRewriter.js';
 import { getSlotFillingState } from './slotFillingManager.js';
+import { handleRememberMemory } from './memoryHandler.js';
 
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
@@ -26,6 +27,8 @@ const THRESHOLDS = {
 // Note: Reduced set to allow more natural, conversational responses
 const CRITICAL_INTENTS = new Set([
   'query_card_data',  // Simple data queries can use templates
+  'remember_memory',
+  'recall_memory'
   // 'split_payment' - removed to allow GPT formatting for better UX
   // 'payment_optimizer' - removed to allow personalized responses
   // 'debt_guidance_plan' - removed to allow conversational advice
@@ -164,27 +167,48 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
  * @param {Object} context
  * @returns {Promise<string>}
  */
-async function executeIntentWithSlots(readyIntent, userData, context) {
+async function executeIntentWithSlots(readyIntent, userData, context, slotFillingState) {
   const { intent, slots } = readyIntent;
   
   console.log('[ConversationEngineV2] Executing intent with slots:', { intent, slots });
 
   try {
-    if (intent === 'split_payment') {
-      const { generateResponse } = await import('./responseGenerator.js');
-      const classification = { intent: 'split_payment' };
-      const entities = { amount: slots.budget };
-      
-      const response = generateResponse(classification, entities, userData, context);
-      
-      // Log intent
-      await logIntentDetection(`split $${slots.budget} payment`, intent, 0.95, 'slot_filled', userData.user_id);
-      
-      return response;
+    switch (intent) {
+      case 'split_payment': {
+        const { generateResponse } = await import('./responseGenerator.js');
+        const classification = { intent: 'split_payment' };
+        const entities = { amount: slots.budget };
+        
+        const response = generateResponse(classification, entities, userData, context);
+        
+        await logIntentDetection(`split $${slots.budget} payment`, intent, 0.95, 'slot_filled', userData.user_id);
+        return response;
+      }
+
+      case 'remember_memory': {
+        const { memoryDraft, tags } = slots;
+        if (!memoryDraft || !Array.isArray(tags) || tags.length === 0) {
+          if (slotFillingState) {
+            slotFillingState.clear();
+          }
+          return "I still need a short tag like 'tag travel' so I can store that note.";
+        }
+
+        const response = await handleRememberMemory({
+          userId: memoryDraft.userId,
+          query: memoryDraft.naturalText,
+          entities: { tags },
+          memoryDraftOverride: memoryDraft,
+          overrideTags: tags
+        });
+
+        await logIntentDetection(memoryDraft.naturalText, intent, 0.95, 'slot_filled', userData.user_id);
+        return response;
+      }
+
+      default:
+        return "I've received your information. Let me process that...";
     }
-    
-    // Add more intent handlers as needed
-    return "I've received your information. Let me process that...";
     
   } catch (error) {
     console.error('[ConversationEngineV2] Error executing intent with slots:', error);
@@ -330,7 +354,7 @@ export const processQuery = async (query, userData = {}, context = {}) => {
           console.log('[ConversationEngineV2] ✅ ALL SLOTS FILLED, EXECUTING:', readyIntent);
           
           // Execute the target intent with filled slots
-          const response = await executeIntentWithSlots(readyIntent, userData, context);
+          const response = await executeIntentWithSlots(readyIntent, userData, { ...context, lastQuery: query }, slotFillingState);
           
           // Update conversation context
           const conversationContext = getConversationContext();
@@ -364,7 +388,8 @@ export const processQuery = async (query, userData = {}, context = {}) => {
     });
 
     // Rewrite query with context if it's a follow-up
-    const rewriteResult = rewriteQueryWithContext(query, activeContext);
+  const rewriteResult = rewriteQueryWithContext(query, activeContext);
+  const handlerContext = { ...context, lastQuery: query, slotFillingState };
     
     if (rewriteResult.confidence > 0) {
       console.log('[ConversationEngineV2] Query rewrite:', {
@@ -378,14 +403,22 @@ export const processQuery = async (query, userData = {}, context = {}) => {
     // Check if we should directly route (high-confidence follow-up)
     if (shouldDirectRoute(rewriteResult)) {
       console.log('[ConversationEngineV2] Direct routing to:', rewriteResult.directRoute);
-      return await handleDirectRoute(rewriteResult, userData, context, conversationContext);
+      return await handleDirectRoute(rewriteResult, userData, handlerContext, conversationContext);
     }
 
     // Use rewritten query for classification if confidence is high enough
     const queryToClassify = rewriteResult.confidence >= 0.70 ? rewriteResult.rewritten : query;
 
     // STEP 1: Classify into high-level category (TASK / GUIDANCE / CHAT)
-    const category = await classifyCategory(queryToClassify);
+  let category = await classifyCategory(queryToClassify);
+
+  const memoryPattern = /\b(memory|memories|remember|tag|tags|note|log|save)\b/i;
+  if (category === 'CHAT' && memoryPattern.test(queryToClassify)) {
+    category = 'TASK';
+  }
+  if (!['TASK', 'GUIDANCE', 'CHAT'].includes(category)) {
+    category = 'TASK';
+  }
     const allowedIntents = INTENT_CATEGORIES[category] || [];
     console.log('[ConversationEngineV2] Category:', category, '- Allowed intents:', allowedIntents);
 
@@ -438,7 +471,7 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Get structured data from local intent handler
       const entities = extractEntities(query);
       const classification = { intent: topMatch.intent_id };
-      let localResponse = generateResponse(classification, entities, userData, context);
+      let localResponse = generateResponse(classification, entities, userData, handlerContext);
 
       // Handle async responses (e.g., from recommendation handler)
       if (localResponse instanceof Promise) {
@@ -473,7 +506,7 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Get structured data from local intent handler
       const entities = extractEntities(query);
       const classification = { intent: topMatch.intent_id };
-      let localResponse = generateResponse(classification, entities, userData, context);
+      let localResponse = generateResponse(classification, entities, userData, handlerContext);
 
       // Handle async responses (e.g., from recommendation handler)
       if (localResponse instanceof Promise) {
