@@ -127,9 +127,24 @@ export const INTENT_DEFINITIONS = {
       "Lowest interest card for $1000?",
       "Maximize cashback for Target"
     ]
-  }
+  },
 
-  ,
+  reminder_settings: {
+    name: "Reminder Controls",
+    description: "User wants to manage payment reminders or notification preferences",
+    capabilities: [
+      "Mute or pause payment reminders",
+      "Resume reminders after they were muted",
+      "List upcoming reminders",
+      "Adjust reminder schedules or channels"
+    ],
+    examples: [
+      "Mute all reminders",
+      "Pause payment notifications",
+      "Resume reminders",
+      "Show my reminder schedule"
+    ]
+  },
 
   remember_memory: {
     name: "Save Memory or Note",

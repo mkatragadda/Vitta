@@ -19,7 +19,8 @@ export const INTENT_CATEGORIES = {
     'remove_card',
     'navigate_screen',
     'remember_memory',
-    'recall_memory'
+    'recall_memory',
+    'reminder_settings'
   ],
   GUIDANCE: [
     'debt_guidance',
@@ -151,6 +152,18 @@ export const INTENT_EXAMPLES = {
     "what card to use at the store",
     "best card to use right now for this"
   ],
+  reminder_settings: [
+    "mute all reminders",
+    "pause payment notifications",
+    "stop reminding me about payments",
+    "silence payment reminders",
+    "pause reminders for a week",
+    "resume reminders",
+    "turn payment reminders back on",
+    "show my reminder schedule",
+    "list my upcoming reminders",
+    "unmute payment notifications"
+  ],
   remember_memory: [
     "remember $80 for danny's birthday gift tag gifts",
     "save a note about paying $45 cash for lunch tag dining",
@@ -160,22 +173,6 @@ export const INTENT_EXAMPLES = {
     "remember i paid daycare 400 tag childcare",
     "tag my purchase of 200 dollars for groceries",
     "tag my walmart expense as household supplies"
-  ],
-  recall_memory: [
-    "show memories tagged gifts",
-    "what did i tag as dining this month",
-    "recall notes tagged travel",
-    "list expenses tagged childcare",
-    "what memories are tagged goals",
-    "tell me what i tagged supplies last week"
-  ],
-  remember_memory: [
-    "remember $80 for danny's birthday gift tag gifts",
-    "save a note about paying $45 cash for lunch tag dining",
-    "remember to check travel deals on friday tag travel",
-    "remember i paid $120 cash to bob for supplies tag expenses",
-    "save that my goal is to keep balances under 500 tag goals",
-    "remember i paid daycare 400 tag childcare"
   ],
   recall_memory: [
     "show memories tagged gifts",

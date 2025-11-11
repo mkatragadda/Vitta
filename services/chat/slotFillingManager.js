@@ -234,7 +234,7 @@ export class SlotFillingState {
     console.log('[SlotFilling] Extracting memory tag from:', rawQuery);
 
     const cleaned = rawQuery
-      .replace(/^tag(?:\s+as)?\s+/i, '')
+      .replace(/^tag(?:ged)?(?:\s+it)?(?:\s+(?:as|with))?\s+/i, '')
       .replace(/^it's\s+/i, '')
       .trim();
 
