@@ -432,8 +432,12 @@ const VittaApp = () => {
       if (notification.isNotDisplayed?.()) {
         const reason = notification.getNotDisplayedReason?.();
         console.warn('[Vitta] Prompt not displayed:', reason);
-        if (reason === 'opt_out_or_no_session' && tokenClientRef.current) {
-          triggerOAuthTokenFlow();
+        if (tokenClientRef.current) {
+          const fallbackReasons = ['opt_out_or_no_session', 'suppressed_by_user', 'browser_not_supported'];
+          if (fallbackReasons.includes(reason)) {
+            triggerOAuthTokenFlow();
+            return;
+          }
         }
       }
 
@@ -442,8 +446,14 @@ const VittaApp = () => {
         console.warn('[Vitta] Prompt dismissed:', reason);
         if (reason === 'credential_returned') {
           // do nothing - user likely completed sign-in
-        } else if (reason === 'user_cancel' && tokenClientRef.current && !isAuthenticated) {
-          triggerOAuthTokenFlow();
+          return;
+        }
+        if (tokenClientRef.current && !isAuthenticated) {
+          const fallbackReasons = ['user_cancel', 'suppressed_by_user', 'secure_request_required'];
+          if (fallbackReasons.includes(reason)) {
+            triggerOAuthTokenFlow();
+            return;
+          }
         }
       }
 
