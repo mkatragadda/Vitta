@@ -1,16 +1,62 @@
 /**
  * Recommendation Engine
  * Core logic for recommending credit cards based on different optimization strategies
+ *
+ * Features:
+ * - Feature flag support for enhanced recommendation engine (14 categories)
+ * - Graceful fallback to legacy engine
+ * - Support for multiple strategies (Rewards, APR, Cashflow)
+ * - Backward compatibility with existing code
  */
 
 import { getUserCards } from '../cardService';
 import { getUserProfile, STRATEGY_TYPES } from '../userBehavior/behaviorAnalyzer';
 import { createLogger } from '../../utils/logger';
+import { EnhancedRecommendationEngine } from './enhancedRecommendationEngine';
 
 const logger = createLogger('RecommendationEngine');
 
 /**
+ * Feature Flag: Use enhanced recommendation engine
+ * Supports all 14 merchant categories with multi-source classification
+ *
+ * Environment variable: USE_ENHANCED_CLASSIFICATION
+ * - true: Use enhanced engine (14 categories, merchant classification, confidence scoring)
+ * - false: Use legacy engine (simple category matching)
+ *
+ * Default: false (use legacy engine for backward compatibility)
+ */
+const USE_ENHANCED_CLASSIFICATION = process.env.USE_ENHANCED_CLASSIFICATION === 'true';
+
+/**
+ * Enhanced engine singleton instance
+ * Lazy-loaded on first use
+ */
+let enhancedEngine = null;
+
+/**
+ * Get or create enhanced engine instance
+ * @private
+ * @returns {EnhancedRecommendationEngine} Singleton instance
+ */
+const getEnhancedEngine = () => {
+  if (!enhancedEngine) {
+    enhancedEngine = new EnhancedRecommendationEngine(
+      {}, // Use default dependencies
+      {
+        enableCaching: true,
+        debugMode: process.env.DEBUG_RECOMMENDATIONS === 'true'
+      }
+    );
+    logger.info('Enhanced Recommendation Engine initialized');
+  }
+  return enhancedEngine;
+};
+
+/**
  * Get card recommendation for a purchase
+ * Routes to enhanced or legacy engine based on feature flag
+ *
  * @param {string} userId - User ID
  * @param {Object} context - Purchase context
  * @param {string} context.category - Purchase category (dining, groceries, travel, etc.)
@@ -19,6 +65,21 @@ const logger = createLogger('RecommendationEngine');
  * @param {Date} context.date - Purchase date
  * @param {string} context.strategy - Override strategy (optional)
  * @returns {Promise<Object>} Recommendation result
+ *
+ * @example
+ * // Basic usage - category specified
+ * const rec = await getRecommendationForPurchase('user-123', {
+ *   category: 'dining',
+ *   merchant: 'Chipotle',
+ *   amount: 50
+ * });
+ *
+ * @example
+ * // With merchant (uses enhanced engine if enabled)
+ * const rec = await getRecommendationForPurchase('user-123', {
+ *   merchant: 'United Airlines',  // Enhanced engine classifies this
+ *   amount: 500
+ * });
  */
 export const getRecommendationForPurchase = async (userId, context = {}) => {
   // Input validation
@@ -36,7 +97,12 @@ export const getRecommendationForPurchase = async (userId, context = {}) => {
   }
 
   try {
-    logger.debug('Getting recommendation', { userId, strategy: context.strategy });
+    logger.debug('Getting recommendation', {
+      userId,
+      strategy: context.strategy,
+      useEnhanced: USE_ENHANCED_CLASSIFICATION,
+      hasMerchant: !!context.merchant
+    });
 
     // Get user's cards
     const userCards = await getUserCards(userId);
@@ -48,9 +114,108 @@ export const getRecommendationForPurchase = async (userId, context = {}) => {
         alternatives: [],
         strategy: STRATEGY_TYPES.REWARDS_MAXIMIZER,
         reasoning: "Add cards to your wallet to get personalized recommendations!",
-        noCards: true
+        noCards: true,
+        engine: USE_ENHANCED_CLASSIFICATION ? 'enhanced' : 'legacy'
       };
     }
+
+    // Route to enhanced engine if flag enabled AND merchant is specified
+    if (USE_ENHANCED_CLASSIFICATION && context.merchant) {
+      return await getEnhancedRecommendation(userId, userCards, context);
+    }
+
+    // Fall back to legacy engine
+    return await getLegacyRecommendation(userId, userCards, context);
+
+  } catch (error) {
+    logger.error('Error getting recommendation', error);
+
+    // Graceful fallback instead of throwing
+    return {
+      primary: null,
+      alternatives: [],
+      strategy: context.strategy || STRATEGY_TYPES.REWARDS_MAXIMIZER,
+      reasoning: "We're having trouble generating recommendations right now. Please try again in a moment.",
+      error: true,
+      errorMessage: error.message,
+      engine: USE_ENHANCED_CLASSIFICATION ? 'enhanced' : 'legacy'
+    };
+  }
+};
+
+/**
+ * Get recommendation using enhanced engine (14 categories + merchant classification)
+ * @private
+ * @param {string} userId - User ID
+ * @param {Array} userCards - User's credit cards
+ * @param {Object} context - Purchase context with merchant
+ * @returns {Promise<Object>} Enhanced recommendation
+ */
+const getEnhancedRecommendation = async (userId, userCards, context) => {
+  try {
+    logger.debug('Using enhanced recommendation engine', {
+      userId,
+      merchant: context.merchant
+    });
+
+    const engine = getEnhancedEngine();
+
+    // Call enhanced engine
+    const recommendation = await engine.getRecommendation(userId, {
+      merchant: context.merchant,
+      mccCode: context.mccCode,
+      amount: context.amount,
+      cards: userCards,
+      strategy: context.strategy || 'rewards'
+    });
+
+    logger.debug('Enhanced recommendation generated', {
+      userId,
+      merchant: context.merchant,
+      primaryCard: recommendation.primary?.card?.name,
+      confidence: recommendation.confidence,
+      processingTimeMs: recommendation.processingTimeMs
+    });
+
+    // Convert to legacy format for backward compatibility
+    return {
+      primary: recommendation.primary?.card || null,
+      alternatives: recommendation.alternatives?.map(alt => alt.card) || [],
+      strategy: context.strategy || 'rewards',
+      reasoning: recommendation.primary?.explanation || '',
+      confidence: recommendation.confidence,
+      classification: recommendation.classification,
+      processingTimeMs: recommendation.processingTimeMs,
+      engine: 'enhanced',
+      fromCache: recommendation.fromCache
+    };
+
+  } catch (error) {
+    logger.warn('Enhanced engine failed, falling back to legacy engine', {
+      userId,
+      error: error.message
+    });
+
+    // Fall back to legacy engine on error
+    const userProfile = await getUserProfile(userId);
+    return await getLegacyRecommendation(userId, userCards, context);
+  }
+};
+
+/**
+ * Get recommendation using legacy engine (category-based)
+ * @private
+ * @param {string} userId - User ID
+ * @param {Array} userCards - User's credit cards
+ * @param {Object} context - Purchase context
+ * @returns {Promise<Object>} Legacy recommendation
+ */
+const getLegacyRecommendation = async (userId, userCards, context) => {
+  try {
+    logger.debug('Using legacy recommendation engine', {
+      userId,
+      category: context.category
+    });
 
     // Get user behavior profile
     const userProfile = await getUserProfile(userId);
@@ -71,21 +236,12 @@ export const getRecommendationForPurchase = async (userId, context = {}) => {
       alternatives: scoredCards.slice(1, 3),
       strategy,
       reasoning,
-      userProfile
+      userProfile,
+      engine: 'legacy'
     };
-
   } catch (error) {
-    logger.error('Error getting recommendation', error);
-
-    // Graceful fallback instead of throwing
-    return {
-      primary: null,
-      alternatives: [],
-      strategy: context.strategy || STRATEGY_TYPES.REWARDS_MAXIMIZER,
-      reasoning: "We're having trouble generating recommendations right now. Please try again in a moment.",
-      error: true,
-      errorMessage: error.message
-    };
+    logger.error('Legacy engine error', error);
+    throw error;
   }
 };
 
@@ -491,4 +647,43 @@ export const getStrategyInfo = (strategy) => {
   };
 
   return info[strategy] || info[STRATEGY_TYPES.REWARDS_MAXIMIZER];
+};
+
+/**
+ * Feature flag utilities and status information
+ * For monitoring and debugging enhanced classification
+ */
+
+/**
+ * Check if enhanced recommendation engine is enabled
+ * @returns {boolean} True if USE_ENHANCED_CLASSIFICATION is true
+ */
+export const isEnhancedClassificationEnabled = () => {
+  return USE_ENHANCED_CLASSIFICATION;
+};
+
+/**
+ * Get engine status information for monitoring/debugging
+ * @returns {Object} Status information
+ */
+export const getEngineStatus = () => {
+  const engine = enhancedEngine ? getEnhancedEngine() : null;
+  return {
+    enhancedEnabled: USE_ENHANCED_CLASSIFICATION,
+    engineInitialized: enhancedEngine !== null,
+    engineMetrics: engine ? engine.getMetrics() : null,
+    debugMode: process.env.DEBUG_RECOMMENDATIONS === 'true'
+  };
+};
+
+/**
+ * Reset enhanced engine (useful for testing or cache clearing)
+ * @private
+ */
+export const resetEnhancedEngine = () => {
+  if (enhancedEngine) {
+    enhancedEngine.clearCache();
+    enhancedEngine.resetMetrics();
+    logger.info('Enhanced engine reset');
+  }
 };

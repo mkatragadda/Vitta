@@ -1,26 +1,38 @@
 /**
  * Intelligent Card Analysis Service
  * Analyzes user queries and provides contextual responses based on card data
+ *
+ * Enhanced with:
+ * - Support for all 14 merchant categories
+ * - Dynamic category definitions from categoryDefinitions.js
+ * - Integration with reward multiplier lookup from recommendationStrategies
+ * - Consistent category matching across services
  */
 
-// Merchant category mappings with reward multipliers
-const MERCHANT_REWARDS = {
-  'costco': { category: 'warehouse', keywords: ['costco', 'warehouse'] },
-  'grocery': { category: 'groceries', keywords: ['grocery', 'groceries', 'supermarket', 'whole foods', 'trader joes', 'safeway', 'kroger'] },
-  'gas': { category: 'gas', keywords: ['gas', 'fuel', 'chevron', 'shell', 'exxon', 'bp'] },
-  'restaurant': { category: 'dining', keywords: ['restaurant', 'dining', 'food', 'eat', 'chipotle', 'mcdonalds', 'starbucks'] },
-  'travel': { category: 'travel', keywords: ['travel', 'flight', 'hotel', 'airline', 'airbnb', 'uber', 'lyft'] }
+import { getRewardMultiplier } from './recommendations/recommendationStrategies';
+import { MERCHANT_CATEGORIES } from './categories/categoryDefinitions';
+
+/**
+ * Build merchant reward mappings from categoryDefinitions
+ * Creates a lookup structure for quick category matching
+ */
+const buildMerchantRewardMappings = () => {
+  const mappings = {};
+
+  for (const [categoryId, categoryDef] of Object.entries(MERCHANT_CATEGORIES)) {
+    mappings[categoryId] = {
+      category: categoryId,
+      name: categoryDef.name,
+      keywords: categoryDef.keywords || [],
+      aliases: categoryDef.reward_aliases || []
+    };
+  }
+
+  return mappings;
 };
 
-// Card type reward structures (common knowledge base)
-const CARD_REWARD_DATABASE = {
-  'amex gold': { dining: 4, grocery: 4, travel: 3, default: 1 },
-  'chase freedom': { rotating: 5, default: 1 },
-  'chase sapphire': { travel: 3, dining: 3, default: 1 },
-  'citi double cash': { default: 2 },
-  'discover it': { rotating: 5, default: 1 },
-  'capital one venture': { travel: 2, default: 1 }
-};
+// Merchant category mappings (dynamically built from categoryDefinitions)
+const MERCHANT_REWARDS = buildMerchantRewardMappings();
 
 /**
  * Analyze user query and extract intent
@@ -54,6 +66,7 @@ export const analyzeQuery = (query, cards) => {
 
 /**
  * Find best card for a specific merchant or category
+ * Uses enhanced 14-category system with keyword-based classification
  */
 export const findBestCardForMerchant = (merchant, cards) => {
   if (!cards || cards.length === 0) {
@@ -62,46 +75,52 @@ export const findBestCardForMerchant = (merchant, cards) => {
 
   const lowerMerchant = merchant.toLowerCase();
 
-  // Determine category
+  // Determine category using 14-category definitions
   let category = 'default';
-  for (const [key, data] of Object.entries(MERCHANT_REWARDS)) {
-    if (data.keywords.some(keyword => lowerMerchant.includes(keyword))) {
-      category = data.category;
+  let matchedCategoryName = '';
+
+  for (const [categoryId, categoryData] of Object.entries(MERCHANT_REWARDS)) {
+    if (categoryData.keywords.some(keyword => lowerMerchant.includes(keyword.toLowerCase()))) {
+      category = categoryId;
+      matchedCategoryName = categoryData.name;
       break;
     }
   }
 
   // Score each card
   const scoredCards = cards.map(card => {
-    const cardTypeLower = (card.card_type || card.card_name || '').toLowerCase();
-    let rewardMultiplier = 1;
-
-    // Check if we have reward data for this card
-    for (const [cardKey, rewards] of Object.entries(CARD_REWARD_DATABASE)) {
-      if (cardTypeLower.includes(cardKey)) {
-        rewardMultiplier = rewards[category] || rewards.default || 1;
-        break;
-      }
-    }
+    // Use the enhanced getRewardMultiplier function to look up multiplier
+    // This handles all 14 categories with alias matching
+    const rewardMultiplier = getRewardMultiplier(card, category);
 
     // Calculate score based on:
     // 1. Reward multiplier (higher is better)
     // 2. APR (lower is better, matters if carrying balance)
     // 3. Available credit (need room to charge)
-    // 4. Statement cycle (prefer cards in grace period)
+    // 4. Grace period (prefer $0 balance for immediate use)
 
-    const availableCredit = card.credit_limit - card.current_balance;
-    const utilizationPenalty = availableCredit < 100 ? -5 : 0; // Penalize if low available credit
-    const aprBonus = card.apr < 20 ? 2 : 0; // Bonus for low APR
+    const availableCredit = Math.max(0, card.credit_limit - (card.current_balance || 0));
+    const hasBalance = (card.current_balance || 0) > 0;
 
-    const score = (rewardMultiplier * 10) + aprBonus + utilizationPenalty;
+    // Only penalize APR if card has a balance (otherwise grace period applies)
+    const aprBonus = !hasBalance && card.apr < 20 ? 2 : 0;
+
+    // Penalize if low available credit
+    const utilizationPenalty = availableCredit < 100 ? -5 : 0;
+
+    // Bonus for $0 balance (can use immediately without interest)
+    const gracePeriodBonus = !hasBalance ? 3 : 0;
+
+    const score = (rewardMultiplier * 10) + aprBonus + utilizationPenalty + gracePeriodBonus;
 
     return {
       ...card,
       score,
       rewardMultiplier,
       availableCredit,
-      reason: generateRecommendationReason(card, rewardMultiplier, category)
+      category,
+      hasBalance,
+      reason: generateRecommendationReason(card, rewardMultiplier, category, matchedCategoryName)
     };
   });
 
@@ -113,20 +132,33 @@ export const findBestCardForMerchant = (merchant, cards) => {
 /**
  * Generate human-readable recommendation reason
  */
-const generateRecommendationReason = (card, rewardMultiplier, category) => {
+const generateRecommendationReason = (card, rewardMultiplier, category, categoryName) => {
   const reasons = [];
 
+  // Rewards reason
   if (rewardMultiplier > 1) {
-    reasons.push(`${rewardMultiplier}x rewards on ${category}`);
+    const multiplierText = Number.isInteger(rewardMultiplier)
+      ? `${rewardMultiplier}x`
+      : `${rewardMultiplier.toFixed(1)}x`;
+    reasons.push(`${multiplierText} rewards on ${categoryName || category}`);
   }
 
-  if (card.apr < 20) {
-    reasons.push(`low APR of ${card.apr}%`);
+  // Grace period reason
+  if (!card.current_balance || card.current_balance === 0) {
+    reasons.push('$0 balance - no interest charges');
   }
 
-  const utilization = Math.round((card.current_balance / card.credit_limit) * 100);
+  // APR reason (only if carrying balance)
+  if (card.current_balance > 0 && card.apr < 20) {
+    reasons.push(`${card.apr}% APR`);
+  }
+
+  // Available credit reason
+  const availableCredit = Math.max(0, card.credit_limit - (card.current_balance || 0));
+  const utilization = Math.round(((card.current_balance || 0) / card.credit_limit) * 100);
+
   if (utilization < 30) {
-    reasons.push(`plenty of available credit ($${(card.credit_limit - card.current_balance).toLocaleString()})`);
+    reasons.push(`$${availableCredit.toLocaleString()} available`);
   }
 
   return reasons.join(', ') || 'general use';
