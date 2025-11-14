@@ -137,49 +137,49 @@ const VittaDocumentChat = () => {
                 <span className="text-2xl font-bold text-white">Vitta</span>
               </div>
 
-              <h1 className="text-4xl font-bold text-white mb-4 leading-tight">
-                Intelligent Document Analysis
+              <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
+                Chat with Your Documents
               </h1>
-              <p className="text-blue-100 text-lg mb-8">
-                Extract insights from financial documents with AI-powered analysis.
+              <p className="text-blue-100 text-lg mb-12">
+                Upload your statements, upload your forms, and let Vitta analyze them. Ask natural questions and get answers instantly.
               </p>
             </div>
 
             {/* Features List */}
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center mt-1">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Upload & Analyze</p>
-                  <p className="text-blue-200 text-sm">Process documents with advanced AI</p>
+                  <p className="text-white font-semibold">Simple Upload</p>
+                  <p className="text-blue-200 text-sm">Drop your bank statements or tax forms</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center mt-1">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Chat with Documents</p>
-                  <p className="text-blue-200 text-sm">Ask questions and get instant answers</p>
+                  <p className="text-white font-semibold">Natural Questions</p>
+                  <p className="text-blue-200 text-sm">"What were my expenses last month?"</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center mt-1">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Secure & Private</p>
-                  <p className="text-blue-200 text-sm">Your data stays encrypted and private</p>
+                  <p className="text-white font-semibold">Smart Answers</p>
+                  <p className="text-blue-200 text-sm">AI extracts insights from your documents</p>
                 </div>
               </div>
             </div>
@@ -194,14 +194,14 @@ const VittaDocumentChat = () => {
               <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-white font-bold text-2xl">V</span>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">Welcome to Vitta</h1>
-              <p className="text-gray-600 text-sm mt-2">Document Intelligence Platform</p>
+              <h1 className="text-3xl font-bold text-gray-900">Chat with Your Documents</h1>
+              <p className="text-gray-600 text-sm mt-2">Your financial AI assistant</p>
             </div>
 
             {/* Heading */}
             <div className="hidden lg:block mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign In</h2>
-              <p className="text-gray-600">Access your document analysis</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Vitta</h2>
+              <p className="text-gray-600">Start your document conversation</p>
             </div>
 
             {/* Google Sign-In Button */}
