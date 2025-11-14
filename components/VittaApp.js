@@ -556,17 +556,6 @@ const VittaApp = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-6">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          {/* Demo Banner */}
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">🚧</span>
-              <h3 className="font-semibold text-amber-800">Demo Mode</h3>
-            </div>
-            <p className="text-amber-800 text-sm">
-              This is a demo of Vitta&apos;s login system. Enter any email and password combination to access the platform.
-            </p>
-          </div>
-
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <span className="text-white font-bold text-2xl">V</span>
