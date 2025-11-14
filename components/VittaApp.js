@@ -554,62 +554,184 @@ const VittaApp = () => {
   // Login Component
   const LoginScreen = () => {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-6">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-white font-bold text-2xl">V</span>
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Vitta</h1>
-            <p className="text-gray-600">Your personal financial intelligence platform</p>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center px-4">
+        {/* Background decorative elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
+        </div>
 
-          {/* Google OAuth Sign-In */}
-          {gsiStatus !== 'disabled' && (
-            <div className="mb-6">
-              <div className="w-full">
-                <div className="text-center text-sm text-gray-600 mb-2">
-                  {gsiStatus === 'loading' && 'Loading Google Sign-In...'}
-                  {gsiStatus === 'ready' && 'Google Sign-In ready'}
-                  {gsiStatus === 'error' && 'Google Sign-In failed to initialize'}
+        {/* Main Content */}
+        <div className="relative z-10 w-full max-w-lg">
+          {/* Left Column - Branding & Features */}
+          <div className="hidden lg:flex lg:flex-col lg:justify-between h-full mr-12">
+            <div>
+              <div className="flex items-center gap-3 mb-12">
+                <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">V</span>
                 </div>
-                <div ref={gsiButtonRef} className="w-full flex items-center justify-center min-h-[46px]" />
-                <p className="mt-2 text-xs text-gray-500 text-center">
-                  Google will open a secure account chooser. If nothing appears, ensure pop-ups are allowed for this site and refresh the page.
-                </p>
+                <span className="text-2xl font-bold text-white">Vitta</span>
               </div>
+
+              <h1 className="text-4xl font-bold text-white mb-4 leading-tight">
+                Master Your Finances with AI
+              </h1>
+              <p className="text-blue-100 text-lg mb-8">
+                Intelligent credit card optimization and financial insights in one powerful platform.
+              </p>
+            </div>
+
+            {/* Features List */}
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-white font-semibold">Smart Card Selection</p>
+                  <p className="text-blue-200 text-sm">AI-powered recommendations for every purchase</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-white font-semibold">Optimize Payments</p>
+                  <p className="text-blue-200 text-sm">Minimize interest and maximize rewards</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-white font-semibold">Save More Money</p>
+                  <p className="text-blue-200 text-sm">Reduce debt and increase cashback earnings</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column - Login Card */}
+        <div className="relative z-10 w-full max-w-sm">
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20">
+            {/* Mobile Logo */}
+            <div className="lg:hidden text-center mb-8">
+              <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <span className="text-white font-bold text-2xl">V</span>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Welcome to Vitta</h1>
+              <p className="text-gray-600 text-sm mt-2">Your financial intelligence platform</p>
+            </div>
+
+            {/* Heading */}
+            <div className="hidden lg:block mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign In</h2>
+              <p className="text-gray-600">Access your financial dashboard</p>
+            </div>
+
+            {/* Google Sign-In Button */}
+            {gsiStatus !== 'disabled' && (
+              <div className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (gsiStatus !== 'ready') {
+                      alert('Google Sign-In is still loading. Please wait a moment and try again.');
+                      return;
+                    }
+                    showGooglePrompt();
+                  }}
+                  className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-50 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <span>Sign in with Google</span>
+                </button>
+
+                {gsiStatus !== 'ready' && (
+                  <p className="text-xs text-gray-500 text-center mt-3">
+                    {gsiStatus === 'loading' && 'Loading Google Sign-In...'}
+                    {gsiStatus === 'error' && 'Google Sign-In failed to load'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Divider */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-3 bg-white text-gray-500 font-medium">Or continue with email</span>
+              </div>
+            </div>
+
+            {/* Email/Password Form */}
+            <form onSubmit={handleLogin} className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                <input
+                  type="email"
+                  id="demo-email"
+                  placeholder="john@example.com"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                <input
+                  type="password"
+                  id="demo-password"
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50"
+                />
+              </div>
+
               <button
                 type="button"
-                onClick={() => {
-                  if (gsiStatus !== 'ready') {
-                    alert('Google Sign-In is still loading. Please wait a moment and try again.');
-                    return;
-                  }
-                  showGooglePrompt();
-                }}
-                className="mt-3 w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                onClick={() => handleLogin('demo@example.com', 'demo')}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Sign in with Google
+                Sign In
               </button>
+            </form>
+
+            {/* Additional Info */}
+            <div className="text-center text-xs text-gray-500 mb-4">
+              <p>Demo mode: Use any email and password to explore</p>
+            </div>
+
+            {/* Footer Links */}
+            <div className="pt-4 border-t border-gray-200 text-center text-xs">
+              <p className="text-gray-500">
+                <a href="#" className="text-blue-600 hover:underline">Terms of Service</a>
+                {' '} • {' '}
+                <a href="#" className="text-blue-600 hover:underline">Privacy Policy</a>
+              </p>
+            </div>
           </div>
-          )}
 
-
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="font-semibold text-blue-900 mb-2">Vitta helps you:</h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Choose the best card for every purchase</li>
-              <li>• Optimize payments to minimize interest</li>
-              <li>• Maximize rewards and cashback</li>
-              <li>• Avoid interest with smart timing</li>
-              <li>• Save money on every transaction</li>
-            </ul>
+          {/* Trust Indicators */}
+          <div className="mt-6 text-center text-sm text-blue-100">
+            <p>🔒 Secure • 🏦 HTTPS • 💳 Encrypted</p>
           </div>
         </div>
       </div>
