@@ -600,18 +600,6 @@ const VittaApp = () => {
           </div>
           )}
 
-          <div className="mt-6">
-            <button
-              type="button"
-              onClick={() => handleLogin('demo@vitta.ai', 'demo')}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
-            >
-              Skip demo login
-            </button>
-            <p className="mt-2 text-sm text-center text-gray-500">
-              Explore Vitta instantly with demo data—no email or password required.
-            </p>
-          </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
             <h3 className="font-semibold text-blue-900 mb-2">Vitta helps you:</h3>

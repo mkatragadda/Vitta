@@ -187,15 +187,6 @@ const VittaDocumentChat = () => {
             </button>
           </form>
 
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => handleLogin('demo@vitta.ai', 'demo')}
-              className="text-sm text-blue-600 hover:text-blue-700"
-            >
-              Skip demo login
-            </button>
-          </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
             <h3 className="font-semibold text-blue-900 mb-2">What&apos;s New in Vitta:</h3>
