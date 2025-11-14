@@ -192,6 +192,12 @@ const VittaApp = () => {
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const userId = user?.id;
 
+  // Email/Password auth form state
+  const [emailForm, setEmailForm] = useState({ email: '', password: '' });
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
   // Login handler
   const handleLogin = (email, password) => {
     // Mock authentication for demo mode
@@ -554,16 +560,19 @@ const VittaApp = () => {
   // Login Component
   const LoginScreen = () => {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center px-4">
-        {/* Background decorative elements */}
-        <div className="absolute inset-0 overflow-hidden">
+      <div className="min-h-screen min-h-dvh bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex flex-col lg:flex-row items-center justify-center px-4 py-6 lg:py-0 gap-8 lg:gap-12 overflow-x-hidden safe-area-inset">
+        {/* Background decorative elements - hidden on mobile for performance */}
+        <div className="hidden lg:block absolute inset-0 overflow-hidden">
           <div className="absolute top-20 left-10 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
           <div className="absolute top-40 right-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
           <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
         </div>
 
+        {/* Mobile background - simple gradient */}
+        <div className="lg:hidden absolute inset-0 bg-gradient-to-b from-slate-800 to-slate-900"></div>
+
         {/* Main Content */}
-        <div className="relative z-10 w-full max-w-lg">
+        <div className="relative z-10 w-full max-w-lg flex flex-col">
           {/* Left Column - Branding & Features */}
           <div className="hidden lg:flex lg:flex-col lg:justify-between h-full mr-12">
             <div>
@@ -624,8 +633,8 @@ const VittaApp = () => {
         </div>
 
         {/* Right Column - Login Card */}
-        <div className="relative z-10 w-full max-w-sm">
-          <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20">
+        <div className="relative z-10 w-full max-w-sm px-0 lg:px-0">
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-6 lg:p-8 border border-white/20 max-h-[90vh] overflow-y-auto">
             {/* Mobile Logo */}
             <div className="lg:hidden text-center mb-8">
               <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -653,7 +662,7 @@ const VittaApp = () => {
                     }
                     showGooglePrompt();
                   }}
-                  className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-50 hover:border-blue-300 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 py-3 lg:py-3 px-4 rounded-xl font-semibold hover:bg-gray-50 hover:border-blue-300 active:bg-gray-100 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 min-h-[48px] touch-target"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -684,39 +693,104 @@ const VittaApp = () => {
             </div>
 
             {/* Email/Password Form */}
-            <form onSubmit={handleLogin} className="space-y-4 mb-6">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!emailForm.email || !emailForm.password) {
+                setAuthError('Please enter both email and password');
+                return;
+              }
+              setAuthError('');
+              setAuthLoading(true);
+              // Simulate auth delay
+              setTimeout(() => {
+                handleLogin(emailForm.email, emailForm.password);
+                setEmailForm({ email: '', password: '' });
+                setAuthLoading(false);
+              }, 500);
+            }} className="space-y-4 mb-6">
+              {/* Error Message */}
+              {authError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 font-medium">{authError}</p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
                 <input
                   type="email"
-                  id="demo-email"
+                  value={emailForm.email}
+                  onChange={(e) => {
+                    setEmailForm({ ...emailForm, email: e.target.value });
+                    setAuthError('');
+                  }}
                   placeholder="john@example.com"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50"
+                  disabled={authLoading}
+                  autoComplete="email"
+                  inputMode="email"
+                  className="w-full px-4 py-3 lg:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 text-base min-h-[44px]"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  id="demo-password"
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={emailForm.password}
+                    onChange={(e) => {
+                      setEmailForm({ ...emailForm, password: e.target.value });
+                      setAuthError('');
+                    }}
+                    placeholder="••••••••"
+                    disabled={authLoading}
+                    autoComplete="current-password"
+                    className="w-full px-4 py-3 lg:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 text-base min-h-[44px] pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={authLoading}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 disabled:text-gray-300"
+                  >
+                    {showPassword ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-4.753 4.753m4.753-4.753L3.596 3.596" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <button
-                type="button"
-                onClick={() => handleLogin('demo@example.com', 'demo')}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                type="submit"
+                disabled={authLoading || !emailForm.email || !emailForm.password}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 lg:py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 active:from-blue-800 active:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 min-h-[48px] text-base font-medium"
               >
-                Sign In
+                {authLoading ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.25"></circle>
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" opacity="0.75"></path>
+                    </svg>
+                    Signing In...
+                  </>
+                ) : (
+                  'Sign In'
+                )}
               </button>
             </form>
 
             {/* Additional Info */}
             <div className="text-center text-xs text-gray-500 mb-4">
-              <p>Demo mode: Use any email and password to explore</p>
+              <p className="font-medium mb-2">Demo Mode</p>
+              <p>Try any email and password to explore</p>
+              <p className="mt-1 text-gray-400">Example: test@example.com / password</p>
             </div>
 
             {/* Footer Links */}
