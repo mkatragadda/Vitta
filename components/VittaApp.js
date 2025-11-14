@@ -192,35 +192,6 @@ const VittaApp = () => {
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const userId = user?.id;
 
-  // Email/Password auth form state
-  const [emailForm, setEmailForm] = useState({ email: '', password: '' });
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Login handler
-  const handleLogin = (email, password) => {
-    // Mock authentication for demo mode
-    const demoId = 'demo-user';
-
-    setUser({
-      id: demoId,
-      email,
-      name: email.split('@')[0],
-      joinDate: new Date(),
-      provider: 'demo',
-      picture: null,
-      isDemoMode: true
-    });
-    setIsAuthenticated(true);
-
-    // Add welcome message
-    setMessages(prev => [...prev, {
-      type: 'bot',
-      content: `Welcome back, ${email.split('@')[0]}! I'm ready to help you with your financial documents and credit card optimization. What would you like to know?`,
-      timestamp: new Date()
-    }]);
-  };
 
   const processGoogleProfile = useCallback(async ({ email, name, picture, sub }) => {
     const savedUser = await saveGoogleUser({
@@ -557,8 +528,17 @@ const VittaApp = () => {
     setIsOpen(false);
   };
 
-  // Login Component
-  const LoginScreen = () => {
+  // Login Component (with internal state to prevent focus loss from parent re-renders)
+  const LoginForm = React.memo(({
+    gsiStatus,
+    gsiButtonRef,
+    showGooglePrompt
+  }) => {
+    // Internal state for the login form - isolated from parent
+    const [localEmailForm, setLocalEmailForm] = useState({ email: '', password: '' });
+    const [localAuthError, setLocalAuthError] = useState('');
+    const [localAuthLoading, setLocalAuthLoading] = useState(false);
+    const [localShowPassword, setLocalShowPassword] = useState(false);
     return (
       <div className="min-h-screen min-h-dvh bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex flex-col lg:flex-row items-center justify-center px-4 py-6 lg:py-0 gap-8 lg:gap-12 overflow-x-hidden safe-area-inset">
         {/* Background decorative elements - hidden on mobile for performance */}
@@ -600,8 +580,8 @@ const VittaApp = () => {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Ask, Don't Click</p>
-                  <p className="text-blue-200 text-sm">Just ask "which card for groceries?" and get instant answers</p>
+                  <p className="text-white font-semibold">Ask, Don&apos;t Click</p>
+                  <p className="text-blue-200 text-sm">Just ask &quot;which card for groceries?&quot; and get instant answers</p>
                 </div>
               </div>
 
@@ -695,23 +675,22 @@ const VittaApp = () => {
             {/* Email/Password Form */}
             <form onSubmit={(e) => {
               e.preventDefault();
-              if (!emailForm.email || !emailForm.password) {
-                setAuthError('Please enter both email and password');
+              if (!localEmailForm.email || !localEmailForm.password) {
+                setLocalAuthError('Please enter both email and password');
                 return;
               }
-              setAuthError('');
-              setAuthLoading(true);
+              setLocalAuthError('');
+              setLocalAuthLoading(true);
               // Simulate auth delay
               setTimeout(() => {
-                handleLogin(emailForm.email, emailForm.password);
-                setEmailForm({ email: '', password: '' });
-                setAuthLoading(false);
+                setLocalAuthError('Email/password authentication is coming soon. Please sign in with Google.');
+                setLocalAuthLoading(false);
               }, 500);
             }} className="space-y-4 mb-6">
               {/* Error Message */}
-              {authError && (
+              {localAuthError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-700 font-medium">{authError}</p>
+                  <p className="text-sm text-red-700 font-medium">{localAuthError}</p>
                 </div>
               )}
 
@@ -719,13 +698,12 @@ const VittaApp = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
                 <input
                   type="email"
-                  value={emailForm.email}
+                  value={localEmailForm.email}
                   onChange={(e) => {
-                    setEmailForm({ ...emailForm, email: e.target.value });
-                    setAuthError('');
+                    setLocalEmailForm({ ...localEmailForm, email: e.target.value });
                   }}
                   placeholder="john@example.com"
-                  disabled={authLoading}
+                  disabled={localAuthLoading}
                   autoComplete="email"
                   inputMode="email"
                   className="w-full px-4 py-3 lg:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 text-base min-h-[44px]"
@@ -736,24 +714,23 @@ const VittaApp = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
                 <div className="relative">
                   <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={emailForm.password}
+                    type={localShowPassword ? 'text' : 'password'}
+                    value={localEmailForm.password}
                     onChange={(e) => {
-                      setEmailForm({ ...emailForm, password: e.target.value });
-                      setAuthError('');
+                      setLocalEmailForm({ ...localEmailForm, password: e.target.value });
                     }}
                     placeholder="••••••••"
-                    disabled={authLoading}
+                    disabled={localAuthLoading}
                     autoComplete="current-password"
                     className="w-full px-4 py-3 lg:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 text-base min-h-[44px] pr-10"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={authLoading}
+                    onClick={() => setLocalShowPassword(!localShowPassword)}
+                    disabled={localAuthLoading}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 disabled:text-gray-300"
                   >
-                    {showPassword ? (
+                    {localShowPassword ? (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -769,10 +746,10 @@ const VittaApp = () => {
 
               <button
                 type="submit"
-                disabled={authLoading || !emailForm.email || !emailForm.password}
+                disabled={localAuthLoading || !localEmailForm.email || !localEmailForm.password}
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 lg:py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 active:from-blue-800 active:to-purple-800 transition-all duration-200 shadow-lg hover:shadow-xl disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 min-h-[48px] text-base font-medium"
               >
-                {authLoading ? (
+                {localAuthLoading ? (
                   <>
                     <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.25"></circle>
@@ -785,13 +762,6 @@ const VittaApp = () => {
                 )}
               </button>
             </form>
-
-            {/* Additional Info */}
-            <div className="text-center text-xs text-gray-500 mb-4">
-              <p className="font-medium mb-2">Demo Mode</p>
-              <p>Try any email and password to explore</p>
-              <p className="mt-1 text-gray-400">Example: test@example.com / password</p>
-            </div>
 
             {/* Footer Links */}
             <div className="pt-4 border-t border-gray-200 text-center text-xs">
@@ -810,7 +780,13 @@ const VittaApp = () => {
         </div>
       </div>
     );
-  };
+  }, (prevProps, nextProps) => {
+    // Return true if props are equal (skip re-render), false if they differ (re-render)
+    // Only compare the props that are passed down (gsiStatus and refs/callbacks are stable)
+    return prevProps.gsiStatus === nextProps.gsiStatus;
+  });
+
+  LoginForm.displayName = 'LoginForm';
 
   // Mock document processing
   const processDocument = async (file) => {
@@ -1203,7 +1179,13 @@ const VittaApp = () => {
 
   // If not authenticated, show login screen
   if (!isAuthenticated) {
-    return <LoginScreen />;
+    return (
+      <LoginForm
+        gsiStatus={gsiStatus}
+        gsiButtonRef={gsiButtonRef}
+        showGooglePrompt={showGooglePrompt}
+      />
+    );
   }
 
   // If credit card screen is active, show it
