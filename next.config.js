@@ -3,6 +3,16 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
 
+  // Configure external image domains
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+  },
+
   // Exclude admin pages from production builds
   webpack: (config, { isServer, dev }) => {
     if (!dev && !isServer) {

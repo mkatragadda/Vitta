@@ -194,11 +194,17 @@ const VittaApp = () => {
 
   // Login handler
   const handleLogin = (email, password) => {
-    // Mock authentication - in real app, this would be actual auth
+    // Mock authentication for demo mode
+    const demoId = 'demo-user';
+
     setUser({
+      id: demoId,
       email,
       name: email.split('@')[0],
-      joinDate: new Date()
+      joinDate: new Date(),
+      provider: 'demo',
+      picture: null,
+      isDemoMode: true
     });
     setIsAuthenticated(true);
 
@@ -547,17 +553,6 @@ const VittaApp = () => {
 
   // Login Component
   const LoginScreen = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const clientIdPresent = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
-
-    const handleSubmit = (e) => {
-      e.preventDefault();
-      if (email && password) {
-        handleLogin(email, password);
-      }
-    };
-
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-6">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
@@ -616,47 +611,17 @@ const VittaApp = () => {
           </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="john@example.com"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
-            >
-              Sign In
-            </button>
-          </form>
-
-          <div className="mt-4 text-center">
+          <div className="mt-6">
             <button
               type="button"
               onClick={() => handleLogin('demo@vitta.ai', 'demo')}
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
             >
               Skip demo login
             </button>
+            <p className="mt-2 text-sm text-center text-gray-500">
+              Explore Vitta instantly with demo data—no email or password required.
+            </p>
           </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
