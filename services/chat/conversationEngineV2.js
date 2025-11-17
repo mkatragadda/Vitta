@@ -37,6 +37,39 @@ const CRITICAL_INTENTS = new Set([
   // 'debt_guidance_plan' - removed to allow conversational advice
 ]);
 
+const REMINDER_COMMAND_PATTERNS = [
+  {
+    action: 'mute',
+    regex: /\b(mute|pause|silence|stop)\s+(all\s+)?reminders?\b/i,
+    durationDays: 30,
+    buildResponse: (days) =>
+      `Okay, I'll stay quiet for the next ${days} days. You can say "resume reminders" whenever you want me to start again.`
+  },
+  {
+    action: 'resume',
+    regex: /\b(resume|unmute|turn\s+on|enable)\s+(all\s+)?reminders?\b/i,
+    durationDays: null,
+    buildResponse: () => 'Reminders are back on. I\'ll keep nudging you when payments are due.'
+  }
+];
+
+async function handleReminderQuickCommand(query, userId) {
+  if (!userId) return null;
+
+  for (const command of REMINDER_COMMAND_PATTERNS) {
+    if (command.regex.test(query)) {
+      await muteReminders({
+        userId,
+        durationDays: command.durationDays
+      });
+
+      return command.buildResponse(command.durationDays ?? 0);
+    }
+  }
+
+  return null;
+}
+
 /**
  * Apply deterministic heuristics when embeddings are ambiguous.
  * Ensures save/remember phrasing routes to remember_memory instead of recall_memory.
@@ -412,8 +445,17 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       }
     }
 
-    // STEP 0B: Get conversation context and check for follow-ups
+    // STEP 0B: Get conversation context (needed for both quick commands and follow-ups)
     const conversationContext = getConversationContext();
+
+    // Quick reminder mute/unmute commands (pre-intent for snappy UX)
+    const quickReminderResponse = await handleReminderQuickCommand(query, userData.user_id);
+    if (quickReminderResponse) {
+      conversationContext.addTurn(query, 'reminder_quick_command', {}, quickReminderResponse);
+      return quickReminderResponse;
+    }
+
+    // STEP 0C: Check for follow-ups using conversation context
     const activeContext = conversationContext.getActiveContext();
     
     console.log('[ConversationEngineV2] Context:', {

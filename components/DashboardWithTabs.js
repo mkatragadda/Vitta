@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LogOut, Wallet, TrendingUp, Star, Plus, Trash2, Edit2, MessageCircle, X, Minimize2, Send, Bot, User } from 'lucide-react';
 import { getUserCards, addCard, updateCard, deleteCard, calculateUtilization, getCardRecommendations } from '../services/cardService';
 import PaymentOptimizer from './PaymentOptimizer';
+import ReminderWidget from './ReminderWidget';
 
 const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading: isChatLoading, handleSendMessage, handleKeyPress, MessageContent }) => {
   const userId = user?.id;
@@ -482,6 +483,8 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
             </button>
           </div>
         </div>
+
+        <ReminderWidget userId={userId} cards={cards} />
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 bg-white rounded-lg p-2 shadow">

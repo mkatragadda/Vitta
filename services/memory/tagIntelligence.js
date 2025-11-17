@@ -6,9 +6,9 @@
  */
 
 const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'of', 'for', 'to', 'my', 'your', 'our', 'on', 'with', 'about', 'and', 'purchase',
+  'a', 'an', 'the', 'of', 'for', 'to', 'my', 'your', 'our', 'this', 'on', 'with', 'about', 'and', 'purchase',
   'spend', 'spent', 'payment', 'ticket', 'purchase', 'buy', 'bought', 'order', 'expense', 'expenses',
-  'purchase', 'walmart', 'amazon', 'target', 'as', 'from', 'tag', 'tags'
+  'purchase', 'transaction', 'card', 'as', 'from', 'tag', 'tags', 'it'
 ]);
 
 const CANONICAL_KEYWORDS = [
