@@ -614,3 +614,157 @@ describe('14-Category Support - Reward Multipliers', () => {
   });
 });
 
+describe('Travel Rewards Optimization - Category Recognition Fix', () => {
+  // Card with 5x travel rewards (Amex Platinum)
+  const CARD_5X_TRAVEL = {
+    id: 'amex-platinum',
+    nickname: 'Amex Platinum',
+    card_name: 'Platinum Card',
+    current_balance: 0,
+    credit_limit: 35000,
+    apr: 26.24,
+    statement_close_day: 11,
+    payment_due_day: 8,
+    grace_period_days: 27,
+    reward_structure: {
+      travel: 5,
+      dining: 1,
+      default: 1
+    }
+  };
+
+  // Card with 2x travel rewards (Chase Sapphire Preferred)
+  const CARD_2X_TRAVEL = {
+    id: 'chase-sapphire',
+    nickname: 'Chase Sapphire',
+    card_name: 'Sapphire Preferred',
+    current_balance: 0,
+    credit_limit: 20000,
+    apr: 23.74,
+    statement_close_day: 5,
+    payment_due_day: 30,
+    grace_period_days: 25,
+    reward_structure: {
+      travel: 2,
+      dining: 2,
+      default: 1
+    }
+  };
+
+  // Card with 2x default rewards but NO travel multiplier (Citi Double Cash)
+  const CARD_2X_DEFAULT = {
+    id: 'citi-double',
+    nickname: 'Citi Double Cash',
+    card_name: 'Double Cash',
+    current_balance: 0,
+    credit_limit: 20000,
+    apr: 27.99,
+    statement_close_day: 1,
+    payment_due_day: 28,
+    grace_period_days: 23,
+    reward_structure: {
+      default: 2
+    }
+  };
+
+  test('CRITICAL: Travel category correctly selects 5x travel card over 2x default card', () => {
+    const cards = [CARD_5X_TRAVEL, CARD_2X_DEFAULT];
+    const result = scoreForRewards(cards, 'travel', 1000);
+
+    // 5x travel card should rank first
+    expect(result[0].card.id).toBe('amex-platinum');
+    expect(result[0].multiplier).toBe(5);
+    expect(result[0].cashback).toBe(50.00); // $1000 * 5% = $50
+    expect(result[0].score).toBe(50.00);
+
+    // 2x default card should rank second (uses default: 2 since no travel multiplier)
+    expect(result[1].card.id).toBe('citi-double');
+    expect(result[1].multiplier).toBe(2); // Falls back to default: 2 since no travel multiplier
+    expect(result[1].cashback).toBe(20.00); // $1000 * 2% (default) = $20
+    expect(result[1].score).toBe(20.00);
+
+    // 5x card should have higher score
+    expect(result[0].score).toBeGreaterThan(result[1].score);
+  });
+
+  test('CRITICAL: Travel category correctly ranks: 5x > 2x travel > 2x default', () => {
+    const cards = [CARD_2X_DEFAULT, CARD_2X_TRAVEL, CARD_5X_TRAVEL];
+    const result = scoreForRewards(cards, 'travel', 1000);
+
+    // Should be sorted: 5x travel > 2x travel > 2x default
+    expect(result[0].card.id).toBe('amex-platinum');
+    expect(result[0].multiplier).toBe(5);
+    expect(result[0].cashback).toBe(50.00);
+
+    expect(result[1].card.id).toBe('chase-sapphire');
+    expect(result[1].multiplier).toBe(2);
+    expect(result[1].cashback).toBe(20.00);
+
+    expect(result[2].card.id).toBe('citi-double');
+    expect(result[2].multiplier).toBe(2); // No travel multiplier, uses default: 2
+    expect(result[2].cashback).toBe(20.00); // $1000 * 2% (default) = $20
+    
+    // Both 2x cards have same cashback, but travel-specific card should rank higher
+    // This is handled by the sorting logic (available credit, utilization, etc.)
+  });
+
+  test('Travel category with $0 amount still has correct multipliers', () => {
+    const cards = [CARD_2X_DEFAULT, CARD_2X_TRAVEL, CARD_5X_TRAVEL];
+    const result = scoreForRewards(cards, 'travel', 0);
+
+    // All cards should have correct multipliers even with $0 amount
+    const amexCard = result.find(r => r.card.id === 'amex-platinum');
+    const chaseCard = result.find(r => r.card.id === 'chase-sapphire');
+    const citiCard = result.find(r => r.card.id === 'citi-double');
+    
+    expect(amexCard.multiplier).toBe(5);
+    expect(chaseCard.multiplier).toBe(2);
+    expect(citiCard.multiplier).toBe(2); // Uses default: 2
+    
+    // All should have $0 cashback with $0 amount
+    expect(amexCard.cashback).toBe(0);
+    expect(chaseCard.cashback).toBe(0);
+    expect(citiCard.cashback).toBe(0);
+  });
+
+  test('Travel aliases (flights, hotels) correctly match travel category', () => {
+    const cards = [CARD_5X_TRAVEL, CARD_2X_DEFAULT];
+    
+    const travelResult = scoreForRewards(cards, 'travel', 100);
+    const flightsResult = scoreForRewards(cards, 'flights', 100);
+    const hotelsResult = scoreForRewards(cards, 'hotels', 100);
+    const airlineResult = scoreForRewards(cards, 'airline', 100);
+
+    // All should select 5x travel card
+    expect(travelResult[0].card.id).toBe('amex-platinum');
+    expect(flightsResult[0].card.id).toBe('amex-platinum');
+    expect(hotelsResult[0].card.id).toBe('amex-platinum');
+    expect(airlineResult[0].card.id).toBe('amex-platinum');
+
+    // All should have 5x multiplier
+    expect(travelResult[0].multiplier).toBe(5);
+    expect(flightsResult[0].multiplier).toBe(5);
+    expect(hotelsResult[0].multiplier).toBe(5);
+    expect(airlineResult[0].multiplier).toBe(5);
+  });
+
+  test('Cards with balance are still excluded even with high travel rewards', () => {
+    const cardWithBalance = {
+      ...CARD_5X_TRAVEL,
+      current_balance: 1000
+    };
+    
+    const cards = [cardWithBalance, CARD_2X_DEFAULT];
+    const result = scoreForRewards(cards, 'travel', 1000);
+
+    // Card with balance should be rejected
+    expect(result[0].card.id).toBe('citi-double'); // Only default card available
+    expect(result[0].canRecommend).toBe(true);
+
+    // 5x card should be in results but not recommendable
+    const rejectedCard = result.find(r => r.card.id === 'amex-platinum');
+    expect(rejectedCard.canRecommend).toBe(false);
+    expect(rejectedCard.score).toBe(-1000);
+  });
+});
+

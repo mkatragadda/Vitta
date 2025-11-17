@@ -321,17 +321,9 @@ export function getMostConfidentMCCCode(categoryId) {
 }
 
 /**
- * Named exports
+ * Named exports for constants
  */
 export {
-  classifyByMCCCode,
-  getMCCCodesForCategory,
-  getAllMCCMappings,
-  getMCCConfidence,
-  isValidMCCCode,
-  getMCCDescription,
-  classifyManyByMCCCode,
-  getMostConfidentMCCCode,
   MCC_TO_CATEGORY_MAP,
   MCC_CONFIDENCE_LEVELS
 };

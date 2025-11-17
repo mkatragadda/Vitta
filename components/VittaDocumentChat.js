@@ -167,7 +167,7 @@ const VittaDocumentChat = () => {
                 </div>
                 <div>
                   <p className="text-white font-semibold">Natural Questions</p>
-                  <p className="text-blue-200 text-sm">"What were my expenses last month?"</p>
+                  <p className="text-blue-200 text-sm">&quot;What were my expenses last month?&quot;</p>
                 </div>
               </div>
 

@@ -80,8 +80,9 @@ export const getStatementCloseDate = (statementCloseDay, referenceDate = new Dat
   // Try current month first
   let statementDate = new Date(year, month, statementCloseDay);
 
-  // If statement day is in the future, use previous month's statement
-  if (statementCloseDay > today) {
+  // If statement day is today or in the future, use previous month's statement
+  // Rationale: "Most recent" statement is the one that already closed.
+  if (statementCloseDay >= today) {
     statementDate = new Date(year, month - 1, statementCloseDay);
   }
 
@@ -115,8 +116,12 @@ export const getPaymentDueDate = (statementCloseDay, paymentDueDay, statementClo
   const year = statementDate.getFullYear();
   const month = statementDate.getMonth();
 
-  // If payment_due_day < statement_close_day, payment is next month
-  if (paymentDueDay < statementCloseDay) {
+  // If payment_due_day <= statement_close_day, payment is next month
+  // Also ensure a minimal practical grace period (e.g., 5 days).
+  // Some issuers have due dates shortly after close; if the gap is unrealistically small,
+  // push to next month to maintain a reasonable grace period.
+  const minimalGraceDays = 5;
+  if (paymentDueDay <= statementCloseDay || (paymentDueDay - statementCloseDay) < minimalGraceDays) {
     // Payment due in month after statement closes
     return new Date(year, month + 1, paymentDueDay);
   } else {

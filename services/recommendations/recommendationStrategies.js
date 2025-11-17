@@ -352,7 +352,10 @@ function getRewardMultiplier(card, category) {
   if (!card.reward_structure) return 1.0;
 
   const rewardStructure = card.reward_structure;
-  const categoryLower = (category || '').toLowerCase().trim();
+  // Normalize category: convert spaces to underscores for consistent matching
+  // This handles "home improvement" -> "home_improvement"
+  const categoryNormalized = (category || '').toLowerCase().trim().replace(/\s+/g, '_');
+  const categoryLower = categoryNormalized;
 
   // Try exact match first (14-category system)
   if (rewardStructure[categoryLower]) {
@@ -434,10 +437,20 @@ function getRewardMultiplier(card, category) {
     'ecommerce': ['online', 'internet', 'amazon']
   };
 
+  // Use normalized category for alias lookup
   const possibleKeys = aliases[categoryLower] || [categoryLower];
   for (const key of possibleKeys) {
     if (rewardStructure[key]) {
       return Number(rewardStructure[key]) || 1.0;
+    }
+  }
+  
+  // Also try with original category (with spaces) if different from normalized
+  // This handles cases where reward structure might have spaces instead of underscores
+  if (category && category.toLowerCase().trim() !== categoryLower) {
+    const originalCategory = category.toLowerCase().trim();
+    if (rewardStructure[originalCategory]) {
+      return Number(rewardStructure[originalCategory]) || 1.0;
     }
   }
 

@@ -7,7 +7,122 @@ import nlp from 'compromise';
 import deeplinksData from '../../data/deeplinks';
 import { extractAmount } from '../../utils/textExtraction';
 
-// Merchant synonyms and common names
+// Category keywords (must be checked BEFORE merchant patterns to avoid conflicts)
+// All 14 categories from the reward structure system
+const CATEGORY_PATTERNS = {
+  // 1. Dining - restaurants, food, eating out
+  'dining': [
+    'dining', 'dining out', 'restaurant', 'restaurants', 'restaurant dining',
+    'eating out', 'eat out', 'food', 'food dining', 'dinner', 'lunch', 'breakfast',
+    'takeout', 'take out', 'delivery', 'food delivery', 'fast food', 'fastfood'
+  ],
+  
+  // 2. Groceries - supermarkets, grocery stores
+  'groceries': [
+    'grocery', 'groceries', 'grocery store', 'grocery stores',
+    'supermarket', 'supermarkets', 'food shopping', 'food store', 'food stores',
+    'grocery shopping', 'grocery stores', 'market', 'grocery market'
+  ],
+  
+  // 3. Gas - fuel stations, gasoline
+  'gas': [
+    'gas', 'gas station', 'gas stations', 'fuel', 'fuel station', 'fuel stations',
+    'gasoline', 'petrol', 'ev charging', 'electric vehicle charging',
+    'charging station', 'charging stations', 'refueling'
+  ],
+  
+  // 4. Travel - flights, hotels, airlines, vacations
+  'travel': [
+    'travel', 'traveling', 'travelling', 'trip', 'trips', 'vacation', 'vacations',
+    'flight', 'flights', 'airline', 'airlines', 'airfare', 'airfare booking',
+    'hotel', 'hotels', 'lodging', 'accommodation', 'accommodations',
+    'airbnb', 'booking', 'expedia', 'priceline', 'travel booking',
+    'cruise', 'cruises', 'resort', 'resorts'
+  ],
+  
+  // 5. Entertainment - movies, theaters, concerts, events
+  'entertainment': [
+    'entertainment', 'movies', 'movie', 'movie theater', 'movie theatre',
+    'theater', 'theatre', 'cinema', 'cinemas', 'concert', 'concerts',
+    'events', 'live events', 'sports events', 'sporting events',
+    'tickets', 'event tickets', 'show', 'shows', 'musical', 'musicals'
+  ],
+  
+  // 6. Streaming - streaming services, subscriptions
+  'streaming': [
+    'streaming', 'streaming service', 'streaming services', 'streaming platform',
+    'subscriptions', 'subscription', 'video streaming', 'music streaming',
+    'netflix', 'spotify', 'hulu', 'prime video', 'disney plus', 'disney+',
+    'apple tv', 'hbo max', 'paramount plus', 'peacock', 'youtube tv',
+    'pandora', 'siriusxm', 'sirius xm'
+  ],
+  
+  // 7. Drugstores - pharmacies, CVS, Walgreens
+  'drugstores': [
+    'drugstore', 'drugstores', 'drug store', 'drug stores',
+    'pharmacy', 'pharmacies', 'cvs', 'walgreens', 'rite aid',
+    'pharmacy store', 'health pharmacy'
+  ],
+  
+  // 8. Home Improvement - hardware stores, home depot, lowes
+  'home_improvement': [
+    'home improvement', 'home improvements', 'home improvement store',
+    'hardware', 'hardware store', 'hardware stores', 'home depot', 'home depot store',
+    'lowes', 'lowes store', 'menards', 'ace hardware', 'true value',
+    'home renovation', 'home repair', 'home remodeling', 'diy', 'do it yourself'
+  ],
+  
+  // 9. Department Stores - shopping, retail stores
+  'department_stores': [
+    'department store', 'department stores', 'shopping', 'retail store',
+    'retail stores', 'mall', 'shopping mall', 'shopping center',
+    'macy', 'macys', 'nordstrom', 'kohls', 'jcpenney', 'jc penney',
+    'dillards', 'belk', 'sears'
+  ],
+  
+  // 10. Transit - public transportation, uber, lyft, taxis
+  'transit': [
+    'transit', 'public transit', 'public transportation', 'transportation',
+    'taxi', 'taxis', 'cab', 'cabs', 'uber', 'lyft', 'rideshare', 'ride share',
+    'ride sharing', 'ride-hailing', 'commute', 'commuting', 'metro', 'subway',
+    'bus', 'bus fare', 'train', 'train fare', 'public transport'
+  ],
+  
+  // 11. Utilities - electricity, water, internet, phone
+  'utilities': [
+    'utilities', 'utility', 'utility bill', 'utility bills', 'utility payment',
+    'electricity', 'electric bill', 'electric bills', 'power', 'power bill',
+    'water', 'water bill', 'water bills', 'sewer', 'sewer bill',
+    'internet', 'internet bill', 'internet service', 'internet provider',
+    'phone bill', 'phone bills', 'cell phone', 'cell phone bill',
+    'cable', 'cable bill', 'cable tv', 'internet and cable'
+  ],
+  
+  // 12. Warehouse - costco, sams club, warehouse clubs
+  'warehouse': [
+    'warehouse', 'warehouse store', 'warehouse stores', 'warehouse club',
+    'warehouse clubs', 'costco', 'sams club', 'sams', "sam's club",
+    'bj', 'bjs', "bj's wholesale", 'wholesale club', 'wholesale clubs',
+    'bulk store', 'bulk stores'
+  ],
+  
+  // 13. Office Supplies - office depot, staples, stationery
+  'office_supplies': [
+    'office supplies', 'office supply', 'office supply store',
+    'office supply stores', 'office depot', 'staples', 'stationery',
+    'stationary', 'office store', 'office stores', 'business supplies'
+  ],
+  
+  // 14. Insurance - auto, health, car, home insurance
+  'insurance': [
+    'insurance', 'auto insurance', 'car insurance', 'vehicle insurance',
+    'health insurance', 'medical insurance', 'home insurance', 'homeowners insurance',
+    'renters insurance', 'rental insurance', 'life insurance',
+    'insurance premium', 'insurance payment', 'insurance payments'
+  ]
+};
+
+// Merchant synonyms and common names (specific merchants that may map to categories)
 const MERCHANT_PATTERNS = {
   'costco': ['costco', 'costco wholesale'],
   'walmart': ['walmart', 'wal-mart', 'wal mart'],
@@ -16,10 +131,10 @@ const MERCHANT_PATTERNS = {
   'trader joes': ['trader joes', 'trader joe', 'traders joes'],
   'safeway': ['safeway'],
   'kroger': ['kroger'],
-  'gas': ['gas station', 'gas', 'fuel', 'chevron', 'shell', 'exxon', 'bp', '76'],
-  'restaurant': ['restaurant', 'dining', 'food', 'eat out', 'chipotle', 'mcdonalds', 'starbucks', 'cafe'],
-  'grocery': ['grocery', 'groceries', 'supermarket', 'food shopping'],
-  'travel': ['travel', 'flight', 'hotel', 'airline', 'airbnb', 'booking', 'expedia'],
+  'gas': ['gas station', 'chevron', 'shell', 'exxon', 'bp', '76'],
+  'restaurant': ['restaurant', 'chipotle', 'mcdonalds', 'starbucks', 'cafe'],
+  'grocery': ['supermarket', 'food shopping'],
+  'travel': ['flight', 'hotel', 'airline', 'airbnb', 'booking', 'expedia'],
   'amazon': ['amazon', 'amazon.com'],
   'uber': ['uber', 'lyft', 'rideshare'],
   'online': ['online', 'internet', 'web shopping', 'e-commerce']
@@ -67,8 +182,11 @@ export const extractEntities = (query) => {
 
   console.log('[EntityExtractor] Extracting from:', query);
 
-  // Extract merchant
-  entities.merchant = extractMerchant(query, doc);
+  // Extract category FIRST (before merchant to avoid conflicts)
+  entities.category = extractCategory(query, doc);
+
+  // Extract merchant (will skip if already matched as category)
+  entities.merchant = extractMerchant(query, doc, entities.category);
 
   // Extract card name
   entities.cardName = extractCardName(query, doc);
@@ -96,15 +214,85 @@ export const extractEntities = (query) => {
 };
 
 /**
- * Extract merchant name
+ * Extract category from query
+ * Categories are checked, with longer patterns prioritized to avoid partial matches
  */
-const extractMerchant = (query, doc) => {
+const extractCategory = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+
+  // Collect all patterns with their categories, sorted by length (longest first)
+  const allPatterns = [];
+  
+  for (const [category, patterns] of Object.entries(CATEGORY_PATTERNS)) {
+    for (const pattern of patterns) {
+      allPatterns.push({
+        category,
+        pattern: pattern.toLowerCase(),
+        length: pattern.length
+      });
+    }
+  }
+  
+  // Sort by length (longest first) to prioritize longer matches like "food shopping" over "food"
+  allPatterns.sort((a, b) => b.length - a.length);
+
+  // Check each pattern (longest first)
+  for (const { category, pattern } of allPatterns) {
+    // Use word boundary matching to avoid partial matches
+    // Handle both spaces and underscores in patterns
+    const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const regex = new RegExp(`\\b${escapedPattern}\\b`, 'i');
+    
+    if (regex.test(lowerQuery)) {
+      console.log('[EntityExtractor] Found category:', category, 'from pattern:', pattern);
+      return category;
+    }
+  }
+
+  // Special case: If query contains "costco" or specific merchant that maps to category,
+  // and no other category was found, extract the category
+  // But only if it's clearly a category query (e.g., "best card for costco" not "costco store")
+  if (!lowerQuery.includes('store') && !lowerQuery.includes('shopping')) {
+    if (lowerQuery.includes('costco') && lowerQuery.match(/\b(best|which|what|suggest|card|for)\b/i)) {
+      // If query is like "best card for costco", treat as warehouse category
+      return 'warehouse';
+    }
+    if (lowerQuery.includes('uber') && lowerQuery.match(/\b(best|which|what|suggest|card|for)\b/i)) {
+      return 'transit';
+    }
+    if (lowerQuery.includes('lyft') && lowerQuery.match(/\b(best|which|what|suggest|card|for)\b/i)) {
+      return 'transit';
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Extract merchant name
+ * Can extract merchant even if category is present (e.g., "travel at costco")
+ */
+const extractMerchant = (query, doc, extractedCategory = null) => {
   const lowerQuery = query.toLowerCase();
 
   // Check for merchant patterns
   for (const [merchant, patterns] of Object.entries(MERCHANT_PATTERNS)) {
     for (const pattern of patterns) {
-      if (lowerQuery.includes(pattern.toLowerCase())) {
+      const patternLower = pattern.toLowerCase();
+      
+      // If category was extracted, don't extract merchant if it's the same word
+      // (e.g., "travel" shouldn't be merchant if it's already category)
+      if (extractedCategory) {
+        const categoryPatterns = CATEGORY_PATTERNS[extractedCategory] || [];
+        const isCategoryKeyword = categoryPatterns.some(catPattern => 
+          catPattern.toLowerCase() === patternLower
+        );
+        if (isCategoryKeyword) {
+          continue; // Skip this merchant pattern - it's the category keyword
+        }
+      }
+      
+      if (lowerQuery.includes(patternLower)) {
         console.log('[EntityExtractor] Found merchant:', merchant);
         return merchant;
       }

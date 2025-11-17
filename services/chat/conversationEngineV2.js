@@ -15,6 +15,8 @@ import { getConversationContext } from './conversationContext.js';
 import { rewriteQueryWithContext, shouldDirectRoute } from './queryRewriter.js';
 import { getSlotFillingState } from './slotFillingManager.js';
 import { handleRememberMemory } from './memoryHandler.js';
+import { formatMultiStrategyRecommendations } from '../recommendations/recommendationFormatter.js';
+import { getAllStrategies } from '../recommendations/recommendationStrategies.js';
 
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
@@ -105,10 +107,7 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
       console.log('[DirectRoute] Purchase context for comparison:', purchaseContext);
 
       // NEW ARCHITECTURE: Use separate strategies with user profile detection
-      // IMPORTANT: Using plain text formatter because chat UI only supports ONE table per message
-      const { getAllStrategies } = await import('../recommendations/recommendationStrategies.js');
-      const { formatMultiStrategyRecommendations } = await import('../recommendations/recommendationFormatterPlainText.js');
-      
+
       // Default to $1000 if no amount specified - crucial for showing dollar calculations
       const defaultAmount = purchaseContext.amount || 1000;
       

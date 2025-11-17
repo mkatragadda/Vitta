@@ -104,11 +104,16 @@ const buildPurchaseContext = (entities, query) => {
   }
 
   // Extract category or merchant
-  if (entities.merchant) {
+  // Category takes precedence (if extracted, use it directly)
+  if (entities.category) {
+    context.category = entities.category;
+    // Still try to extract merchant if available (for specific merchant recommendations)
+    if (entities.merchant) {
+      context.merchant = entities.merchant;
+    }
+  } else if (entities.merchant) {
     context.merchant = entities.merchant;
     context.category = inferCategoryFromMerchant(entities.merchant);
-  } else if (entities.category) {
-    context.category = entities.category;
   }
 
   // Extract date/timing context
@@ -533,16 +538,43 @@ const estimateRewardValue = (card, context) => {
 
 /**
  * Infer category from merchant name
+ * Also handles direct category mentions (e.g., "travel", "dining")
  */
 const inferCategoryFromMerchant = (merchant) => {
   const lowerMerchant = merchant.toLowerCase();
 
+  // Direct category matches (if merchant is actually a category keyword)
+  const directCategoryMatches = {
+    'travel': ['travel', 'traveling', 'trip', 'vacation', 'flight', 'flights', 'hotel', 'hotels', 'airline', 'airlines', 'airbnb', 'booking', 'expedia', 'lodging', 'accommodation'],
+    'dining': ['dining', 'restaurant', 'restaurants', 'eating out', 'eat out', 'food', 'dinner', 'lunch', 'breakfast'],
+    'groceries': ['grocery', 'groceries', 'supermarket', 'supermarkets', 'food shopping', 'grocery store', 'grocery stores'],
+    'gas': ['gas', 'fuel', 'gasoline', 'petrol', 'gas station', 'fuel station', 'ev charging'],
+    'entertainment': ['entertainment', 'movies', 'movie', 'theater', 'theatre', 'concert', 'concerts', 'events'],
+    'streaming': ['streaming', 'streaming services', 'subscriptions'],
+    'drugstores': ['drugstore', 'drugstores', 'pharmacy', 'pharmacies'],
+    'home_improvement': ['home improvement', 'hardware'],
+    'department_stores': ['department store', 'department stores', 'shopping'],
+    'transit': ['transit', 'public transit', 'transportation', 'taxi', 'uber', 'lyft', 'rideshare', 'ride share'],
+    'utilities': ['utilities', 'utility', 'electricity', 'water', 'internet', 'phone bill'],
+    'warehouse': ['warehouse', 'warehouse club', 'warehouse clubs'],
+    'office_supplies': ['office supplies', 'office supply'],
+    'insurance': ['insurance', 'auto insurance', 'health insurance', 'car insurance']
+  };
+
+  // Check for direct category matches first
+  for (const [category, keywords] of Object.entries(directCategoryMatches)) {
+    if (keywords.some(keyword => lowerMerchant.includes(keyword.toLowerCase()))) {
+      return category;
+    }
+  }
+
+  // Merchant-to-category mapping (specific merchants)
   const categoryMap = {
     'groceries': ['costco', 'whole foods', 'trader joe', 'safeway', 'kroger', 'walmart', 'target', 'grocery'],
-    'dining': ['restaurant', 'chipotle', 'mcdonald', 'starbucks', 'cafe', 'pizza', 'burger'],
-    'gas': ['gas', 'shell', 'chevron', 'exxon', 'bp', 'fuel'],
-    'travel': ['airline', 'hotel', 'airbnb', 'uber', 'lyft', 'flight'],
-    'online': ['amazon', 'ebay', 'online']
+    'dining': ['chipotle', 'mcdonald', 'starbucks', 'cafe', 'pizza', 'burger'],
+    'gas': ['shell', 'chevron', 'exxon', 'bp'],
+    'travel': ['airbnb', 'uber', 'lyft'],
+    'online': ['amazon', 'ebay']
   };
 
   for (const [category, keywords] of Object.entries(categoryMap)) {
