@@ -326,36 +326,140 @@ export function scoreForGracePeriod(cards, purchaseDate = new Date()) {
 
 /**
  * Get reward multiplier for a card and category
+ * Supports all 14 merchant categories with fallback logic
+ *
+ * Categories:
+ * 1. dining
+ * 2. groceries
+ * 3. gas
+ * 4. travel
+ * 5. entertainment
+ * 6. streaming
+ * 7. drugstores
+ * 8. home_improvement
+ * 9. department_stores
+ * 10. transit
+ * 11. utilities
+ * 12. warehouse
+ * 13. office_supplies
+ * 14. insurance
+ *
  * @param {Object} card - Credit card
- * @param {string} category - Purchase category
- * @returns {number} Reward multiplier (e.g., 1.5 for 1.5x)
+ * @param {string} category - Purchase category (any of the 14 categories)
+ * @returns {number} Reward multiplier (e.g., 1.5 for 1.5x, 4 for 4x)
  */
 function getRewardMultiplier(card, category) {
   if (!card.reward_structure) return 1.0;
 
   const rewardStructure = card.reward_structure;
-  const categoryLower = (category || '').toLowerCase();
+  // Normalize category: convert spaces to underscores for consistent matching
+  // This handles "home improvement" -> "home_improvement"
+  const categoryNormalized = (category || '').toLowerCase().trim().replace(/\s+/g, '_');
+  const categoryLower = categoryNormalized;
 
-  // Try exact match first
+  // Try exact match first (14-category system)
   if (rewardStructure[categoryLower]) {
     return Number(rewardStructure[categoryLower]) || 1.0;
   }
 
-  // Try common aliases
+  // Try common aliases and subcategories
   const aliases = {
-    'grocery': ['groceries', 'supermarkets', 'food'],
-    'groceries': ['grocery', 'supermarkets', 'food'],
-    'dining': ['restaurants', 'restaurant', 'eating'],
-    'restaurants': ['dining', 'restaurant', 'eating'],
-    'gas': ['fuel', 'gasoline'],
-    'travel': ['flights', 'hotels', 'airline'],
-    'online': ['ecommerce', 'internet', 'amazon']
+    // Dining aliases
+    'dining': ['restaurants', 'restaurant', 'eating', 'food_dining', 'dining_out'],
+    'restaurants': ['dining', 'restaurant', 'eating', 'food_dining', 'dining_out'],
+    'restaurant': ['dining', 'restaurants', 'eating'],
+
+    // Groceries aliases
+    'groceries': ['grocery', 'supermarkets', 'supermarket', 'food', 'grocery_stores', 'food_grocery'],
+    'grocery': ['groceries', 'supermarkets', 'supermarket', 'food'],
+    'supermarket': ['groceries', 'grocery', 'supermarkets'],
+    'supermarkets': ['groceries', 'grocery', 'supermarket'],
+
+    // Gas aliases
+    'gas': ['fuel', 'gasoline', 'petrol', 'gas_fuel', 'ev_charging'],
+    'fuel': ['gas', 'gasoline', 'petrol'],
+    'gasoline': ['gas', 'fuel', 'petrol'],
+
+    // Travel aliases
+    'travel': ['flights', 'hotels', 'airline', 'airlines', 'travel_airfare', 'travel_hotel', 'travel_lodging'],
+    'flights': ['travel', 'airline', 'airlines'],
+    'hotels': ['travel', 'lodging', 'accommodation'],
+    'airline': ['travel', 'flights', 'airlines'],
+    'airlines': ['travel', 'flights', 'airline'],
+
+    // Entertainment aliases
+    'entertainment': ['movies', 'theater', 'events', 'concert', 'entertainment_events'],
+    'movies': ['entertainment', 'theater'],
+    'theater': ['entertainment', 'movies'],
+
+    // Streaming aliases
+    'streaming': ['streaming_services', 'subscriptions', 'digital_entertainment'],
+    'streaming_services': ['streaming', 'subscriptions'],
+
+    // Drugstores aliases
+    'drugstores': ['pharmacy', 'pharmacies', 'drug_store', 'health_pharmacy'],
+    'pharmacy': ['drugstores', 'pharmacies'],
+    'pharmacies': ['drugstores', 'pharmacy'],
+
+    // Home Improvement aliases
+    'home_improvement': ['home_improvement_retail', 'hardware', 'home_depot'],
+    'hardware': ['home_improvement'],
+
+    // Department Stores aliases
+    'department_stores': ['department_store', 'retail_stores', 'shopping'],
+    'department_store': ['department_stores'],
+
+    // Transit aliases
+    'transit': ['public_transit', 'taxi', 'uber', 'ride_share', 'transportation'],
+    'taxi': ['transit', 'ride_share', 'uber'],
+    'uber': ['transit', 'taxi', 'ride_share'],
+
+    // Utilities aliases
+    'utilities': ['electricity', 'water', 'gas_utilities', 'internet_utilities'],
+
+    // Warehouse aliases
+    'warehouse': ['warehouse_clubs', 'costco', 'sams_club'],
+    'warehouse_clubs': ['warehouse'],
+    'costco': ['warehouse'],
+    'sams_club': ['warehouse'],
+
+    // Office Supplies aliases
+    'office_supplies': ['office_supply', 'office_depot', 'stationery'],
+    'office_supply': ['office_supplies'],
+
+    // Insurance aliases
+    'insurance': ['insurance_services', 'auto_insurance', 'health_insurance'],
+
+    // Legacy aliases (for backward compatibility)
+    'grocery': ['groceries', 'supermarkets'],
+    'groceries': ['grocery', 'supermarkets'],
+    'online': ['ecommerce', 'internet', 'amazon', 'online_shopping'],
+    'ecommerce': ['online', 'internet', 'amazon']
   };
 
+  // Use normalized category for alias lookup
   const possibleKeys = aliases[categoryLower] || [categoryLower];
   for (const key of possibleKeys) {
     if (rewardStructure[key]) {
       return Number(rewardStructure[key]) || 1.0;
+    }
+  }
+  
+  // Also try with original category (with spaces) if different from normalized
+  // This handles cases where reward structure might have spaces instead of underscores
+  if (category && category.toLowerCase().trim() !== categoryLower) {
+    const originalCategory = category.toLowerCase().trim();
+    if (rewardStructure[originalCategory]) {
+      return Number(rewardStructure[originalCategory]) || 1.0;
+    }
+  }
+
+  // Try parent category (e.g., "dining_* " → "dining")
+  const parentMatch = categoryLower.match(/^([a-z_]+?)_/);
+  if (parentMatch) {
+    const parentCategory = parentMatch[1];
+    if (rewardStructure[parentCategory]) {
+      return Number(rewardStructure[parentCategory]) || 1.0;
     }
   }
 
@@ -508,4 +612,7 @@ export function getRecommendationSummary(recommendations) {
     totalCardsWithGracePeriod: rewards.filter(r => r.hasGracePeriod).length
   };
 }
+
+// Export getRewardMultiplier for use in other services (e.g., cardAnalyzer)
+export { getRewardMultiplier };
 

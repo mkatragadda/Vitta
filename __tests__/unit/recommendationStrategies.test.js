@@ -303,11 +303,468 @@ describe('REGRESSION: Citi Costco with high balance (Fixed 2025-11-06)', () => {
   test('Citi Costco CAN be shown for APR comparison (even with balance)', () => {
     const cards = [CARD_WITH_HIGH_BALANCE];
     const result = scoreForAPR(cards, 1000);
-    
+
     // APR comparison works regardless of balance
     expect(result[0].canRecommend).toBe(true);
     expect(result[0].apr).toBe(19.24);
     expect(result[0].monthlyInterest).toBeGreaterThan(0);
+  });
+});
+
+describe('14-Category Support - Reward Multipliers', () => {
+  // Card with all 14 categories
+  const card14Categories = {
+    id: 'card-14-cat',
+    card_name: 'All Categories Card',
+    current_balance: 0,
+    credit_limit: 10000,
+    apr: 18.99,
+    statement_close_day: 15,
+    payment_due_day: 10,
+    grace_period_days: 25,
+    reward_structure: {
+      dining: 4,
+      groceries: 3,
+      gas: 4,
+      travel: 5,
+      entertainment: 2,
+      streaming: 1,
+      drugstores: 2,
+      home_improvement: 1,
+      department_stores: 1,
+      transit: 2,
+      utilities: 1,
+      warehouse: 1.5,
+      office_supplies: 1,
+      insurance: 1,
+      default: 1
+    }
+  };
+
+  describe('Exact Category Matches', () => {
+    test('dining category returns 4x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'dining', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('groceries category returns 3x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'groceries', 100);
+      expect(result[0].multiplier).toBe(3);
+    });
+
+    test('gas category returns 4x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'gas', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('travel category returns 5x multiplier (highest)', () => {
+      const result = scoreForRewards([card14Categories], 'travel', 100);
+      expect(result[0].multiplier).toBe(5);
+    });
+
+    test('entertainment category returns 2x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'entertainment', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('streaming category returns 1x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'streaming', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('drugstores category returns 2x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'drugstores', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('home_improvement category returns 1x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'home_improvement', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('department_stores category returns 1x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'department_stores', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('transit category returns 2x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'transit', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('utilities category returns 1x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'utilities', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('warehouse category returns 1.5x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'warehouse', 100);
+      expect(result[0].multiplier).toBe(1.5);
+    });
+
+    test('office_supplies category returns 1x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'office_supplies', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('insurance category returns 1x multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'insurance', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+  });
+
+  describe('Category Aliases - All 14 Categories', () => {
+    test('restaurants alias maps to dining (4x)', () => {
+      const result = scoreForRewards([card14Categories], 'restaurants', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('grocery alias maps to groceries (3x)', () => {
+      const result = scoreForRewards([card14Categories], 'grocery', 100);
+      expect(result[0].multiplier).toBe(3);
+    });
+
+    test('supermarket alias maps to groceries (3x)', () => {
+      const result = scoreForRewards([card14Categories], 'supermarket', 100);
+      expect(result[0].multiplier).toBe(3);
+    });
+
+    test('fuel alias maps to gas (4x)', () => {
+      const result = scoreForRewards([card14Categories], 'fuel', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('flights alias maps to travel (5x)', () => {
+      const result = scoreForRewards([card14Categories], 'flights', 100);
+      expect(result[0].multiplier).toBe(5);
+    });
+
+    test('hotels alias maps to travel (5x)', () => {
+      const result = scoreForRewards([card14Categories], 'hotels', 100);
+      expect(result[0].multiplier).toBe(5);
+    });
+
+    test('airline alias maps to travel (5x)', () => {
+      const result = scoreForRewards([card14Categories], 'airline', 100);
+      expect(result[0].multiplier).toBe(5);
+    });
+
+    test('movies alias maps to entertainment (2x)', () => {
+      const result = scoreForRewards([card14Categories], 'movies', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('theater alias maps to entertainment (2x)', () => {
+      const result = scoreForRewards([card14Categories], 'theater', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('subscriptions alias maps to streaming (1x)', () => {
+      const result = scoreForRewards([card14Categories], 'subscriptions', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('pharmacy alias maps to drugstores (2x)', () => {
+      const result = scoreForRewards([card14Categories], 'pharmacy', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('hardware alias maps to home_improvement (1x)', () => {
+      const result = scoreForRewards([card14Categories], 'hardware', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('taxi alias maps to transit (2x)', () => {
+      const result = scoreForRewards([card14Categories], 'taxi', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('uber alias maps to transit (2x)', () => {
+      const result = scoreForRewards([card14Categories], 'uber', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('electricity alias maps to utilities (1x)', () => {
+      const result = scoreForRewards([card14Categories], 'electricity', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('costco alias maps to warehouse (1.5x)', () => {
+      const result = scoreForRewards([card14Categories], 'costco', 100);
+      expect(result[0].multiplier).toBe(1.5);
+    });
+
+    test('office_depot alias maps to office_supplies (1x)', () => {
+      const result = scoreForRewards([card14Categories], 'office_depot', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+
+    test('auto_insurance alias maps to insurance (1x)', () => {
+      const result = scoreForRewards([card14Categories], 'auto_insurance', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+  });
+
+  describe('Case Insensitivity and Whitespace Handling', () => {
+    test('uppercase category names work correctly', () => {
+      const result = scoreForRewards([card14Categories], 'DINING', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('mixed case category names work correctly', () => {
+      const result = scoreForRewards([card14Categories], 'DiNiNg', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('whitespace is trimmed from category names', () => {
+      const result = scoreForRewards([card14Categories], '  dining  ', 100);
+      expect(result[0].multiplier).toBe(4);
+    });
+
+    test('unknown categories return default multiplier', () => {
+      const result = scoreForRewards([card14Categories], 'unknown_category', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+  });
+
+  describe('14 Categories - Scoring Comparison', () => {
+    test('travel (5x) scores higher than dining (4x)', () => {
+      const travelResult = scoreForRewards([card14Categories], 'travel', 100);
+      const diningResult = scoreForRewards([card14Categories], 'dining', 100);
+
+      expect(travelResult[0].score).toBeGreaterThan(diningResult[0].score);
+      expect(travelResult[0].cashback).toBeGreaterThan(diningResult[0].cashback);
+    });
+
+    test('dining (4x) scores higher than groceries (3x)', () => {
+      const diningResult = scoreForRewards([card14Categories], 'dining', 100);
+      const groceriesResult = scoreForRewards([card14Categories], 'groceries', 100);
+
+      expect(diningResult[0].score).toBeGreaterThan(groceriesResult[0].score);
+    });
+
+    test('all 14 categories have correct multipliers and scores', () => {
+      const categories = [
+        { name: 'dining', multiplier: 4 },
+        { name: 'groceries', multiplier: 3 },
+        { name: 'gas', multiplier: 4 },
+        { name: 'travel', multiplier: 5 },
+        { name: 'entertainment', multiplier: 2 },
+        { name: 'streaming', multiplier: 1 },
+        { name: 'drugstores', multiplier: 2 },
+        { name: 'home_improvement', multiplier: 1 },
+        { name: 'department_stores', multiplier: 1 },
+        { name: 'transit', multiplier: 2 },
+        { name: 'utilities', multiplier: 1 },
+        { name: 'warehouse', multiplier: 1.5 },
+        { name: 'office_supplies', multiplier: 1 },
+        { name: 'insurance', multiplier: 1 }
+      ];
+
+      categories.forEach(cat => {
+        const result = scoreForRewards([card14Categories], cat.name, 100);
+        expect(result[0].multiplier).toBe(cat.multiplier);
+        expect(result[0].score).toBeGreaterThan(0);
+      });
+    });
+  });
+
+  describe('Backward Compatibility - Legacy Categories', () => {
+    const legacyCard = {
+      id: 'legacy-card',
+      card_name: 'Legacy Card',
+      current_balance: 0,
+      credit_limit: 5000,
+      apr: 19.99,
+      statement_close_day: 15,
+      payment_due_day: 10,
+      grace_period_days: 21,
+      reward_structure: {
+        travel: 3,
+        dining: 2,
+        online: 1.5,
+        default: 1
+      }
+    };
+
+    test('legacy travel category still works', () => {
+      const result = scoreForRewards([legacyCard], 'travel', 100);
+      expect(result[0].multiplier).toBe(3);
+    });
+
+    test('legacy dining category still works', () => {
+      const result = scoreForRewards([legacyCard], 'dining', 100);
+      expect(result[0].multiplier).toBe(2);
+    });
+
+    test('legacy online category still works', () => {
+      const result = scoreForRewards([legacyCard], 'online', 100);
+      expect(result[0].multiplier).toBe(1.5);
+    });
+
+    test('legacy ecommerce alias maps to online', () => {
+      const result = scoreForRewards([legacyCard], 'ecommerce', 100);
+      expect(result[0].multiplier).toBe(1.5);
+    });
+
+    test('legacy cards return default for new 14-category types', () => {
+      const result = scoreForRewards([legacyCard], 'gas', 100);
+      expect(result[0].multiplier).toBe(1);
+    });
+  });
+});
+
+describe('Travel Rewards Optimization - Category Recognition Fix', () => {
+  // Card with 5x travel rewards (Amex Platinum)
+  const CARD_5X_TRAVEL = {
+    id: 'amex-platinum',
+    nickname: 'Amex Platinum',
+    card_name: 'Platinum Card',
+    current_balance: 0,
+    credit_limit: 35000,
+    apr: 26.24,
+    statement_close_day: 11,
+    payment_due_day: 8,
+    grace_period_days: 27,
+    reward_structure: {
+      travel: 5,
+      dining: 1,
+      default: 1
+    }
+  };
+
+  // Card with 2x travel rewards (Chase Sapphire Preferred)
+  const CARD_2X_TRAVEL = {
+    id: 'chase-sapphire',
+    nickname: 'Chase Sapphire',
+    card_name: 'Sapphire Preferred',
+    current_balance: 0,
+    credit_limit: 20000,
+    apr: 23.74,
+    statement_close_day: 5,
+    payment_due_day: 30,
+    grace_period_days: 25,
+    reward_structure: {
+      travel: 2,
+      dining: 2,
+      default: 1
+    }
+  };
+
+  // Card with 2x default rewards but NO travel multiplier (Citi Double Cash)
+  const CARD_2X_DEFAULT = {
+    id: 'citi-double',
+    nickname: 'Citi Double Cash',
+    card_name: 'Double Cash',
+    current_balance: 0,
+    credit_limit: 20000,
+    apr: 27.99,
+    statement_close_day: 1,
+    payment_due_day: 28,
+    grace_period_days: 23,
+    reward_structure: {
+      default: 2
+    }
+  };
+
+  test('CRITICAL: Travel category correctly selects 5x travel card over 2x default card', () => {
+    const cards = [CARD_5X_TRAVEL, CARD_2X_DEFAULT];
+    const result = scoreForRewards(cards, 'travel', 1000);
+
+    // 5x travel card should rank first
+    expect(result[0].card.id).toBe('amex-platinum');
+    expect(result[0].multiplier).toBe(5);
+    expect(result[0].cashback).toBe(50.00); // $1000 * 5% = $50
+    expect(result[0].score).toBe(50.00);
+
+    // 2x default card should rank second (uses default: 2 since no travel multiplier)
+    expect(result[1].card.id).toBe('citi-double');
+    expect(result[1].multiplier).toBe(2); // Falls back to default: 2 since no travel multiplier
+    expect(result[1].cashback).toBe(20.00); // $1000 * 2% (default) = $20
+    expect(result[1].score).toBe(20.00);
+
+    // 5x card should have higher score
+    expect(result[0].score).toBeGreaterThan(result[1].score);
+  });
+
+  test('CRITICAL: Travel category correctly ranks: 5x > 2x travel > 2x default', () => {
+    const cards = [CARD_2X_DEFAULT, CARD_2X_TRAVEL, CARD_5X_TRAVEL];
+    const result = scoreForRewards(cards, 'travel', 1000);
+
+    // Should be sorted: 5x travel > 2x travel > 2x default
+    expect(result[0].card.id).toBe('amex-platinum');
+    expect(result[0].multiplier).toBe(5);
+    expect(result[0].cashback).toBe(50.00);
+
+    expect(result[1].card.id).toBe('chase-sapphire');
+    expect(result[1].multiplier).toBe(2);
+    expect(result[1].cashback).toBe(20.00);
+
+    expect(result[2].card.id).toBe('citi-double');
+    expect(result[2].multiplier).toBe(2); // No travel multiplier, uses default: 2
+    expect(result[2].cashback).toBe(20.00); // $1000 * 2% (default) = $20
+    
+    // Both 2x cards have same cashback, but travel-specific card should rank higher
+    // This is handled by the sorting logic (available credit, utilization, etc.)
+  });
+
+  test('Travel category with $0 amount still has correct multipliers', () => {
+    const cards = [CARD_2X_DEFAULT, CARD_2X_TRAVEL, CARD_5X_TRAVEL];
+    const result = scoreForRewards(cards, 'travel', 0);
+
+    // All cards should have correct multipliers even with $0 amount
+    const amexCard = result.find(r => r.card.id === 'amex-platinum');
+    const chaseCard = result.find(r => r.card.id === 'chase-sapphire');
+    const citiCard = result.find(r => r.card.id === 'citi-double');
+    
+    expect(amexCard.multiplier).toBe(5);
+    expect(chaseCard.multiplier).toBe(2);
+    expect(citiCard.multiplier).toBe(2); // Uses default: 2
+    
+    // All should have $0 cashback with $0 amount
+    expect(amexCard.cashback).toBe(0);
+    expect(chaseCard.cashback).toBe(0);
+    expect(citiCard.cashback).toBe(0);
+  });
+
+  test('Travel aliases (flights, hotels) correctly match travel category', () => {
+    const cards = [CARD_5X_TRAVEL, CARD_2X_DEFAULT];
+    
+    const travelResult = scoreForRewards(cards, 'travel', 100);
+    const flightsResult = scoreForRewards(cards, 'flights', 100);
+    const hotelsResult = scoreForRewards(cards, 'hotels', 100);
+    const airlineResult = scoreForRewards(cards, 'airline', 100);
+
+    // All should select 5x travel card
+    expect(travelResult[0].card.id).toBe('amex-platinum');
+    expect(flightsResult[0].card.id).toBe('amex-platinum');
+    expect(hotelsResult[0].card.id).toBe('amex-platinum');
+    expect(airlineResult[0].card.id).toBe('amex-platinum');
+
+    // All should have 5x multiplier
+    expect(travelResult[0].multiplier).toBe(5);
+    expect(flightsResult[0].multiplier).toBe(5);
+    expect(hotelsResult[0].multiplier).toBe(5);
+    expect(airlineResult[0].multiplier).toBe(5);
+  });
+
+  test('Cards with balance are still excluded even with high travel rewards', () => {
+    const cardWithBalance = {
+      ...CARD_5X_TRAVEL,
+      current_balance: 1000
+    };
+    
+    const cards = [cardWithBalance, CARD_2X_DEFAULT];
+    const result = scoreForRewards(cards, 'travel', 1000);
+
+    // Card with balance should be rejected
+    expect(result[0].card.id).toBe('citi-double'); // Only default card available
+    expect(result[0].canRecommend).toBe(true);
+
+    // 5x card should be in results but not recommendable
+    const rejectedCard = result.find(r => r.card.id === 'amex-platinum');
+    expect(rejectedCard.canRecommend).toBe(false);
+    expect(rejectedCard.score).toBe(-1000);
   });
 });
 

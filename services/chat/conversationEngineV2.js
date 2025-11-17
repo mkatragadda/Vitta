@@ -15,7 +15,8 @@ import { getConversationContext } from './conversationContext.js';
 import { rewriteQueryWithContext, shouldDirectRoute } from './queryRewriter.js';
 import { getSlotFillingState } from './slotFillingManager.js';
 import { handleRememberMemory } from './memoryHandler.js';
-import { muteReminders } from '../reminders/reminderService.js';
+import { formatMultiStrategyRecommendations } from '../recommendations/recommendationFormatter.js';
+import { getAllStrategies } from '../recommendations/recommendationStrategies.js';
 
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
@@ -28,6 +29,7 @@ const THRESHOLDS = {
 // Note: Reduced set to allow more natural, conversational responses
 const CRITICAL_INTENTS = new Set([
   'query_card_data',  // Simple data queries can use templates
+  'card_recommendation', // Preserve structured multi-strategy layout without GPT reformatting
   'remember_memory',
   'recall_memory'
   // 'split_payment' - removed to allow GPT formatting for better UX
@@ -69,6 +71,41 @@ async function handleReminderQuickCommand(query, userId) {
 }
 
 /**
+ * Apply deterministic heuristics when embeddings are ambiguous.
+ * Ensures save/remember phrasing routes to remember_memory instead of recall_memory.
+ */
+function applyIntentHeuristics(query, topMatch) {
+  if (!topMatch || !query) {
+    return topMatch;
+  }
+
+  const lowerQuery = query.toLowerCase();
+  const wantsToSaveNote = /\b(save|remember|log|note|track)\b/.test(lowerQuery);
+  const retrievalLanguage =
+    /\b(show|list|find|see|display|what|which|any)\b/.test(lowerQuery) ||
+    lowerQuery.startsWith('show ');
+
+  if (wantsToSaveNote && !retrievalLanguage && topMatch.intent_id !== 'remember_memory') {
+    const adjusted = {
+      ...topMatch,
+      intent_id: 'remember_memory',
+      similarity: Math.max(topMatch.similarity || 0, THRESHOLDS.MEDIUM_CONFIDENCE + 0.01),
+      heuristic: 'memory_save_override'
+    };
+
+    console.log('[ConversationEngineV2] Heuristic override → remember_memory', {
+      originalIntent: topMatch.intent_id,
+      similarity: topMatch.similarity?.toFixed(3),
+      adjustedSimilarity: adjusted.similarity.toFixed(3)
+    });
+
+    return adjusted;
+  }
+
+  return topMatch;
+}
+
+/**
  * Handle direct routing for high-confidence follow-ups
  * Bypasses normal classification pipeline
  * @param {Object} rewriteResult - Result from query rewriter
@@ -103,10 +140,7 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
       console.log('[DirectRoute] Purchase context for comparison:', purchaseContext);
 
       // NEW ARCHITECTURE: Use separate strategies with user profile detection
-      // IMPORTANT: Using plain text formatter because chat UI only supports ONE table per message
-      const { getAllStrategies } = await import('../recommendations/recommendationStrategies.js');
-      const { formatMultiStrategyRecommendations } = await import('../recommendations/recommendationFormatterPlainText.js');
-      
+
       // Default to $1000 if no amount specified - crucial for showing dollar calculations
       const defaultAmount = purchaseContext.amount || 1000;
       
@@ -496,24 +530,26 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       category
     });
 
+    const selectedMatch = applyIntentHeuristics(query, topMatch);
+
     // Log intent detection
     await logIntentDetection(
       query,
-      topMatch.intent_id,
-      topMatch.similarity,
+      selectedMatch.intent_id,
+      selectedMatch.similarity,
       'vector',
       userData.user_id
     );
 
     // STEP 3: Handle based on confidence level
-    if (topMatch.similarity >= THRESHOLDS.HIGH_CONFIDENCE) {
+    if (selectedMatch.similarity >= THRESHOLDS.HIGH_CONFIDENCE) {
       // High confidence - get local data, then use GPT for conversational formatting
       console.log('[ConversationEngineV2] High confidence match, using GPT with local data');
-      console.log('[ConversationEngineV2] Similarity:', topMatch.similarity, 'Intent:', topMatch.intent_id);
+      console.log('[ConversationEngineV2] Similarity:', selectedMatch.similarity, 'Intent:', selectedMatch.intent_id);
 
       // Get structured data from local intent handler
       const entities = extractEntities(query);
-      const classification = { intent: topMatch.intent_id };
+      const classification = { intent: selectedMatch.intent_id };
       let localResponse = generateResponse(classification, entities, userData, handlerContext);
 
       // Handle async responses (e.g., from recommendation handler)
@@ -526,29 +562,29 @@ export const processQuery = async (query, userData = {}, context = {}) => {
         localResponse = localResponse.response;
       }
 
-      if (CRITICAL_INTENTS.has(topMatch.intent_id)) {
+      if (CRITICAL_INTENTS.has(selectedMatch.intent_id)) {
         console.log('[ConversationEngineV2] Critical intent detected, returning structured response without GPT');
         const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
-        conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+        conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
         return response;
       }
 
       // Pass to GPT for conversational formatting
-      const response = await processWithGPT(query, userData, context, topMatch, localResponse, category);
+      const response = await processWithGPT(query, userData, context, selectedMatch, localResponse, category);
       
       // Update conversation context
-      conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+      conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
       
       return response;
 
-    } else if (topMatch.similarity >= THRESHOLDS.MEDIUM_CONFIDENCE) {
+    } else if (selectedMatch.similarity >= THRESHOLDS.MEDIUM_CONFIDENCE) {
       // Medium confidence - get local data, then use GPT for conversational formatting
       console.log('[ConversationEngineV2] Medium confidence match, using GPT with local data');
-      console.log('[ConversationEngineV2] Similarity:', topMatch.similarity, 'Intent:', topMatch.intent_id);
+      console.log('[ConversationEngineV2] Similarity:', selectedMatch.similarity, 'Intent:', selectedMatch.intent_id);
 
       // Get structured data from local intent handler
       const entities = extractEntities(query);
-      const classification = { intent: topMatch.intent_id };
+      const classification = { intent: selectedMatch.intent_id };
       let localResponse = generateResponse(classification, entities, userData, handlerContext);
 
       // Handle async responses (e.g., from recommendation handler)
@@ -561,27 +597,27 @@ export const processQuery = async (query, userData = {}, context = {}) => {
         localResponse = localResponse.response;
       }
 
-      if (CRITICAL_INTENTS.has(topMatch.intent_id)) {
+      if (CRITICAL_INTENTS.has(selectedMatch.intent_id)) {
         console.log('[ConversationEngineV2] Critical intent detected (medium confidence), returning structured response without GPT');
         const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
-        conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+        conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
         return response;
       }
 
       // Pass to GPT for conversational formatting
-      const response = await processWithGPT(query, userData, context, topMatch, localResponse, category);
+      const response = await processWithGPT(query, userData, context, selectedMatch, localResponse, category);
       
       // Update conversation context
-      conversationContext.addTurn(query, topMatch.intent_id, entities, response);
+      conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
       
       return response;
 
     } else {
       // Low confidence - use GPT fallback
       console.log('[ConversationEngineV2] Low confidence, using GPT fallback');
-      console.log('[ConversationEngineV2] Similarity:', topMatch.similarity, 'Threshold:', THRESHOLDS.MEDIUM_CONFIDENCE);
+      console.log('[ConversationEngineV2] Similarity:', selectedMatch.similarity, 'Threshold:', THRESHOLDS.MEDIUM_CONFIDENCE);
       
-      const response = await processWithGPT(query, userData, context, topMatch, null, category);
+      const response = await processWithGPT(query, userData, context, selectedMatch, null, category);
       
       // Update conversation context (with fallback intent)
       const entities = extractEntities(query);

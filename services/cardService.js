@@ -1,6 +1,138 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { getCardById } from './cardDatabase/cardCatalogService';
 
+const DEMO_USER_ID = 'demo-user';
+
+const BASE_DEMO_CARDS = [
+  {
+    id: 'demo-card-1',
+    user_id: DEMO_USER_ID,
+    card_name: 'American Express® Gold Card',
+    nickname: 'Amex Gold',
+    issuer: 'American Express',
+    card_network: 'Amex',
+    card_type: 'Premium Rewards',
+    apr: 18.99,
+    credit_limit: 15000,
+    current_balance: 0,
+    amount_to_pay: 0,
+    annual_fee: 250,
+    statement_close_day: 5,
+    payment_due_day: 25,
+    grace_period_days: 20,
+    payment_due_date: '2025-11-25',
+    statement_cycle_start: '2025-11-06',
+    statement_cycle_end: '2025-12-05',
+    reward_structure: {
+      // Phase 2: All 14 categories
+      dining: 4,
+      groceries: 1,
+      gas: 1,
+      travel: 1,
+      entertainment: 1,
+      streaming: 1,
+      drugstores: 1,
+      home_improvement: 1,
+      department_stores: 1,
+      transit: 1,
+      utilities: 1,
+      warehouse: 1,
+      office_supplies: 1,
+      insurance: 1,
+      default: 1
+    },
+    created_at: '2025-01-15T12:00:00Z',
+    updated_at: '2025-11-01T12:00:00Z',
+    is_manual_entry: true
+  },
+  {
+    id: 'demo-card-2',
+    user_id: DEMO_USER_ID,
+    card_name: 'Chase Sapphire Preferred®',
+    nickname: 'Chase Sapphire',
+    issuer: 'Chase',
+    card_network: 'Visa',
+    card_type: 'Travel Rewards',
+    apr: 22.74,
+    credit_limit: 25000,
+    current_balance: 0,
+    amount_to_pay: 0,
+    annual_fee: 95,
+    statement_close_day: 12,
+    payment_due_day: 7,
+    grace_period_days: 25,
+    payment_due_date: '2025-12-07',
+    statement_cycle_start: '2025-11-12',
+    statement_cycle_end: '2025-12-12',
+    reward_structure: {
+      // Phase 2: All 14 categories
+      dining: 3,
+      groceries: 1,
+      gas: 1,
+      travel: 5,
+      entertainment: 2,
+      streaming: 1,
+      drugstores: 1,
+      home_improvement: 1,
+      department_stores: 1,
+      transit: 3,
+      utilities: 1,
+      warehouse: 1,
+      office_supplies: 1,
+      insurance: 1,
+      default: 1
+    },
+    created_at: '2025-02-10T12:00:00Z',
+    updated_at: '2025-10-28T12:00:00Z',
+    is_manual_entry: true
+  },
+  {
+    id: 'demo-card-3',
+    user_id: DEMO_USER_ID,
+    card_name: 'Citi Custom Cash Card®',
+    nickname: 'Citi Custom Cash',
+    issuer: 'Citi',
+    card_network: 'Mastercard',
+    card_type: 'Cashback',
+    apr: 19.99,
+    credit_limit: 12000,
+    current_balance: 0,
+    amount_to_pay: 0,
+    annual_fee: 0,
+    statement_close_day: 20,
+    payment_due_day: 15,
+    grace_period_days: 25,
+    payment_due_date: '2025-12-15',
+    statement_cycle_start: '2025-11-20',
+    statement_cycle_end: '2025-12-20',
+    reward_structure: {
+      // Phase 2: All 14 categories
+      dining: 1,
+      groceries: 5,
+      gas: 4,
+      travel: 1,
+      entertainment: 1,
+      streaming: 1,
+      drugstores: 1,
+      home_improvement: 1,
+      department_stores: 1,
+      transit: 1,
+      utilities: 1,
+      warehouse: 1,
+      office_supplies: 1,
+      insurance: 1,
+      default: 1
+    },
+    created_at: '2025-03-18T12:00:00Z',
+    updated_at: '2025-11-03T12:00:00Z',
+    is_manual_entry: true
+  }
+];
+
+let demoCardStore = [...BASE_DEMO_CARDS];
+
+const cloneDemoCards = (cards) => cards.map(card => ({ ...card, reward_structure: { ...(card.reward_structure || {}) } }));
+
 /**
  * Card Service - Handles all credit card database operations
  *
@@ -21,14 +153,31 @@ import { getCardById } from './cardDatabase/cardCatalogService';
  * @returns {Promise<Object>} Created card object
  */
 export const addCard = async (cardData) => {
-  if (!isSupabaseConfigured()) {
-    console.log('[Vitta] Supabase not configured - demo mode');
-    return {
-      id: 'demo-' + Date.now(),
+  if (cardData.user_id === DEMO_USER_ID) {
+    const newCard = {
+      id: 'demo-card-' + Date.now(),
       ...cardData,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_manual_entry: true,
       isDemoMode: true
     };
+    demoCardStore = [newCard, ...demoCardStore];
+    return { ...newCard };
+  }
+
+  if (!isSupabaseConfigured()) {
+    console.log('[Vitta] Supabase not configured - demo mode');
+    const newCard = {
+      id: 'demo-card-' + Date.now(),
+      ...cardData,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_manual_entry: true,
+      isDemoMode: true
+    };
+    demoCardStore = [newCard, ...demoCardStore];
+    return { ...newCard };
   }
 
   try {
@@ -60,6 +209,11 @@ export const addCard = async (cardData) => {
  * @returns {Promise<Array>} Array of card objects
  */
 export const getUserCards = async (userId) => {
+  if (userId === DEMO_USER_ID) {
+    console.log('[Vitta] Returning demo cards for demo user');
+    return cloneDemoCards(demoCardStore.filter(card => card.user_id === DEMO_USER_ID));
+  }
+
   if (!isSupabaseConfigured()) {
     console.log('[Vitta] Supabase not configured - demo mode');
     return [];
@@ -93,9 +247,34 @@ export const getUserCards = async (userId) => {
  * @returns {Promise<Object>} Updated card object
  */
 export const updateCard = async (cardId, updates) => {
+  const cardInDemoStore = demoCardStore.find(card => card.id === cardId);
+  if (cardInDemoStore) {
+    const updated = {
+      ...cardInDemoStore,
+      ...updates,
+      updated_at: new Date().toISOString(),
+      isDemoMode: true
+    };
+    demoCardStore = demoCardStore.map(card => card.id === cardId ? updated : card);
+    return { ...updated };
+  }
+
   if (!isSupabaseConfigured()) {
     console.log('[Vitta] Supabase not configured - demo mode');
-    return { id: cardId, ...updates, isDemoMode: true };
+    const index = demoCardStore.findIndex(card => card.id === cardId);
+    if (index === -1) {
+      return { id: cardId, ...updates, isDemoMode: true };
+    }
+
+    const updated = {
+      ...demoCardStore[index],
+      ...updates,
+      updated_at: new Date().toISOString(),
+      isDemoMode: true
+    };
+
+    demoCardStore[index] = updated;
+    return { ...updated };
   }
 
   try {
@@ -128,6 +307,11 @@ export const updateCard = async (cardId, updates) => {
  * @returns {Promise<boolean>} True if deleted successfully
  */
 export const deleteCard = async (cardId) => {
+  if (demoCardStore.some(card => card.id === cardId)) {
+    demoCardStore = demoCardStore.filter(card => card.id !== cardId);
+    return true;
+  }
+
   if (!isSupabaseConfigured()) {
     console.log('[Vitta] Supabase not configured - demo mode');
     return true;
