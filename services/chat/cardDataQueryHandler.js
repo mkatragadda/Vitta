@@ -613,13 +613,21 @@ const listAllCards = (cards) => {
 };
 
 const listCardsWithBalance = (cards, totalCards) => {
-  let response = `**Cards with Balances** (${cards.length} of ${totalCards} total cards):\n\n`;
+  // Double-check: Filter out any $0 balance cards that might have slipped through
+  // This ensures we only show cards with actual balances
+  const cardsWithBalance = cards.filter(c => (c.current_balance || 0) > 0);
+  
+  if (cardsWithBalance.length === 0) {
+    return "✅ **Great news!** All your cards are paid off. You don't have any cards with balances.\n\nAll your cards show $0.00 balance. Keep it up! 🎉";
+  }
+  
+  let response = `**Cards with Balances** (${cardsWithBalance.length} of ${totalCards} total cards):\n\n`;
 
   response += '| Card | Balance | Limit | APR | Utilization |\n';
   response += '|------|---------|-------|-----|-------------|\n';
 
   // Sort by balance (highest first)
-  const sorted = [...cards].sort((a, b) => (b.current_balance || 0) - (a.current_balance || 0));
+  const sorted = [...cardsWithBalance].sort((a, b) => (b.current_balance || 0) - (a.current_balance || 0));
 
   sorted.forEach((card) => {
     const util = Math.round((card.current_balance / card.credit_limit) * 100);
@@ -634,14 +642,14 @@ const listCardsWithBalance = (cards, totalCards) => {
     response += `| ${cardName} | ${balance} | ${limit} | ${apr} | ${utilization} |\n`;
   });
 
-  const totalBalance = cards.reduce((sum, c) => sum + (c.current_balance || 0), 0);
-  const totalLimit = cards.reduce((sum, c) => sum + (c.credit_limit || 0), 0);
-  const overallUtil = Math.round((totalBalance / totalLimit) * 100);
+  const totalBalance = cardsWithBalance.reduce((sum, c) => sum + (c.current_balance || 0), 0);
+  const totalLimit = cardsWithBalance.reduce((sum, c) => sum + (c.credit_limit || 0), 0);
+  const overallUtil = totalLimit > 0 ? Math.round((totalBalance / totalLimit) * 100) : 0;
 
   response += `\n**Summary:**`;
   response += `\n• Total balance: $${totalBalance.toLocaleString()}`;
   response += `\n• Average utilization: ${overallUtil}%`;
-  response += `\n• ${totalCards - cards.length} card${totalCards - cards.length !== 1 ? 's are' : ' is'} paid off`;
+  response += `\n• ${totalCards - cardsWithBalance.length} card${totalCards - cardsWithBalance.length !== 1 ? 's are' : ' is'} paid off`;
 
   response += `\n\nView all cards in [My Wallet](vitta://navigate/cards)`;
   return response.trim();
