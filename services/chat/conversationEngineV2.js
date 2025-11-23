@@ -18,6 +18,9 @@ import { handleRememberMemory } from './memoryHandler.js';
 import { formatMultiStrategyRecommendations } from '../recommendations/recommendationFormatter.js';
 import { getAllStrategies } from '../recommendations/recommendationStrategies.js';
 
+// Phase 6: Initialize FeedbackLoop for feedback collection
+let feedbackLoop = null;
+
 // Similarity thresholds for intent matching
 const THRESHOLDS = {
   HIGH_CONFIDENCE: 0.87,
@@ -31,8 +34,8 @@ const CRITICAL_INTENTS = new Set([
   'query_card_data',  // Simple data queries can use templates
   'card_recommendation', // Preserve structured multi-strategy layout without GPT reformatting
   'remember_memory',
-  'recall_memory'
-  // 'split_payment' - removed to allow GPT formatting for better UX
+  'recall_memory',
+  'split_payment' // Preserve complete payment split table with ALL cards - GPT truncates long tables
   // 'payment_optimizer' - removed to allow personalized responses
   // 'debt_guidance_plan' - removed to allow conversational advice
 ]);
@@ -100,6 +103,45 @@ function applyIntentHeuristics(query, topMatch) {
     });
 
     return adjusted;
+  }
+
+  // Override card_recommendation → query_card_data for data queries
+  // Patterns: "lowest/highest balance/APR" with network/issuer filters
+  if (topMatch.intent_id === 'card_recommendation') {
+    const dataQueryPatterns = [
+      /\b(lowest|highest|smallest|largest|maximum|minimum)\s+(balance|apr|interest|rate|limit|utilization)\b/i,
+      /\b(balance|apr|interest|rate|limit|utilization).*(lowest|highest|smallest|largest|maximum|minimum)\b/i,
+      /\b(show|list|find|give me|tell me|what is).*(balance|apr|interest|rate|limit|utilization)\b/i
+    ];
+    
+    const networkIssuerPatterns = [
+      /\b(visa|mastercard|amex|discover|american express)\s+card/i,
+      /\b(chase|citi|capital one|american express|bank of america|wells fargo)\s+card/i,
+      /\bmaster\s*card/i,
+      /\bvisa\s+card/i
+    ];
+    
+    const isDataQuery = dataQueryPatterns.some(pattern => pattern.test(lowerQuery));
+    const hasNetworkIssuerFilter = networkIssuerPatterns.some(pattern => pattern.test(lowerQuery));
+    
+    // Override if it's clearly a data query, especially with network/issuer filters
+    if (isDataQuery || hasNetworkIssuerFilter) {
+      const adjusted = {
+        ...topMatch,
+        intent_id: 'query_card_data',
+        similarity: Math.max(topMatch.similarity || 0, THRESHOLDS.HIGH_CONFIDENCE),
+        heuristic: 'data_query_override'
+      };
+
+      console.log('[ConversationEngineV2] Heuristic override → query_card_data', {
+        originalIntent: topMatch.intent_id,
+        similarity: topMatch.similarity?.toFixed(3),
+        adjustedSimilarity: adjusted.similarity.toFixed(3),
+        reason: isDataQuery ? 'data_query_pattern' : 'network_issuer_filter'
+      });
+
+      return adjusted;
+    }
   }
 
   return topMatch;
@@ -182,7 +224,8 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
       const budget = entities.amount || 1000; // Default budget
       const splitEntities = { amount: budget };
       
-      response = generateResponse(classification, splitEntities, userData, context);
+      // Phase 6: Now async due to pattern learning integration
+      response = await generateResponse(classification, splitEntities, userData, context);
       
       await logIntentDetection(rewritten, intent, 0.85, 'direct_route', userData.user_id);
     }
@@ -191,7 +234,8 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
       const { generateResponse } = await import('./responseGenerator.js');
       const classification = { intent: 'split_payment' };
       
-      response = generateResponse(classification, entities, userData, context);
+      // Phase 6: Now async due to pattern learning integration
+      response = await generateResponse(classification, entities, userData, context);
       
       await logIntentDetection(rewritten, intent, 0.85, 'direct_route', userData.user_id);
     }
@@ -205,8 +249,9 @@ async function handleDirectRoute(rewriteResult, userData, context, conversationC
     }
     else if (intent === 'query_card_data') {
       // Card data follow-ups
+      // Phase 6: Now async due to pattern matching
       const { handleCardDataQuery } = await import('./cardDataQueryHandler.js');
-      response = handleCardDataQuery(userData.cards || [], entities, rewritten);
+      response = await handleCardDataQuery(userData.cards || [], entities, rewritten);
       
       await logIntentDetection(rewritten, intent, 0.80, 'direct_route', userData.user_id);
     }
@@ -247,7 +292,8 @@ async function executeIntentWithSlots(readyIntent, userData, context, slotFillin
         const classification = { intent: 'split_payment' };
         const entities = { amount: slots.budget };
         
-        const response = generateResponse(classification, entities, userData, context);
+        // Phase 6: Now async due to pattern learning integration
+        const response = await generateResponse(classification, entities, userData, context);
         
         await logIntentDetection(`split $${slots.budget} payment`, intent, 0.95, 'slot_filled', userData.user_id);
         return response;
@@ -550,12 +596,8 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Get structured data from local intent handler
       const entities = extractEntities(query);
       const classification = { intent: selectedMatch.intent_id };
-      let localResponse = generateResponse(classification, entities, userData, handlerContext);
-
-      // Handle async responses (e.g., from recommendation handler)
-      if (localResponse instanceof Promise) {
-        localResponse = await localResponse;
-      }
+      // Phase 6: Now async due to pattern learning integration
+      let localResponse = await generateResponse(classification, entities, userData, handlerContext);
 
       // Handle recommendation handler response format
       if (localResponse && typeof localResponse === 'object' && localResponse.response) {
@@ -565,6 +607,12 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       if (CRITICAL_INTENTS.has(selectedMatch.intent_id)) {
         console.log('[ConversationEngineV2] Critical intent detected, returning structured response without GPT');
         const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
+        
+        // Phase 6: Track query execution for analytics (async, don't block)
+        trackQueryExecution(query, selectedMatch.intent_id, entities, localResponse, userData.user_id).catch(err => {
+          console.error('[ConversationEngineV2] Error tracking query:', err);
+        });
+        
         conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
         return response;
       }
@@ -585,12 +633,8 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       // Get structured data from local intent handler
       const entities = extractEntities(query);
       const classification = { intent: selectedMatch.intent_id };
-      let localResponse = generateResponse(classification, entities, userData, handlerContext);
-
-      // Handle async responses (e.g., from recommendation handler)
-      if (localResponse instanceof Promise) {
-        localResponse = await localResponse;
-      }
+      // Phase 6: Now async due to pattern learning integration
+      let localResponse = await generateResponse(classification, entities, userData, handlerContext);
 
       // Handle recommendation handler response format
       if (localResponse && typeof localResponse === 'object' && localResponse.response) {
@@ -600,12 +644,23 @@ export const processQuery = async (query, userData = {}, context = {}) => {
       if (CRITICAL_INTENTS.has(selectedMatch.intent_id)) {
         console.log('[ConversationEngineV2] Critical intent detected (medium confidence), returning structured response without GPT');
         const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
+        
+        // Phase 6: Track query execution for analytics (async, don't block)
+        trackQueryExecution(query, selectedMatch.intent_id, entities, localResponse, userData.user_id).catch(err => {
+          console.error('[ConversationEngineV2] Error tracking query:', err);
+        });
+        
         conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
         return response;
       }
 
       // Pass to GPT for conversational formatting
       const response = await processWithGPT(query, userData, context, selectedMatch, localResponse, category);
+      
+      // Phase 6: Track query execution for analytics (async, don't block)
+      trackQueryExecution(query, selectedMatch.intent_id, entities, response, userData.user_id).catch(err => {
+        console.error('[ConversationEngineV2] Error tracking query:', err);
+      });
       
       // Update conversation context
       conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
@@ -859,3 +914,40 @@ export const loadConversationHistory = () => {
   }
   return [];
 };
+
+/**
+ * Phase 6: Track query execution for analytics and feedback collection
+ * This function is called after successful query execution
+ * 
+ * @param {string} query - User query
+ * @param {string} intent - Detected intent
+ * @param {Object} entities - Extracted entities
+ * @param {string} response - Generated response
+ * @param {string} userId - User ID
+ * @returns {Promise<void>}
+ */
+async function trackQueryExecution(query, intent, entities, response, userId) {
+  try {
+    // Initialize FeedbackLoop if not already done
+    if (!feedbackLoop) {
+      try {
+        const { FeedbackLoop } = await import('./learning/feedbackLoop.js');
+        feedbackLoop = new FeedbackLoop({ enableProcessing: true, autoUpdatePatterns: true });
+      } catch (error) {
+        console.warn('[ConversationEngineV2] FeedbackLoop not available, feedback collection disabled:', error.message);
+        feedbackLoop = null;
+        return;
+      }
+    }
+
+    // Note: QueryAnalytics tracking is handled in QueryExecutor automatically
+    // This function is primarily for FeedbackLoop integration points
+    
+    // Future: Could track response quality metrics here
+    // For now, QueryAnalytics handles query tracking in QueryExecutor
+    
+  } catch (error) {
+    console.error('[ConversationEngineV2] Error in trackQueryExecution:', error);
+    // Don't throw - tracking shouldn't break query execution
+  }
+}

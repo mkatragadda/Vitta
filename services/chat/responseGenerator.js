@@ -13,8 +13,9 @@ import { handleRememberMemory, handleRecallMemory } from './memoryHandler.js';
 
 /**
  * Generate response based on classified intent
+ * Phase 6: Now async due to pattern learning integration
  */
-export const generateResponse = (classification, entities, userData, context) => {
+export const generateResponse = async (classification, entities, userData, context) => {
   const { intent, intentData } = classification;
   const { cards = [] } = userData;
 
@@ -24,7 +25,8 @@ export const generateResponse = (classification, entities, userData, context) =>
   switch (intent) {
     case 'query_card_data':
       // Smart handler that answers ANY card-related question
-      return handleCardDataQuery(cards, entities, context?.lastQuery || '');
+      // Phase 6: Now async due to pattern matching and analytics
+      return await handleCardDataQuery(cards, entities, context?.lastQuery || '');
 
     case 'card_recommendation':
       // AI Financial Coach for card recommendations
@@ -184,7 +186,8 @@ const handleOptimizePayments = (cards) => {
   return `Let's optimize your payments! The [Payment Optimizer](vitta://navigate/optimizer) will show you the best strategy to minimize interest and pay down debt faster across your ${cards.length} card${cards.length > 1 ? 's' : ''}.`;
 };
 
-const handleSplitPayment = (cards, entities) => {
+// Export for testing
+export const handleSplitPayment = (cards, entities) => {
   if (!cards || cards.length === 0) {
     return "Add cards to your wallet first, then I can help split your payment!";
   }
@@ -204,14 +207,20 @@ const handleSplitPayment = (cards, entities) => {
     min: c.amount_to_pay || 0
   }));
 
+  // Calculate total balance across all cards
+  const totalBalance = paymentCards.reduce((sum, c) => sum + (c.balance || 0), 0);
+
+  // Check if all cards have zero balance
+  if (totalBalance === 0) {
+    return `✅ **Great news!** All your cards are paid off.\n\nThere's nothing to split right now since all your cards have $0.00 balances.\n\n**What you can do:**\n• Save your $${budget.toLocaleString()} for future expenses\n• Keep building good credit by using your cards responsibly\n• Check back when you have balances to optimize\n\nWhen you do have balances, I'll help you split payments to minimize interest!`;
+  }
+
   // Calculate minimum payments
   const totalMin = paymentCards.reduce((sum, c) => sum + Math.min(c.min, c.balance), 0);
 
-  if (budget < totalMin) {
-    return `⚠️ Your budget of $${budget.toLocaleString()} is less than the minimum payments required ($${totalMin.toLocaleString()}).\n\nYou need at least $${totalMin.toLocaleString()} to cover minimum payments on all cards.`;
-  }
-
-  const remaining = budget - totalMin;
+  // Check if budget is insufficient (warning but still show partial split)
+  const budgetInsufficient = budget < totalMin;
+  const remaining = Math.max(0, budget - totalMin);
 
   // Calculate APR-weighted distribution for remaining budget
   const targets = paymentCards.map(c => ({
@@ -221,23 +230,45 @@ const handleSplitPayment = (cards, entities) => {
 
   const totalApr = targets.reduce((sum, c) => sum + c.apr, 0) || 1;
 
-  // Calculate allocations
-  const allocations = paymentCards.map(c => ({
-    id: c.id,
-    name: c.name,
-    pay: Math.min(c.min, c.balance),
-    minPay: Math.min(c.min, c.balance),
-    balance: c.balance,
-    apr: c.apr
-  }));
-
-  if (remaining > 0 && targets.length > 0) {
-    targets.forEach(t => {
-      const share = (t.apr / totalApr) * remaining;
-      const extra = Math.min(share, t.remainingAfterMin);
-      const idx = allocations.findIndex(a => a.id === t.id);
-      allocations[idx].pay += extra;
+  // Calculate allocations - initialize with minimums (or proportional split if budget insufficient)
+  let allocations;
+  
+  if (budgetInsufficient) {
+    // When budget < totalMin, distribute available budget proportionally by minimum payment amount
+    // Cards with higher minimums get proportionally more
+    const totalMinimums = paymentCards.reduce((sum, c) => sum + Math.min(c.min, c.balance), 0) || 1;
+    allocations = paymentCards.map(c => {
+      const minAmount = Math.min(c.min, c.balance);
+      const proportionalShare = (minAmount / totalMinimums) * budget;
+      return {
+        id: c.id,
+        name: c.name,
+        pay: Math.min(proportionalShare, c.balance), // Can't pay more than balance
+        minPay: minAmount,
+        balance: c.balance,
+        apr: c.apr
+      };
     });
+  } else {
+    // Normal flow: start with minimums, then distribute extra
+    allocations = paymentCards.map(c => ({
+      id: c.id,
+      name: c.name,
+      pay: Math.min(c.min, c.balance),
+      minPay: Math.min(c.min, c.balance),
+      balance: c.balance,
+      apr: c.apr
+    }));
+
+    // Distribute remaining budget to cards with highest APR
+    if (remaining > 0 && targets.length > 0 && totalApr > 0) {
+      targets.forEach(t => {
+        const share = (t.apr / totalApr) * remaining;
+        const extra = Math.min(share, t.remainingAfterMin);
+        const idx = allocations.findIndex(a => a.id === t.id);
+        allocations[idx].pay += extra;
+      });
+    }
   }
 
   // Calculate interest savings
@@ -260,29 +291,50 @@ const handleSplitPayment = (cards, entities) => {
 
   // Generate response
   let response = `**💰 Payment Split for ${currency(budget)}**\n\n`;
-  response += `You need at least ${currency(totalMin)} to cover minimum payments on all cards. Here's the optimized split:\n\n`;
+  
+  if (budgetInsufficient) {
+    response += `⚠️ **Warning:** Your budget of ${currency(budget)} is less than the minimum payments required (${currency(totalMin)}).\n\n`;
+    response += `Here's a proportional split of what you can afford:\n\n`;
+  } else {
+    response += `You need at least ${currency(totalMin)} to cover minimum payments on all cards. Here's the optimized split:\n\n`;
+  }
 
   response += `| Card | Current Balance | Minimum Payment | Pay This Month | Remaining Balance |\n`;
   response += `| --- | ---:| ---:| ---:| ---:|\n`;
 
-  allocations.forEach(a => {
-    const remainingBalance = Math.max(0, a.balance - a.pay);
-    response += `| ${a.name} | ${currency(a.balance)} | ${currency(a.minPay)} | ${currency(a.pay)} | ${currency(remainingBalance)} |\n`;
+  // Show ALL cards (including zero balance ones) - allocations already contains all cards
+  allocations.forEach(allocation => {
+    const remainingBalance = Math.max(0, allocation.balance - allocation.pay);
+    response += `| ${allocation.name} | ${currency(allocation.balance)} | ${currency(allocation.minPay)} | ${currency(allocation.pay)} | ${currency(remainingBalance)} |\n`;
   });
 
-  response += `\n**Totals**: Pay ${currency(totalPay)} this cycle (Budget remaining: ${currency(budgetRemaining)}).`;
+  response += `\n**Summary**: Processing ${allocations.length} card${allocations.length !== 1 ? 's' : ''} - Pay ${currency(totalPay)} this cycle`;
+  if (budgetRemaining > 0.01) {
+    response += ` (Budget remaining: ${currency(budgetRemaining)})`;
+  }
+  if (budgetInsufficient) {
+    const shortfall = totalMin - totalPay;
+    response += `\n\n**Shortfall**: You're ${currency(shortfall)} short of covering all minimum payments.`;
+  }
+  response += `.`;
 
   if (saved > 0) {
     response += `\n\n✅ **Estimated interest saved this month:** ${currency(saved)}`;
   }
 
   response += `\n\n**Next Steps:**\n`;
-  response += `1. Make these payments to cover minimums and reduce high-APR balances.\n`;
-  if (budgetRemaining > 0.01) {
-    response += `2. Apply the remaining ${currency(budgetRemaining)} toward the highest APR balance for additional savings.\n`;
+  if (budgetInsufficient) {
+    response += `1. ⚠️ **Priority**: Try to secure ${currency(totalMin - budget)} more to cover all minimum payments and avoid late fees.\n`;
+    response += `2. Make these proportional payments to minimize impact on your credit.\n`;
     response += `3. Track progress in [Payment Optimizer](vitta://navigate/optimizer) for ongoing adjustments.`;
   } else {
-    response += `2. Track progress in [Payment Optimizer](vitta://navigate/optimizer) for ongoing adjustments.`;
+    response += `1. Make these payments to cover minimums and reduce high-APR balances.\n`;
+    if (budgetRemaining > 0.01) {
+      response += `2. Apply the remaining ${currency(budgetRemaining)} toward the highest APR balance for additional savings.\n`;
+      response += `3. Track progress in [Payment Optimizer](vitta://navigate/optimizer) for ongoing adjustments.`;
+    } else {
+      response += `2. Track progress in [Payment Optimizer](vitta://navigate/optimizer) for ongoing adjustments.`;
+    }
   }
 
   return response.trim();
