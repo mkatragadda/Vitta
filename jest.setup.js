@@ -6,6 +6,58 @@
 // Mock environment variables if needed
 process.env.NODE_ENV = 'test';
 
+// Mock IndexedDB for Node.js environment
+const {
+  indexedDB,
+  IDBKeyRange,
+  IDBCursor,
+  IDBCursorWithValue,
+  IDBDatabase,
+  IDBFactory,
+  IDBIndex,
+  IDBObjectStore,
+  IDBOpenDBRequest,
+  IDBRequest,
+  IDBTransaction,
+  IDBVersionChangeEvent,
+} = require('fake-indexeddb');
+
+if (typeof global !== 'undefined' && !global.indexedDB) {
+  global.indexedDB = indexedDB;
+  global.IDBKeyRange = IDBKeyRange;
+  global.IDBCursor = IDBCursor;
+  global.IDBCursorWithValue = IDBCursorWithValue;
+  global.IDBDatabase = IDBDatabase;
+  global.IDBFactory = IDBFactory;
+  global.IDBIndex = IDBIndex;
+  global.IDBObjectStore = IDBObjectStore;
+  global.IDBOpenDBRequest = IDBOpenDBRequest;
+  global.IDBRequest = IDBRequest;
+  global.IDBTransaction = IDBTransaction;
+  global.IDBVersionChangeEvent = IDBVersionChangeEvent;
+}
+
+// Mock navigator for offline tests
+if (typeof global.navigator === 'undefined') {
+  global.navigator = {
+    onLine: true,
+  };
+} else if (!global.navigator.onLine) {
+  global.navigator.onLine = true;
+}
+
+// Mock fetch if not available
+if (!global.fetch) {
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve(''),
+    })
+  );
+}
+
 // Global test utilities
 global.console = {
   ...console,
