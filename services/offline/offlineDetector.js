@@ -65,30 +65,33 @@ class OfflineDetector {
     this.notify('sync:start')
 
     try {
-      const messages = await dbManager.getPendingMessages()
-      const payments = await dbManager.getPendingPayments()
+      // Dynamically import syncManager to avoid circular dependencies
+      const { getSyncManager } = await import('../sync/syncManager.js')
+      const syncManager = getSyncManager()
 
-      console.log(`[OfflineDetector] Found ${messages.length} pending messages`)
-      console.log(`[OfflineDetector] Found ${payments.length} pending payments`)
+      console.log(`[OfflineDetector] Triggering sync for ${syncManager.getQueueLength()} queued operations`)
 
       // Log sync attempt
       await dbManager.addSyncLog({
         action: 'auto_sync',
         status: 'started',
-        messageCount: messages.length,
-        paymentCount: payments.length,
+        operationCount: syncManager.getQueueLength(),
       })
 
-      // Here you would call syncManager to sync all pending operations
-      // For now, just log it
-      this.notify('sync:end', { success: true, messages, payments })
+      // Process the queue
+      const syncResult = await syncManager.processQueue()
 
+      console.log(`[OfflineDetector] Sync complete: ${syncResult.succeeded} succeeded, ${syncResult.failed} failed`)
+
+      // Log sync completion
       await dbManager.addSyncLog({
         action: 'auto_sync',
         status: 'completed',
-        messageCount: messages.length,
-        paymentCount: payments.length,
+        succeeded: syncResult.succeeded,
+        failed: syncResult.failed,
       })
+
+      this.notify('sync:end', { success: syncResult.failed === 0, result: syncResult })
     } catch (error) {
       console.error('[OfflineDetector] Sync failed:', error)
 

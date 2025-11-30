@@ -2,6 +2,7 @@
  * Conversation Engine V2 - Embedding-Based Intent Detection
  * Uses OpenAI embeddings + vector similarity search for intent detection
  * Enhanced with user profile context for personalized responses
+ * Supports offline message queuing via SyncManager
  */
 
 import { getCachedEmbedding, findSimilarIntents, logIntentDetection } from '../embedding/embeddingService.js';
@@ -17,6 +18,20 @@ import { getSlotFillingState } from './slotFillingManager.js';
 import { handleRememberMemory } from './memoryHandler.js';
 import { formatMultiStrategyRecommendations } from '../recommendations/recommendationFormatter.js';
 import { getAllStrategies } from '../recommendations/recommendationStrategies.js';
+
+// Phase 3: Import sync manager for offline message queuing
+let syncManager = null;
+async function getSyncManager() {
+  if (!syncManager && typeof window !== 'undefined') {
+    try {
+      const { getSyncManager: getSM } = await import('../sync/syncManager.js');
+      syncManager = getSM();
+    } catch (error) {
+      console.warn('[ConversationEngineV2] Failed to load syncManager:', error.message);
+    }
+  }
+  return syncManager;
+}
 
 // Phase 6: Initialize FeedbackLoop for feedback collection
 let feedbackLoop = null;
@@ -442,6 +457,29 @@ Respond with ONLY the category name: TASK, GUIDANCE, or CHAT`
  */
 export const processQuery = async (query, userData = {}, context = {}) => {
   console.log('[ConversationEngineV2] Processing query:', query);
+
+  // Phase 3: Check if offline and queue message if needed
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    console.log('[ConversationEngineV2] User is offline, queuing message');
+    const sm = await getSyncManager();
+    if (sm) {
+      const operationId = sm.addToQueue({
+        type: 'message',
+        data: {
+          message: query,
+          timestamp: Date.now(),
+          userId: userData.user_id
+        }
+      });
+
+      return {
+        queued: true,
+        operationId,
+        message: '📤 Message queued! I\'ll send this when you\'re back online.',
+        intent: 'message_queued'
+      };
+    }
+  }
 
   try {
     // STEP 0A: Check if user is answering a pending question (slot-filling)

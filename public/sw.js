@@ -10,7 +10,7 @@
  * - OpenAI API: Network-Only (never cache AI responses)
  */
 
-const CACHE_VERSION = 'vitta-v1'
+const CACHE_VERSION = 'vitta-v2'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`
 const IMAGE_CACHE = `${CACHE_VERSION}-images`
@@ -103,12 +103,12 @@ self.addEventListener('fetch', (event) => {
   if (isStaticAsset(url.pathname)) {
     // Static assets: Cache-first
     event.respondWith(cacheFirstStrategy(event.request))
+  } else if (url.pathname.startsWith('/api/chat/') || url.pathname.startsWith('/api/embeddings') || url.host === 'api.openai.com') {
+    // OpenAI API: Network-only (check this BEFORE general /api/ routes)
+    event.respondWith(networkOnlyStrategy(event.request))
   } else if (url.pathname.startsWith('/api/')) {
     // API calls: Network-first
     event.respondWith(networkFirstStrategy(event.request))
-  } else if (url.pathname.startsWith('/api/chat/') || url.host === 'api.openai.com') {
-    // OpenAI API: Network-only
-    event.respondWith(networkOnlyStrategy(event.request))
   } else if (isImage(url.pathname)) {
     // Images: Cache-first with size limit
     event.respondWith(cacheFirstImages(event.request))
