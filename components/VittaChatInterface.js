@@ -331,9 +331,9 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4 bg-white">
+      <div className="border-t border-gray-200 p-3 md:p-4 bg-white sticky bottom-0 z-40">
         <div className="max-w-3xl mx-auto">
-          <div className="flex gap-3 items-end">
+          <div className="relative">
             <textarea
               ref={textareaRef}
               value={input}
@@ -342,16 +342,16 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               placeholder="Ask me about your cards, payments, or which card to use..."
               rows={1}
               wrap="soft"
-              className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40"
+              className="w-full p-3 pr-12 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40 text-sm md:text-base"
               disabled={isLoading}
             />
             <button
               onClick={handleSendMessage}
               disabled={!input.trim() || isLoading}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
+              title="Send message"
             >
               <Send className="w-4 h-4" />
-              Send
             </button>
           </div>
         </div>
