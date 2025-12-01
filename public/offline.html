@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#6366f1">
+    <title>Offline - Vitta</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+            max-width: 500px;
+            padding: 40px 30px;
+            text-align: center;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .icon {
+            width: 80px;
+            height: 80px;
+            background: #fee2e2;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 40px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #1f2937;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 28px;
+            text-align: left;
+        }
+
+        .info-box h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 12px;
+        }
+
+        .info-box ul {
+            list-style: none;
+            font-size: 13px;
+            color: #1e3a8a;
+            line-height: 1.8;
+        }
+
+        .info-box li {
+            margin-bottom: 8px;
+        }
+
+        .info-box li:before {
+            content: '✓ ';
+            color: #16a34a;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 16px;
+        }
+
+        .status.online {
+            color: #16a34a;
+        }
+
+        .status.offline {
+            color: #dc2626;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f4f6;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .features {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .features h4 {
+            font-size: 12px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .feature-list {
+            list-style: none;
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.8;
+        }
+
+        .feature-list li:before {
+            content: '• ';
+            color: #d1d5db;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">📱</div>
+
+        <h1>You're Offline</h1>
+        <p class="subtitle">It looks like you've lost your internet connection. Your changes will be saved automatically when you're back online.</p>
+
+        <div class="info-box">
+            <h3>What you can do while offline:</h3>
+            <ul>
+                <li>View your saved cards and chat history</li>
+                <li>Compose messages (they'll send when online)</li>
+                <li>Review payment recommendations</li>
+                <li>Check your spending insights</li>
+            </ul>
+        </div>
+
+        <button class="button" onclick="goToApp()">Go to App</button>
+
+        <p class="status offline">
+            <span class="spinner"></span>Waiting for connection...
+        </p>
+
+        <div class="features">
+            <h4>Pro Tips</h4>
+            <ul class="feature-list">
+                <li>Your work is automatically saved</li>
+                <li>No data loss when you reconnect</li>
+                <li>Message queue syncs automatically</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Check connection status
+        function checkConnection() {
+            const status = document.querySelector('.status')
+            if (navigator.onLine) {
+                status.textContent = '✓ You\'re back online!'
+                status.className = 'status online'
+                // Redirect after 2 seconds
+                setTimeout(() => {
+                    window.location.href = '/'
+                }, 2000)
+            } else {
+                status.innerHTML = '<span class="spinner"></span>Waiting for connection...'
+                status.className = 'status offline'
+            }
+        }
+
+        function goToApp() {
+            window.location.href = '/'
+        }
+
+        // Check connection on load
+        checkConnection()
+
+        // Listen for online/offline events
+        window.addEventListener('online', checkConnection)
+        window.addEventListener('offline', checkConnection)
+
+        // Periodic check (every 5 seconds)
+        setInterval(checkConnection, 5000)
+    </script>
+</body>
+</html>

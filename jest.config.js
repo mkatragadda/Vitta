@@ -12,8 +12,8 @@ const createJestConfig = nextJest({
 
 // Add any custom config to be passed to Jest
 const customJestConfig = {
-  // Test environment
-  testEnvironment: 'node',
+  // Test environment - use jsdom for React component testing
+  testEnvironment: 'jsdom',
 
   // Setup files
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],

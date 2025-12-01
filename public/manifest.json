@@ -1,0 +1,37 @@
+{
+  "name": "Vitta - Smart Credit Card Assistant",
+  "short_name": "Vitta",
+  "description": "Your intelligent credit card platform. AI-powered insights for card optimization and payment strategy.",
+  "start_url": "/?utm_source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "dir": "ltr",
+  "lang": "en",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Chat with Vitta",
+      "short_name": "Chat",
+      "description": "Start a new chat conversation",
+      "url": "/?screen=chat&utm_source=pwa-shortcut"
+    },
+    {
+      "name": "Payment Strategy",
+      "short_name": "Payments",
+      "description": "View payment recommendations",
+      "url": "/?screen=optimizer&utm_source=pwa-shortcut"
+    }
+  ]
+}

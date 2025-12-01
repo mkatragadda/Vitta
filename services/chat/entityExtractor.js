@@ -177,7 +177,16 @@ export const extractEntities = (query) => {
     queryType: null,    // 'comparison', 'listing', 'recommendation', 'timeframe', 'calculation'
     attribute: null,    // 'apr', 'balance', 'due_date', 'credit_limit', 'rewards', 'utilization'
     modifier: null,     // 'lowest', 'highest', 'best', 'worst', 'total', 'average'
-    action: null        // 'show', 'list', 'find', 'calculate', 'compare'
+    action: null,       // 'show', 'list', 'find', 'calculate', 'compare'
+    balanceFilter: null, // 'with_balance', 'zero_balance', 'no_balance' - filter cards by balance status
+    networkValue: null, // 'Visa', 'Mastercard', 'Amex', 'Discover' - extracted network value for filtering
+    issuerValue: null,  // 'Chase', 'Citi', etc. - extracted issuer value for filtering
+    
+    // Phase 2: Query system entities
+    distinctQuery: null,      // { isDistinct: boolean, field: string | null }
+    compoundOperators: null,  // { logicalOperators: string[] }
+    grouping: null,           // { groupBy: string | null }
+    aggregation: null         // { operation: string, field: string | null }
   };
 
   console.log('[EntityExtractor] Extracting from:', query);
@@ -207,6 +216,15 @@ export const extractEntities = (query) => {
   entities.attribute = extractAttribute(query, doc);
   entities.modifier = extractModifier(query, doc);
   entities.action = extractAction(query, doc);
+  entities.balanceFilter = extractBalanceFilter(query, doc);
+  entities.networkValue = extractNetworkValue(query, doc);
+  entities.issuerValue = extractIssuerValue(query, doc);
+
+  // Phase 2: Extract query system entities
+  entities.distinctQuery = extractDistinctIndicator(query, doc);
+  entities.compoundOperators = extractCompoundOperators(query, doc);
+  entities.grouping = extractGrouping(query, doc);
+  entities.aggregation = extractAggregationOperation(query, doc);
 
   console.log('[EntityExtractor] Extracted entities:', entities);
 
@@ -513,48 +531,214 @@ const extractQueryType = (query, doc) => {
 
 /**
  * Extract attribute - what card property are they asking about?
+ * 
+ * Maps natural language terms to database field names.
+ * Priority order: more specific patterns first.
  */
 const extractAttribute = (query, doc) => {
   const lowerQuery = query.toLowerCase();
 
-  // APR / Interest
-  if (/\b(apr|interest|rate)\b/.test(lowerQuery)) {
-    return 'apr';
+  // Check most specific patterns FIRST (multi-word, unambiguous)
+  
+  // Grace period (very specific, check before "grace" alone or "period" alone)
+  if (/\bgrace\s+period\b/.test(lowerQuery) || /\binterest\s+free\s+days\b/.test(lowerQuery) || /\bdays\s+grace\b/.test(lowerQuery)) {
+    return 'grace_period';
   }
 
-  // Balance / Debt
-  if (/\b(balance|debt|owe|owing)\b/.test(lowerQuery)) {
-    return 'balance';
+  // Statement close (check before other "close" matches)
+  if (/\bstatement\s+close\b/.test(lowerQuery) || /\bstatement\s+cycle\s+end\b/.test(lowerQuery) || /\bstatement\s+end\b/.test(lowerQuery) ||
+      /\bwhen\s+.*statement\s+close\b/.test(lowerQuery) || /\bclose\s+date\b/.test(lowerQuery)) {
+    return 'statement_close';
   }
 
-  // Due date / Payment date
-  if (/\b(due.*date|payment.*date|when.*due)\b/.test(lowerQuery)) {
+  // Statement start (check before other "start" matches)
+  if (/\bstatement\s+start\b/.test(lowerQuery) || /\bstatement\s+cycle\s+start\b/.test(lowerQuery) || /\bcycle\s+start\b/.test(lowerQuery)) {
+    return 'statement_start';
+  }
+
+  // Payment due date (check before generic "due" or "payment")
+  if (/\bpayment\s+due\s+date\b/.test(lowerQuery) || /\bdue\s+date\b/.test(lowerQuery) || /\bwhen\s+.*due\b/.test(lowerQuery) ||
+      /\bwhen\s+.*payment\s+due\b/.test(lowerQuery) || /\bdue\s+dates?\b/.test(lowerQuery)) {
     return 'due_date';
   }
 
-  // Credit limit
-  if (/\b(credit.*limit|limit|max)\b/.test(lowerQuery)) {
+  // Payment amount (check before generic "payment")
+  if (/\bpayment\s+amount\b/.test(lowerQuery) || /\bhow\s+much\s+.*pay\b/.test(lowerQuery) || /\bminimum\s+payment\b/.test(lowerQuery) || /\bamount\s+.*pay\b/.test(lowerQuery) ||
+      /\bpayment\s+amounts?\b/.test(lowerQuery)) {
+    return 'payment_amount';
+  }
+
+  // Credit limit (specific, check before generic "limit")
+  if (/\bcredit\s+limit\b/.test(lowerQuery) || /\bmaximum\s+credit\b/.test(lowerQuery) || /\bcredit\s+limits?\b/.test(lowerQuery)) {
     return 'credit_limit';
   }
 
+  // Available credit (check before generic "available")
+  if (/\bavailable\s+credit\b/.test(lowerQuery) || /\bremaining\s+credit\b/.test(lowerQuery) || /\bfree\s+credit\b/.test(lowerQuery)) {
+    return 'available_credit';
+  }
+
+  // Card network (check before generic "network" or "payment")
+  if (/\bcard\s+network\b/.test(lowerQuery) || /\bpayment\s+network\b/.test(lowerQuery)) {
+    return 'card_network';
+  }
+
+  // Card name (check before generic "name")
+  if (/\bcard\s+name\b/.test(lowerQuery) || /\bcard\s+title\b/.test(lowerQuery) || 
+      /\bname\s+of\s+(?:my|this)\s+card\b/.test(lowerQuery) || /\bwhat\s+(?:is|was)\s+(?:the|my)\s+card\b/.test(lowerQuery)) {
+    return 'card_name';
+  }
+
+  // Card type (check before generic "type")
+  if (/\bcard\s+type\b/.test(lowerQuery) || /\bkind\s+.*card\b/.test(lowerQuery) || /\bcard\s+kind\b/.test(lowerQuery)) {
+    return 'card_type';
+  }
+
+  // Nickname (specific)
+  if (/\b(nickname|card\s+nickname|nick|alias)\b/.test(lowerQuery)) {
+    return 'nickname';
+  }
+
+  // Annual fee (check before generic "fee")
+  if (/\bannual\s+fee\b/.test(lowerQuery) || /\byearly\s+fee\b/.test(lowerQuery)) {
+    return 'annual_fee';
+  }
+
+  // APR / Interest Rate (specific terms)
+  if (/\bapr\b/.test(lowerQuery) || /\bannual\s+percentage\s+rate\b/.test(lowerQuery) || /\binterest\s+rate\b/.test(lowerQuery)) {
+    return 'apr';
+  }
+
+  // Balance / Debt (common query)
+  if (/\b(balance|balances|debt|owe|owing|outstanding)\b/.test(lowerQuery)) {
+    return 'balance';
+  }
+
   // Available credit
-  if (/\b(available|can.*spend)\b/.test(lowerQuery)) {
+  if (/\b(available.*credit|available|can.*spend|remaining.*credit|free.*credit)\b/.test(lowerQuery)) {
     return 'available_credit';
   }
 
   // Utilization
-  if (/\b(utilization|usage|percent|using)\b/.test(lowerQuery)) {
+  if (/\b(utilization|usage|percent.*used|using|credit.*usage)\b/.test(lowerQuery)) {
     return 'utilization';
   }
 
-  // Rewards
-  if (/\b(rewards?|points?|cashback|miles|cash back)\b/.test(lowerQuery)) {
+  // Less specific patterns (after specific patterns checked)
+  
+  // Utilization (specific term)
+  if (/\butilization\b/.test(lowerQuery) || (/\busage\b/.test(lowerQuery) && /\b(credit|percent)\b/.test(lowerQuery))) {
+    return 'utilization';
+  }
+
+  // Rewards (check before generic "earn")
+  if (/\b(rewards?|points?|cashback|miles|cash\s+back)\b/.test(lowerQuery) || (/\bearn\b/.test(lowerQuery) && /\b(rewards?|points?)\b/.test(lowerQuery))) {
     return 'rewards';
   }
 
-  // Payment amount
-  if (/\b(payment.*amount|how much.*pay|minimum)\b/.test(lowerQuery)) {
-    return 'payment_amount';
+  // Generic terms (lowest priority - check last)
+  // Credit limit - generic "limit"
+  if (/\blimit\b/.test(lowerQuery) && !/\bcredit\s+limit\b/.test(lowerQuery)) {
+    return 'credit_limit';
+  }
+
+  // Annual fee - generic "fee"
+  if (/\bfee\b/.test(lowerQuery) && !/\bannual\s+fee\b/.test(lowerQuery)) {
+    return 'annual_fee';
+  }
+
+  // Grace period - generic "grace"
+  if (/\bgrace\b/.test(lowerQuery) && !/\bgrace\s+period\b/.test(lowerQuery)) {
+    return 'grace_period';
+  }
+
+  // Issuer (often handled via distinct queries)
+  if (/\b(issuer|bank|banking|card\s+issuer|financial\s+institution)\b/.test(lowerQuery)) {
+    return 'issuer';
+  }
+
+  // Card network - generic "network" or network names
+  if (/\bnetwork\b/.test(lowerQuery) && !/\bcard\s+network\b/.test(lowerQuery)) {
+    return 'card_network';
+  }
+  
+  // Network names (visa, mastercard, etc.) - check last as they're often in filters, not attributes
+  if (/\b(visa|mastercard|amex|discover)\s+cards?\b/.test(lowerQuery)) {
+    return 'card_network';
+  }
+
+  return null;
+};
+
+/**
+ * Extract network value from query (Visa, Mastercard, Amex, Discover)
+ * @param {string} query - User query
+ * @param {Object} doc - NLP document
+ * @returns {string|null} - Network value (normalized) or null
+ */
+const extractNetworkValue = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+  
+  // Network name patterns (case-insensitive)
+  // Handle variations: "visa", "mastercard"/"master card"/"mastercards"/"master cards", "amex"/"american express", "discover"
+  const networkPatterns = {
+    'Visa': /\bvisa\b/i,
+    'Mastercard': /\bmaster\s*card(s)?\b/i,  // Matches "mastercard", "master card", "mastercards", "master cards"
+    'Amex': /\bamex\b/i,
+    'American Express': /\bamerican\s+express\b/i,
+    'Discover': /\bdiscover\b/i
+  };
+
+  // Check each network pattern (order matters - check American Express before Amex)
+  // First check for multi-word patterns
+  if (networkPatterns['American Express'].test(lowerQuery)) {
+    console.log('[EntityExtractor] Found network value: Amex');
+    return 'Amex';
+  }
+  
+  // Then check single-word patterns
+  for (const [network, pattern] of Object.entries(networkPatterns)) {
+    // Skip American Express (already checked above)
+    if (network === 'American Express') continue;
+    
+    if (pattern.test(lowerQuery)) {
+      console.log('[EntityExtractor] Found network value:', network);
+      return network;
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Extract issuer value from query (Chase, Citi, etc.)
+ * @param {string} query - User query
+ * @param {Object} doc - NLP document
+ * @returns {string|null} - Issuer value (normalized) or null
+ */
+const extractIssuerValue = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+  
+  // Common issuer patterns
+  const issuerPatterns = [
+    { pattern: /\bchase\b/i, value: 'Chase' },
+    { pattern: /\bciti\b/i, value: 'Citi' },
+    { pattern: /\bcitibank\b/i, value: 'Citi' },
+    { pattern: /\bamerican\s+express\b/i, value: 'American Express' },
+    { pattern: /\bamex\b/i, value: 'American Express' },
+    { pattern: /\bcapital\s+one\b/i, value: 'Capital One' },
+    { pattern: /\bdiscover\b/i, value: 'Discover' },
+    { pattern: /\bbank\s+of\s+america\b/i, value: 'Bank of America' },
+    { pattern: /\bbofa\b/i, value: 'Bank of America' },
+    { pattern: /\bwells\s+fargo\b/i, value: 'Wells Fargo' }
+  ];
+
+  // Check each issuer pattern
+  for (const { pattern, value } of issuerPatterns) {
+    if (pattern.test(lowerQuery)) {
+      console.log('[EntityExtractor] Found issuer value:', value);
+      return value;
+    }
   }
 
   return null;
@@ -568,12 +752,337 @@ const extractModifier = (query, doc) => {
 
   if (/\blowest\b/.test(lowerQuery)) return 'lowest';
   if (/\bhighest\b/.test(lowerQuery)) return 'highest';
+  if (/\blongest\b/.test(lowerQuery)) return 'highest'; // "longest grace period" = highest grace period
+  if (/\bshortest\b/.test(lowerQuery)) return 'lowest'; // "shortest grace period" = lowest grace period
   if (/\bbest\b/.test(lowerQuery)) return 'best';
   if (/\bworst\b/.test(lowerQuery)) return 'worst';
   if (/\btotal\b/.test(lowerQuery)) return 'total';
   if (/\baverage\b/.test(lowerQuery)) return 'average';
-  if (/\bmost\b/.test(lowerQuery)) return 'most';
+  if (/\bmost\b/.test(lowerQuery)) return 'most'; // "most available credit" - can be treated as highest or most
   if (/\bleast\b/.test(lowerQuery)) return 'least';
+
+  return null;
+};
+
+/**
+ * Extract balance filter - are they filtering by balance status?
+ * Detects patterns like "with balance", "only with balance", "zero balance", "no balance", "paid off"
+ */
+const extractBalanceFilter = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+
+  // Patterns for cards WITH balance (non-zero)
+  if (/\b(?:only\s+)?(?:with|having|that have|that has)\s+balance/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: with_balance');
+    return 'with_balance';
+  }
+  if (/\bcards?\s+(?:with|having)\s+balance/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: with_balance');
+    return 'with_balance';
+  }
+  if (/\bbalance[s]?(?:\s+only)?(?!\s+(?:is|are|of|zero|no))/i.test(lowerQuery) && 
+      /(?:list|show|cards?)/.test(lowerQuery)) {
+    // "list cards with balance" or "show cards balance"
+    // But NOT "zero balance" or "no balance"
+    if (!/\bzero\b/.test(lowerQuery) && !/\bno\b.*balance/.test(lowerQuery)) {
+      console.log('[EntityExtractor] Found balance filter: with_balance (implicit)');
+      return 'with_balance';
+    }
+  }
+
+  // Patterns for cards with ZERO balance (paid off)
+  if (/\bzero\s+balance/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: zero_balance');
+    return 'zero_balance';
+  }
+  if (/\bno\s+balance/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: zero_balance');
+    return 'zero_balance';
+  }
+  if (/\b(?:paid\s+off|paid\s+in\s+full|no\s+debt|all\s+paid)/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: zero_balance (paid off)');
+    return 'zero_balance';
+  }
+  if (/\b\$0\s+balance/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: zero_balance ($0)');
+    return 'zero_balance';
+  }
+  // Pattern: "0 dollars balance" or "0 dollar balance"
+  if (/\b0\s+(?:dollar|dollars)\s+balance/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: zero_balance (0 dollars)');
+    return 'zero_balance';
+  }
+  // Pattern: "cards with 0 balance" or "0 balance cards"
+  if (/\b0\s+balance/i.test(lowerQuery) || /\bbalance.*\b0\b/i.test(lowerQuery)) {
+    console.log('[EntityExtractor] Found balance filter: zero_balance (0)');
+    return 'zero_balance';
+  }
+
+  return null;
+};
+
+/**
+ * Phase 2: Extract distinct query indicator
+ * Detects queries like "what are the different issuers", "what networks do I have"
+ * 
+ * @param {string} query - User query
+ * @param {Object} doc - NLP document
+ * @returns {Object|null} - { isDistinct: boolean, field: string | null }
+ */
+const extractDistinctIndicator = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+
+  // Keywords that STRONGLY indicate distinct queries (exclude generic action words)
+  const distinctKeywords = [
+    'different', 'various', 'varied', 'diverse',
+    'breakdown', 'distribution', 'categorization'
+  ];
+  
+  // Phrases that require distinct keyword context (more specific patterns)
+  const distinctPhrases = [
+    /what\s+are\s+(?:the|all|different|various|types|kinds)/i,
+    /what\s+(?:networks|issuers|types|kinds)\s+(?:do\s+I\s+have|are|in)/i,
+    /how\s+many\s+(?:different|various|types)/i,
+    /number\s+of\s+(?:different|various)/i,
+    /all\s+(?:the|of\s+the)\s+(?:different|various|types|kinds|issuers|networks)/i,
+    /grouped\s+by/i,
+    /breakdown\s+(?:by|of)/i,
+    /distribution\s+(?:by|of)/i
+  ];
+
+  // Field keywords that map to card fields
+  const fieldPatterns = {
+    'issuer': ['issuer', 'issuers', 'bank', 'banks', 'card issuer', 'financial institution'],
+    'card_network': ['network', 'networks', 'card network', 'payment network', 'credit card network'],
+    'card_type': ['type', 'types', 'card type', 'card types', 'kinds of cards', 'kinds'],
+    'issuer': ['issuer', 'issuers'] // Keep for backward compatibility
+  };
+
+  // Check if query contains distinct keywords or phrases
+  const hasDistinctPhrase = distinctPhrases.some(phrase => phrase.test(lowerQuery));
+  
+  const hasDistinctKeyword = distinctKeywords.some(keyword => {
+    // Handle multi-word keywords
+    if (keyword.includes(' ')) {
+      return lowerQuery.includes(keyword);
+    }
+    return new RegExp(`\\b${keyword}\\b`, 'i').test(lowerQuery);
+  });
+  
+  // Only return distinct if we have STRONG indicators (keyword or phrase)
+  if (!hasDistinctKeyword && !hasDistinctPhrase) {
+    return null;
+  }
+  
+  // Additional check: exclude simple action queries without distinct context
+  // Pattern: "show me my cards", "list cards", "tell me cards"
+  // Only exclude if NO distinct keyword/phrase matched
+  const simpleActionPattern = /^(show|list|tell)\s+(?:me|my|all)\s+(?:my|the|all|cards?|card)\s*$/i;
+  if (simpleActionPattern.test(lowerQuery.trim()) && !hasDistinctKeyword && !hasDistinctPhrase) {
+    return null;
+  }
+
+  // Determine which field they're asking about
+  let detectedField = null;
+  for (const [field, patterns] of Object.entries(fieldPatterns)) {
+    for (const pattern of patterns) {
+      const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+      if (regex.test(lowerQuery)) {
+        detectedField = field;
+        console.log('[EntityExtractor] Found distinct query for field:', field);
+        break;
+      }
+    }
+    if (detectedField) break;
+  }
+
+  return {
+    isDistinct: true,
+    field: detectedField || 'issuer' // Default to issuer if field not detected
+  };
+};
+
+/**
+ * Phase 2: Extract compound filter operators (AND/OR)
+ * Detects queries with multiple conditions like "visa cards with balance over 5000 and APR less than 25"
+ * 
+ * @param {string} query - User query
+ * @param {Object} doc - NLP document
+ * @returns {Object} - { logicalOperators: string[] }
+ */
+const extractCompoundOperators = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+  const logicalOperators = [];
+
+  // Detect AND operators
+  const andPatterns = [
+    /\band\b/i,
+    /\s+&\s+/,
+    /\s+\+\s+/,
+    /,.*(?:with|that|and)/i
+  ];
+
+  // Detect OR operators
+  const orPatterns = [
+    /\bor\b/i,
+    /\s+\|\s+/,
+    /,\s*(?:or)/i
+  ];
+
+  // Count AND occurrences
+  andPatterns.forEach(pattern => {
+    const matches = lowerQuery.match(pattern);
+    if (matches) {
+      matches.forEach(() => logicalOperators.push('AND'));
+    }
+  });
+
+  // Count OR occurrences
+  orPatterns.forEach(pattern => {
+    const matches = lowerQuery.match(pattern);
+    if (matches) {
+      matches.forEach(() => logicalOperators.push('OR'));
+    }
+  });
+
+  // If we have multiple conditions but no explicit operator, default to AND
+  // Look for multiple filter-like patterns
+  const filterIndicators = [
+    /\b(with|having|that have|that has)\b/i,
+    /\b(over|above|greater than|more than)\b/i,
+    /\b(under|below|less than|below)\b/i,
+    /\b(equal to|exactly)\b/i
+  ];
+
+  let filterCount = 0;
+  filterIndicators.forEach(pattern => {
+    const matches = lowerQuery.match(pattern);
+    if (matches) filterCount += matches.length;
+  });
+
+  // If we have 2+ filter indicators but no explicit operators, infer AND
+  if (filterCount >= 2 && logicalOperators.length === 0) {
+    // Add AND operators for implicit conditions
+    for (let i = 0; i < filterCount - 1; i++) {
+      logicalOperators.push('AND');
+    }
+  }
+
+  return {
+    logicalOperators: logicalOperators.length > 0 ? logicalOperators : []
+  };
+};
+
+/**
+ * Phase 2: Extract grouping indicator
+ * Detects queries like "by issuer", "grouped by network", "breakdown by issuer"
+ * 
+ * @param {string} query - User query
+ * @param {Object} doc - NLP document
+ * @returns {Object|null} - { groupBy: string | null }
+ */
+const extractGrouping = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+
+  // Patterns for grouping
+  const groupPatterns = [
+    /(?:by|grouped by|group by|organized by)\s+(\w+)/i,
+    /breakdown\s+(?:by|of)\s+(\w+)/i,
+    /distribution\s+(?:by|of)\s+(\w+)/i
+  ];
+
+  const fieldPatterns = {
+    'issuer': ['issuer', 'issuers', 'bank', 'banks'],
+    'card_network': ['network', 'networks', 'card network'],
+    'card_type': ['type', 'types', 'card type']
+  };
+
+  for (const pattern of groupPatterns) {
+    const match = lowerQuery.match(pattern);
+    if (match && match[1]) {
+      const matchedField = match[1].toLowerCase();
+      
+      // Map to actual field name
+      for (const [field, patterns] of Object.entries(fieldPatterns)) {
+        if (patterns.some(p => matchedField.includes(p) || p.includes(matchedField))) {
+          console.log('[EntityExtractor] Found grouping by:', field);
+          return { groupBy: field };
+        }
+      }
+      
+      // Return matched field if no mapping found (let QueryBuilder handle validation)
+      return { groupBy: matchedField };
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Phase 2: Extract aggregation operation
+ * Detects queries like "total balance", "average APR", "how many cards", "sum of balances"
+ * 
+ * @param {string} query - User query
+ * @param {Object} doc - NLP document
+ * @returns {Object|null} - { operation: string, field: string | null }
+ */
+const extractAggregationOperation = (query, doc) => {
+  const lowerQuery = query.toLowerCase();
+
+  // Aggregation operation patterns
+  const aggregationPatterns = {
+    'sum': ['total', 'sum', 'add up', 'sum of', 'total of', 'combined', 'together'],
+    'avg': ['average', 'avg', 'mean', 'typical'],
+    'count': ['how many', 'number of', 'count', 'how much'],
+    'min': ['minimum', 'min', 'lowest', 'smallest', 'least'],
+    'max': ['maximum', 'max', 'highest', 'largest', 'most']
+  };
+
+  // Field patterns that might be aggregated
+  const fieldPatterns = {
+    'current_balance': ['balance', 'balances', 'debt', 'owed', 'amount due'],
+    'apr': ['apr', 'interest rate', 'rate', 'percentage'],
+    'credit_limit': ['limit', 'credit limit', 'max credit'],
+    'utilization': ['utilization', 'usage', 'used']
+  };
+
+  let detectedOperation = null;
+  let detectedField = null;
+
+  // Find aggregation operation
+  for (const [operation, patterns] of Object.entries(aggregationPatterns)) {
+    for (const pattern of patterns) {
+      const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+      if (regex.test(lowerQuery)) {
+        detectedOperation = operation;
+        console.log('[EntityExtractor] Found aggregation operation:', operation);
+        break;
+      }
+    }
+    if (detectedOperation) break;
+  }
+
+  // Find field if operation detected
+  if (detectedOperation) {
+    for (const [field, patterns] of Object.entries(fieldPatterns)) {
+      for (const pattern of patterns) {
+        const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+        if (regex.test(lowerQuery)) {
+          detectedField = field;
+          console.log('[EntityExtractor] Found aggregation field:', field);
+          break;
+        }
+      }
+      if (detectedField) break;
+    }
+  }
+
+  if (detectedOperation) {
+    return {
+      operation: detectedOperation,
+      field: detectedField || null
+    };
+  }
 
   return null;
 };

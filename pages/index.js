@@ -7,7 +7,7 @@ export default function Home() {
       <Head>
         <title>Vitta - Personal finance assistant with AI</title>
         <meta name="description" content="Chat with your financial documents using AI" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, user-scalable=yes" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <VittaApp />

@@ -228,9 +228,9 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
 
   // Chat View
   const ChatView = useMemo(() => (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
         {messages.map((message, index) => (
           <div key={index} className={`flex gap-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex gap-4 max-w-3xl ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -330,10 +330,15 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
           )}
       </div>
 
-      {/* Input Area */}
-      <div className="border-t border-gray-200 p-4 bg-white">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex gap-3 items-end">
+      {/* Input Area - ChatGPT-style with safe area support */}
+      <div 
+        className="border-t border-gray-200 bg-white sticky bottom-0 z-40 w-full pt-3 pb-3 px-3 sm:px-4"
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))'
+        }}
+      >
+        <div className="w-full max-w-3xl mx-auto">
+          <div className="relative w-full">
             <textarea
               ref={textareaRef}
               value={input}
@@ -342,16 +347,21 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               placeholder="Ask me about your cards, payments, or which card to use..."
               rows={1}
               wrap="soft"
-              className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40"
+              className="w-full p-3 pr-14 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40 text-sm sm:text-base"
               disabled={isLoading}
+              style={{
+                minHeight: '44px',
+                maxHeight: '160px',
+                lineHeight: '1.5'
+              }}
             />
             <button
               onClick={handleSendMessage}
               disabled={!input.trim() || isLoading}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
+              title="Send message"
             >
               <Send className="w-4 h-4" />
-              Send
             </button>
           </div>
         </div>
