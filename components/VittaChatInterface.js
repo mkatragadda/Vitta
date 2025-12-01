@@ -331,9 +331,9 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-3 md:p-4 bg-white sticky bottom-0 z-40">
-        <div className="max-w-3xl mx-auto">
-          <div className="relative">
+      <div className="border-t border-gray-200 p-3 sm:p-4 bg-white sticky bottom-0 z-40 w-full">
+        <div className="w-full max-w-2xl mx-auto px-2 sm:px-4">
+          <div className="relative w-full">
             <textarea
               ref={textareaRef}
               value={input}
@@ -342,13 +342,13 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               placeholder="Ask me about your cards, payments, or which card to use..."
               rows={1}
               wrap="soft"
-              className="w-full p-3 pr-12 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40 text-sm md:text-base"
+              className="w-full p-3 pr-14 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40 text-sm sm:text-base"
               disabled={isLoading}
             />
             <button
               onClick={handleSendMessage}
               disabled={!input.trim() || isLoading}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
               title="Send message"
             >
               <Send className="w-4 h-4" />
