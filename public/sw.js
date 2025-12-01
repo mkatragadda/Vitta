@@ -84,12 +84,24 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
-  // CRITICAL: Skip ALL interception in development (localhost)
+  // CRITICAL: Skip ALL interception in development ONLY (extremely restrictive)
   // This prevents service worker from interfering with Next.js dev server
-  if (url.hostname === 'localhost' || 
-      url.hostname === '127.0.0.1' ||
-      url.hostname.includes('localhost')) {
-    // Let requests pass through to network without interception
+  // PRODUCTION SAFETY: Only exact localhost matches, never production domains
+  var hostname = url.hostname;
+  var isExactLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+  var isDevIP = false;
+  if (hostname.indexOf('192.168.') === 0 || hostname.indexOf('10.0.') === 0) {
+    var parts = hostname.split('.');
+    isDevIP = parts.length === 4 && parts.every(function(part) { return /^\d+$/.test(part); });
+  }
+  // Block production patterns - if any production-like pattern exists, don't skip
+  var hasProdPattern = /\.(com|net|org|io|app|dev|co)$/i.test(hostname) || 
+                      hostname.indexOf('vercel') !== -1 ||
+                      hostname.indexOf('heroku') !== -1 ||
+                      hostname.indexOf('netlify') !== -1;
+  
+  if ((isExactLocalhost || isDevIP) && !hasProdPattern) {
+    // Let requests pass through to network without interception (development only)
     return;
   }
 

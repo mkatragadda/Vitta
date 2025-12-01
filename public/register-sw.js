@@ -7,15 +7,27 @@
 (function() {
   'use strict';
   
-  // Immediately check and unregister service workers in development
-  // Check for any localhost/127.0.0.1 regardless of port
-  const isDevelopment = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname === '' ||
-    window.location.hostname.includes('localhost') ||
-    window.location.hostname.includes('127.0.0.1')
-  );
+  // RESTRICTIVE: Only unregister service workers in development with exact hostname matches
+  // CRITICAL: This prevents any production domain from matching
+  var isDevelopment = false;
+  if (typeof window !== 'undefined' && window.location) {
+    var hostname = window.location.hostname;
+    // Only exact matches - prevents production domains from matching
+    var isExactLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    // For IP addresses, require exact format (4 parts: x.x.x.x)
+    var isDevIP = false;
+    if (hostname.indexOf('192.168.') === 0 || hostname.indexOf('10.0.') === 0) {
+      var parts = hostname.split('.');
+      isDevIP = parts.length === 4 && parts.every(function(part) { return /^\d+$/.test(part); });
+    }
+    // Block production-like patterns
+    var hasProdPattern = /\.(com|net|org|io|app|dev|co)$/i.test(hostname) || 
+                        hostname.indexOf('vercel') !== -1 ||
+                        hostname.indexOf('heroku') !== -1 ||
+                        hostname.indexOf('netlify') !== -1;
+    
+    isDevelopment = (isExactLocalhost || isDevIP) && !hasProdPattern;
+  }
   
   if (isDevelopment && 'serviceWorker' in navigator) {
     // Immediately unregister all service workers
