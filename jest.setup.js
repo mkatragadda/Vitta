@@ -6,6 +6,37 @@
 // Mock environment variables if needed
 process.env.NODE_ENV = 'test';
 
+// Polyfill structuredClone FIRST - before anything else uses it
+if (typeof global.structuredClone === 'undefined') {
+  global.structuredClone = (obj) => {
+    return JSON.parse(JSON.stringify(obj));
+  };
+}
+
+// Setup navigator.onLine as settable property BEFORE anything else
+let mockOnlineState = true;
+delete global.navigator; // Remove any existing read-only navigator
+global.navigator = Object.create(Object.prototype, {
+  onLine: {
+    get() {
+      return mockOnlineState;
+    },
+    set(value) {
+      mockOnlineState = value;
+      // Trigger events if window exists
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        try {
+          window.dispatchEvent(new Event(value ? 'online' : 'offline'));
+        } catch (e) {
+          // Ignore if events not supported
+        }
+      }
+    },
+    configurable: true,
+    enumerable: true,
+  },
+});
+
 // Mock IndexedDB for Node.js environment
 const {
   indexedDB,
@@ -37,14 +68,6 @@ if (typeof global !== 'undefined' && !global.indexedDB) {
   global.IDBVersionChangeEvent = IDBVersionChangeEvent;
 }
 
-// Mock navigator for offline tests
-if (typeof global.navigator === 'undefined') {
-  global.navigator = {
-    onLine: true,
-  };
-} else if (!global.navigator.onLine) {
-  global.navigator.onLine = true;
-}
 
 // Mock fetch if not available
 if (!global.fetch) {

@@ -5,12 +5,45 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
+        {/* CRITICAL: Clear service workers IMMEDIATELY in development - must be first */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  if (typeof window === 'undefined') return;
+                  var hostname = window.location && window.location.hostname;
+                  if (!hostname) return;
+                  var isDev = hostname === 'localhost' || 
+                             hostname === '127.0.0.1' ||
+                             hostname.indexOf('localhost') !== -1;
+                  if (isDev && 'serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function(regs) {
+                      if (regs && regs.length > 0) {
+                        regs.forEach(function(reg) { 
+                          if (reg && reg.unregister) reg.unregister(); 
+                        });
+                      }
+                    }).catch(function(e) { console.warn('SW unregister error:', e); });
+                    if ('caches' in window) {
+                      caches.keys().then(function(names) {
+                        if (names && names.length > 0) {
+                          names.forEach(function(name) { 
+                            if (name) caches.delete(name).catch(function(e) {}); 
+                          });
+                        }
+                      }).catch(function(e) {});
+                    }
+                  }
+                } catch(e) {
+                  console.warn('SW cleanup error:', e);
+                }
+              })();
+            `,
+          }}
+        />
         {/* Basic Meta Tags */}
         <meta charSet="utf-8" />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
-        />
         <meta
           name="description"
           content="AI-powered credit card optimization and payment strategy assistant"
@@ -32,7 +65,7 @@ export default function Document() {
         {/* Google Identity Services */}
         <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-        {/* Service Worker Registration */}
+        {/* Service Worker Registration - Script handles dev/prod internally */}
         <script async src="/register-sw.js"></script>
       </Head>
       <body>

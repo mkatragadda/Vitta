@@ -84,6 +84,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
+  // CRITICAL: Skip ALL interception in development (localhost)
+  // This prevents service worker from interfering with Next.js dev server
+  if (url.hostname === 'localhost' || 
+      url.hostname === '127.0.0.1' ||
+      url.hostname.includes('localhost')) {
+    // Let requests pass through to network without interception
+    return;
+  }
+
   // Skip non-GET requests
   if (event.request.method !== 'GET') {
     return

@@ -28,6 +28,9 @@ export default function App({ Component, pageProps }) {
 
   // Monitor online/offline status
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
     const handleOnline = () => {
       console.log('[App] Coming online')
       setIsOnline(true)

@@ -377,7 +377,12 @@ async function classifyCategory(query) {
       /bill due/,
       /next payment/,
       /statement close/,
-      /statement dates?/
+      /statement dates?/,
+      /list.*cards?/,
+      /show.*cards?/,
+      /my cards?/,
+      /all cards?/,
+      /what cards?/
     ];
 
     if (quickTaskPatterns.some((pattern) => pattern.test(normalized))) {
@@ -385,16 +390,21 @@ async function classifyCategory(query) {
       return 'TASK';
     }
 
-    const response = await fetch('/api/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{
-          role: 'system',
-          content: `You are a query classifier. Classify the user's query into exactly ONE category:
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for category classification
+
+    try {
+      const response = await fetch('/api/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [{
+            role: 'system',
+            content: `You are a query classifier. Classify the user's query into exactly ONE category:
 
 TASK - User wants to perform a specific action with their credit cards:
 - Choose which card to use for a purchase
@@ -418,33 +428,49 @@ CHAT - Casual conversation:
 - Small talk
 
 Respond with ONLY the category name: TASK, GUIDANCE, or CHAT`
-        }, {
-          role: 'user',
-          content: query
-        }],
-        temperature: 0,
-        max_tokens: 10
-      })
-    });
+          }, {
+            role: 'user',
+            content: query
+          }],
+          temperature: 0,
+          max_tokens: 10
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      throw new Error(`Category classification API error: ${response.status}`);
-    }
+      if (!response.ok) {
+        throw new Error(`Category classification API error: ${response.status}`);
+      }
 
-    const data = await response.json();
-    const category = data.choices[0].message.content.trim().toUpperCase();
+      const data = await response.json();
+      const category = data.choices[0].message.content.trim().toUpperCase();
 
-    // Validate category
-    if (!['TASK', 'GUIDANCE', 'CHAT'].includes(category)) {
-      console.warn('[ConversationEngineV2] Invalid category returned:', category, '- defaulting to TASK');
+      // Validate category
+      if (!['TASK', 'GUIDANCE', 'CHAT'].includes(category)) {
+        console.warn('[ConversationEngineV2] Invalid category returned:', category, '- defaulting to TASK');
+        return 'TASK';
+      }
+
+      console.log('[ConversationEngineV2] Category classified:', category);
+      return category;
+
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      if (fetchError.name === 'AbortError') {
+        console.warn('[ConversationEngineV2] Category classification timeout - defaulting to TASK');
+        return 'TASK';
+      }
+      
+      console.error('[ConversationEngineV2] Error classifying category:', fetchError);
+      // Default to TASK on error (most common category)
       return 'TASK';
     }
 
-    console.log('[ConversationEngineV2] Category classified:', category);
-    return category;
-
   } catch (error) {
-    console.error('[ConversationEngineV2] Error classifying category:', error);
+    console.error('[ConversationEngineV2] Error in classifyCategory:', error);
     // Default to TASK on error (most common category)
     return 'TASK';
   }
