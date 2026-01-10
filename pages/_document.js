@@ -163,7 +163,7 @@ export default function Document({ isDevelopment = false }) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Vitta" />
+        <meta name="apple-mobile-web-app-title" content="Agentic Wallet" />
 
         {/* App Favicons */}
         <link rel="manifest" href="/manifest.json" />

@@ -178,7 +178,7 @@ const VittaApp = () => {
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      content: "Hi! I'm your Vitta AI assistant. I can help you choose the best credit card for any purchase, optimize your payments, and maximize your rewards. Ask me anything!",
+      content: "Hi! I'm your Agentic Wallet AI assistant. I can help you choose the best credit card for any purchase, optimize your payments, and maximize your rewards. Ask me anything!",
       timestamp: new Date()
     }
   ]);
@@ -521,7 +521,7 @@ const VittaApp = () => {
     setCurrentScreen('main');
     setMessages([{
       type: 'bot',
-      content: "Hi! I'm your Vitta AI assistant. I can help you choose the best credit card for any purchase, optimize your payments, and maximize your rewards. Ask me anything!",
+      content: "Hi! I'm your Agentic Wallet AI assistant. I can help you choose the best credit card for any purchase, optimize your payments, and maximize your rewards. Ask me anything!",
       timestamp: new Date()
     }]);
     setUploadedDocs([]);
@@ -560,14 +560,14 @@ const VittaApp = () => {
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
                   <span className="text-white font-bold text-xl">V</span>
                 </div>
-                <span className="text-2xl font-bold text-white">Vitta</span>
+                <span className="text-2xl font-bold text-white">Agentic Wallet</span>
               </div>
 
               <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
                 Chat with Your Wallet
               </h1>
               <p className="text-blue-100 text-lg mb-12">
-                Meet Vitta, the ChatGPT of financial wellness. Get real-time credit card recommendations, optimize payments, maximize rewards—all through natural conversation.
+                Meet Agentic Wallet, your intelligent financial assistant. Get real-time credit card recommendations, optimize payments, maximize rewards—all through natural conversation.
               </p>
             </div>
 
@@ -626,7 +626,7 @@ const VittaApp = () => {
 
             {/* Heading */}
             <div className="hidden lg:block mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Vitta</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Agentic Wallet</h2>
               <p className="text-gray-600">Start your financial conversation</p>
             </div>
 
@@ -1278,7 +1278,7 @@ const VittaApp = () => {
               <span className="text-white font-bold text-2xl">V</span>
             </div>
             <div>
-              <h1 className="text-5xl font-bold text-gray-900 mb-2">Vitta</h1>
+              <h1 className="text-5xl font-bold text-gray-900 mb-2">Agentic Wallet</h1>
               <p className="text-xl text-gray-600">Welcome back, {user.name}!</p>
             </div>
           </div>
@@ -1372,12 +1372,12 @@ const VittaApp = () => {
 
         {/* CTA Section */}
         <div className="text-center">
-          <p className="text-gray-600 mb-6">Start by chatting with your Vitta AI Assistant</p>
+          <p className="text-gray-600 mb-6">Start by chatting with your Agentic Wallet AI Assistant</p>
           <button
             onClick={() => setIsOpen(true)}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
           >
-            Open Vitta AI Assistant
+            Open Agentic Wallet AI Assistant
           </button>
         </div>
       </div>
@@ -1402,7 +1402,7 @@ const VittaApp = () => {
                 <span className="text-white font-bold text-sm">V</span>
               </div>
               <div>
-                <h3 className="font-semibold">Vitta AI Assistant</h3>
+                <h3 className="font-semibold">Agentic Wallet AI Assistant</h3>
                 <p className="text-blue-100 text-sm">Welcome, {user.name}!</p>
               </div>
             </div>

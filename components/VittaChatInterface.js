@@ -141,7 +141,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
           <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-lg">
             <span className="text-blue-600 font-bold text-sm">V</span>
           </div>
-          <span className="font-semibold">Vitta</span>
+          <span className="font-semibold">Agentic Wallet</span>
         </div>
         <button
           onClick={() => setIsSidebarOpen(false)}
@@ -162,7 +162,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
           }`}
         >
           <MessageCircle className="w-5 h-5" />
-          <span>Vitta Chat</span>
+          <span>Agentic Wallet Chat</span>
         </button>
 
         <button
@@ -246,7 +246,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
                 <div className={`text-sm font-medium mb-1 ${
                   message.type === 'user' ? 'text-right text-gray-700' : 'text-left text-gray-700'
                 }`}>
-                  {message.type === 'user' ? user?.name || 'You' : 'Vitta AI'}
+                  {message.type === 'user' ? user?.name || 'You' : 'Agentic Wallet AI'}
                 </div>
                 <div className={`p-4 rounded-lg shadow-sm ${
                   message.type === 'user'
@@ -273,7 +273,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               <Bot className="w-4 h-4 text-white" />
             </div>
             <div className="flex-1">
-              <div className="text-sm font-medium mb-1 text-gray-700">Vitta AI</div>
+              <div className="text-sm font-medium mb-1 text-gray-700">Agentic Wallet AI</div>
               <div className="bg-white p-4 rounded-lg shadow-sm">
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
@@ -615,7 +615,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">V</span>
               </div>
-              <span className="font-semibold text-gray-900">Vitta</span>
+              <span className="font-semibold text-gray-900">Agentic Wallet</span>
             </div>
           </div>
         )}

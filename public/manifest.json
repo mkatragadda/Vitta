@@ -1,6 +1,6 @@
 {
-  "name": "Vitta - Smart Credit Card Assistant",
-  "short_name": "Vitta",
+  "name": "Agentic Wallet - Smart Credit Card Assistant",
+  "short_name": "Agentic Wallet",
   "description": "Your intelligent credit card platform. AI-powered insights for card optimization and payment strategy.",
   "start_url": "/?utm_source=pwa",
   "scope": "/",
@@ -22,7 +22,7 @@
   "categories": ["finance", "productivity"],
   "shortcuts": [
     {
-      "name": "Chat with Vitta",
+      "name": "Chat with Agentic Wallet",
       "short_name": "Chat",
       "description": "Start a new chat conversation",
       "url": "/?screen=chat&utm_source=pwa-shortcut"

@@ -464,7 +464,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
               <span className="text-white font-bold text-2xl">V</span>
             </div>
             <div>
-              <h1 className="text-5xl font-bold text-gray-900 mb-2">Vitta</h1>
+              <h1 className="text-5xl font-bold text-gray-900 mb-2">Agentic Wallet</h1>
               <p className="text-xl text-gray-600">Welcome back, {user?.name || 'User'}!</p>
             </div>
           </div>
@@ -553,7 +553,7 @@ const DashboardWithTabs = ({ onBack, user, messages, input, setInput, isLoading:
                 <span className="text-white font-bold text-sm">V</span>
               </div>
               <div>
-                <h3 className="font-semibold">Vitta AI Assistant</h3>
+                <h3 className="font-semibold">Agentic Wallet AI Assistant</h3>
                 <p className="text-blue-100 text-sm">Welcome, {user.name}!</p>
               </div>
             </div>

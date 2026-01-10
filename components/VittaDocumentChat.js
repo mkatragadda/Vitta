@@ -15,7 +15,7 @@ const VittaDocumentChat = () => {
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      content: "Hi! I'm your Vitta AI assistant. Upload your financial documents and I'll help you find information instantly.",
+      content: "Hi! I'm your Agentic Wallet AI assistant. Upload your financial documents and I'll help you find information instantly.",
       timestamp: new Date()
     }
   ]);
@@ -90,7 +90,7 @@ const VittaDocumentChat = () => {
     setCurrentScreen('main');
     setMessages([{
       type: 'bot',
-      content: "Hi! I'm your Vitta AI assistant. Upload your financial documents and I'll help you find information instantly.",
+      content: "Hi! I'm your Agentic Wallet AI assistant. Upload your financial documents and I'll help you find information instantly.",
       timestamp: new Date()
     }]);
     setUploadedDocs([]);
@@ -134,14 +134,14 @@ const VittaDocumentChat = () => {
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
                   <span className="text-white font-bold text-xl">V</span>
                 </div>
-                <span className="text-2xl font-bold text-white">Vitta</span>
+                <span className="text-2xl font-bold text-white">Agentic Wallet</span>
               </div>
 
               <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
                 Chat with Your Documents
               </h1>
               <p className="text-blue-100 text-lg mb-12">
-                Upload your statements, upload your forms, and let Vitta analyze them. Ask natural questions and get answers instantly.
+                Upload your statements, upload your forms, and let Agentic Wallet analyze them. Ask natural questions and get answers instantly.
               </p>
             </div>
 
@@ -200,7 +200,7 @@ const VittaDocumentChat = () => {
 
             {/* Heading */}
             <div className="hidden lg:block mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Vitta</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Agentic Wallet</h2>
               <p className="text-gray-600">Start your document conversation</p>
             </div>
 
