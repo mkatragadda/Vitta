@@ -37,3 +37,34 @@ a {
     padding-right: max(1rem, env(safe-area-inset-right));
   }
 }
+
+/* Mobile viewport fixes */
+html {
+  height: -webkit-fill-available;
+}
+
+body {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  overflow-x: hidden;
+}
+
+/* Prevent input zoom on iOS */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Ensure proper textarea alignment on mobile */
+@media screen and (max-width: 640px) {
+  textarea {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+}

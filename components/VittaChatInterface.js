@@ -230,10 +230,19 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
   const ChatView = useMemo(() => (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+      <div 
+        className="flex-1 overflow-y-auto"
+        style={{
+          paddingTop: '1rem',
+          paddingBottom: '1rem',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left, 1rem))',
+          paddingRight: 'max(1rem, env(safe-area-inset-right, 1rem))'
+        }}
+      >
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 space-y-6">
         {messages.map((message, index) => (
           <div key={index} className={`flex gap-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`flex gap-4 max-w-3xl ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`flex gap-4 w-full ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                 message.type === 'user' ? 'bg-gradient-to-r from-blue-600 to-indigo-600' : 'bg-gradient-to-r from-blue-600 to-indigo-600'
               }`}>
@@ -287,7 +296,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
 
         {/* Quick Action Buttons - Inside messages area */}
         {messages.filter(m => m.type === 'user').length === 0 && (
-          <div className="max-w-3xl mx-auto mt-6">
+          <div className="w-full mt-6">
             <p className="text-sm text-gray-600 mb-3 font-medium">Quick actions:</p>
             <div className="flex flex-wrap gap-2">
                 <button
@@ -328,16 +337,19 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               </div>
             </div>
           )}
+        </div>
       </div>
 
       {/* Input Area - ChatGPT-style with safe area support */}
       <div 
-        className="border-t border-gray-200 bg-white sticky bottom-0 z-40 w-full pt-3 pb-3 px-3 sm:px-4"
+        className="border-t border-gray-200 bg-white w-full pt-3 z-40"
         style={{
-          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))'
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left, 1rem))',
+          paddingRight: 'max(1rem, env(safe-area-inset-right, 1rem))'
         }}
       >
-        <div className="w-full max-w-3xl mx-auto">
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6">
           <div className="relative w-full">
             <textarea
               ref={textareaRef}
@@ -347,7 +359,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               placeholder="Ask me about your cards, payments, or which card to use..."
               rows={1}
               wrap="soft"
-              className="w-full p-3 pr-14 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40 text-sm sm:text-base"
+              className="w-full p-3 pr-12 sm:pr-14 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-40 text-sm sm:text-base"
               disabled={isLoading}
               style={{
                 minHeight: '44px',
@@ -358,7 +370,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
             <button
               onClick={handleSendMessage}
               disabled={!input.trim() || isLoading}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
+              className="absolute right-2 sm:right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
               title="Send message"
             >
               <Send className="w-4 h-4" />
@@ -596,7 +608,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
   ), [cards, formData, handleAddCard, handleDeleteCard, isDemoMode, isLoadingCards, setCurrentView, showAddCard]);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden" style={{ minHeight: '-webkit-fill-available' }}>
       {/* Sidebar */}
       <Sidebar />
 
