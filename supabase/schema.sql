@@ -159,6 +159,171 @@ CREATE TABLE IF NOT EXISTS user_behavior (
 CREATE INDEX idx_user_behavior_user_id ON user_behavior(user_id);
 
 -- ============================================================================
+-- 7. PLAID ITEMS TABLE
+-- ============================================================================
+-- One row per bank connection established via Plaid Link.
+-- access_token_enc is AES-256-GCM encrypted at the application layer.
+-- transactions_cursor tracks /transactions/sync position per Item.
+CREATE TABLE IF NOT EXISTS plaid_items (
+  id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plaid_item_id         text        NOT NULL UNIQUE,
+  access_token_enc      text        NOT NULL,                   -- Encrypted. Never returned to client.
+  institution_id        text,
+  institution_name      text,
+  products              text[]      DEFAULT '{}',
+  status                text        NOT NULL DEFAULT 'active'
+                                      CHECK (status IN ('active', 'needs_update', 'revoked')),
+  transactions_cursor   text        NOT NULL DEFAULT '',        -- Empty = never synced.
+  consent_expires_at    timestamp with time zone,
+  created_at            timestamp with time zone DEFAULT NOW(),
+  updated_at            timestamp with time zone DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plaid_items_user     ON plaid_items(user_id);
+CREATE INDEX IF NOT EXISTS idx_plaid_items_item_id  ON plaid_items(plaid_item_id);
+CREATE INDEX IF NOT EXISTS idx_plaid_items_status   ON plaid_items(status) WHERE status != 'revoked';
+
+-- ============================================================================
+-- 8. PLAID ACCOUNTS TABLE
+-- ============================================================================
+-- Synced account metadata from Plaid /accounts/get.
+-- vitta_card_id is NULL until the user confirms the connection.
+CREATE TABLE IF NOT EXISTS plaid_accounts (
+  id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  plaid_item_id         uuid        NOT NULL REFERENCES plaid_items(id) ON DELETE CASCADE,
+  plaid_account_id      text        NOT NULL,
+  mask                  text,                                   -- Last 4 digits
+  name                  text        NOT NULL,
+  official_name         text,
+  account_type          text        NOT NULL,                   -- 'credit' | 'depository' | 'loan' | ...
+  account_subtype       text,                                   -- 'credit_card' | 'checking' | ...
+  current_balance       numeric     DEFAULT 0,
+  available_balance     numeric,
+  credit_limit          numeric,                                -- balance.limit (credit cards only)
+  vitta_card_id         uuid        REFERENCES user_credit_cards(id) ON DELETE SET NULL,
+  is_active             boolean     DEFAULT true,
+  created_at            timestamp with time zone DEFAULT NOW(),
+  updated_at            timestamp with time zone DEFAULT NOW(),
+
+  UNIQUE (plaid_item_id, plaid_account_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_plaid_accts_item    ON plaid_accounts(plaid_item_id);
+CREATE INDEX IF NOT EXISTS idx_plaid_accts_vitta   ON plaid_accounts(vitta_card_id) WHERE vitta_card_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_plaid_accts_active  ON plaid_accounts(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_plaid_accts_type    ON plaid_accounts(account_type, account_subtype);
+
+-- ============================================================================
+-- 9. PLAID LIABILITIES TABLE
+-- ============================================================================
+-- Detailed credit card liability data from Plaid /liabilities/get.
+-- Stores extracted scalars (for mapping to user_credit_cards) plus the full
+-- apr_list JSONB (for payment optimizer analysis).
+CREATE TABLE IF NOT EXISTS plaid_liabilities (
+  id                        uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  plaid_item_id             uuid        NOT NULL REFERENCES plaid_items(id) ON DELETE CASCADE,
+  plaid_account_id          text        NOT NULL,
+
+  -- Extracted scalar fields → mapped to user_credit_cards on confirm
+  purchase_apr              numeric,
+  cash_advance_apr          numeric,
+  balance_transfer_apr      numeric,
+  minimum_payment_amount    numeric,
+  last_payment_amount       numeric,
+  last_payment_date         date,
+  last_statement_balance    numeric,
+  last_statement_date       date,                               -- → statement_close_day
+  next_payment_due_date     date,                               -- → payment_due_day
+
+  -- Full APR array: [{ apr_type, apr_percentage, balance_subject_to_apr, interest_charges_amount }]
+  apr_list                  jsonb,
+  raw_liability             jsonb       NOT NULL,               -- Full Plaid response (audit)
+
+  fetched_at                timestamp with time zone DEFAULT NOW(),
+  created_at                timestamp with time zone DEFAULT NOW(),
+  updated_at                timestamp with time zone DEFAULT NOW(),
+
+  UNIQUE (plaid_item_id, plaid_account_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_liabilities_item     ON plaid_liabilities(plaid_item_id);
+CREATE INDEX IF NOT EXISTS idx_liabilities_account  ON plaid_liabilities(plaid_account_id);
+CREATE INDEX IF NOT EXISTS idx_liabilities_fetched  ON plaid_liabilities(fetched_at DESC);
+
+-- ============================================================================
+-- 10. TRANSACTIONS TABLE
+-- ============================================================================
+-- Unified table for both Plaid-synced and manually entered transactions.
+-- source column discriminates. plaid_transaction_id UNIQUE enforces idempotent
+-- upsert from /transactions/sync. NULL for manual entries.
+CREATE TABLE IF NOT EXISTS transactions (
+  id                      uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                 uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source                  text        NOT NULL DEFAULT 'manual'
+                            CHECK (source IN ('plaid', 'manual')),
+  vitta_card_id           uuid        REFERENCES user_credit_cards(id) ON DELETE SET NULL,
+
+  -- Plaid fields (NULL when source = 'manual')
+  plaid_transaction_id    text        UNIQUE,                   -- Idempotency anchor
+  plaid_account_id        text,
+
+  -- Shared fields
+  amount                  numeric     NOT NULL,                 -- Always positive
+  amount_sign             text        NOT NULL DEFAULT 'debit'
+                            CHECK (amount_sign IN ('debit', 'credit')),
+  merchant_name           text,
+  category                text,
+  category_confidence     numeric,                              -- 0–1; NULL for manual
+  transaction_date        date        NOT NULL,
+  description             text,
+  location_city           text,
+  location_state          text,
+  location_country        text        DEFAULT 'US',
+  is_pending              boolean     DEFAULT false,
+  notes                   text,                                 -- User-editable
+
+  created_at              timestamp with time zone DEFAULT NOW(),
+  updated_at              timestamp with time zone DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_txns_user_date      ON transactions(user_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_txns_source         ON transactions(source, user_id);
+CREATE INDEX IF NOT EXISTS idx_txns_vitta_card     ON transactions(vitta_card_id) WHERE vitta_card_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_txns_plaid_txn_id   ON transactions(plaid_transaction_id) WHERE plaid_transaction_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_txns_plaid_account  ON transactions(plaid_account_id) WHERE plaid_account_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_txns_category       ON transactions(category, user_id);
+CREATE INDEX IF NOT EXISTS idx_txns_pending        ON transactions(is_pending, user_id) WHERE is_pending = true;
+
+-- ============================================================================
+-- 11. PLAID WEBHOOK EVENTS TABLE
+-- ============================================================================
+-- Append-only audit log. Never delete rows. Tracks signature verification
+-- and processing status for every webhook received from Plaid.
+CREATE TABLE IF NOT EXISTS plaid_webhook_events (
+  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  plaid_item_id       text,                                     -- Plaid Item ID from payload
+  event_type          text        NOT NULL,                     -- TRANSACTIONS_UPDATE, etc.
+  webhook_type        text        NOT NULL,                     -- Transactions, Item, etc.
+  error               jsonb,
+  payload             jsonb       NOT NULL,                     -- Full raw payload (replay/debug)
+  signature_valid     boolean     NOT NULL DEFAULT false,
+  verification_state  text        NOT NULL DEFAULT 'pending'
+                        CHECK (verification_state IN ('pending', 'verified', 'failed', 'skipped')),
+  processing_status   text        NOT NULL DEFAULT 'pending'
+                        CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed')),
+  processing_error    text,
+  received_at         timestamp with time zone DEFAULT NOW(),
+  processed_at        timestamp with time zone
+  -- No updated_at: append-only
+);
+
+CREATE INDEX IF NOT EXISTS idx_wh_item        ON plaid_webhook_events(plaid_item_id) WHERE plaid_item_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_wh_type        ON plaid_webhook_events(event_type, webhook_type);
+CREATE INDEX IF NOT EXISTS idx_wh_processing  ON plaid_webhook_events(processing_status) WHERE processing_status IN ('pending', 'processing');
+CREATE INDEX IF NOT EXISTS idx_wh_received    ON plaid_webhook_events(received_at DESC);
+
+-- ============================================================================
 -- HELPER FUNCTIONS
 -- ============================================================================
 
@@ -179,6 +344,19 @@ CREATE TRIGGER update_card_catalog_updated_at BEFORE UPDATE ON card_catalog
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_user_credit_cards_updated_at BEFORE UPDATE ON user_credit_cards
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Plaid integration triggers (plaid_webhook_events excluded: append-only)
+CREATE TRIGGER trg_plaid_items_updated_at BEFORE UPDATE ON plaid_items
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_plaid_accounts_updated_at BEFORE UPDATE ON plaid_accounts
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_plaid_liabilities_updated_at BEFORE UPDATE ON plaid_liabilities
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_transactions_updated_at BEFORE UPDATE ON transactions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
