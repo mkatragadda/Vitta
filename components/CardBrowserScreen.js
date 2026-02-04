@@ -7,7 +7,7 @@ import { getOwnedCatalogIds } from '../services/cardService';
 /**
  * Step 1: Card Browser - Search and select a card from catalog
  */
-const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
+const CardBrowserScreen = ({ user, onCardSelect, onManualEntry, onLinkBank }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [cards, setCards] = useState([]);
   const [filteredCards, setFilteredCards] = useState([]);
@@ -103,6 +103,22 @@ const CardBrowserScreen = ({ user, onCardSelect, onManualEntry }) => {
             Let&apos;s start building your smart wallet
           </p>
         </div>
+
+        {/* Quick Action: Link Bank */}
+        {onLinkBank && (
+          <div className="mb-8 max-w-2xl mx-auto">
+            <button
+              onClick={onLinkBank}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl py-4 px-6 font-semibold text-lg hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+            >
+              <span>🏦</span>
+              Link Bank accounts via Plaid
+            </button>
+            <p className="text-sm text-gray-600 text-center mt-3">
+              Connect your bank to automatically sync account information
+            </p>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="mb-6">

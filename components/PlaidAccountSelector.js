@@ -8,7 +8,7 @@
  * 2. Add more accounts (Route G): Shows already-added accounts (grayed out) + available accounts
  *
  * Props:
- *  - user: { user_id, ... }
+ *  - user: { id, ... }
  *  - plaidItemId: string (database UUID from plaid_items)
  *  - accounts: [] (from exchange-token response, all accounts)
  *  - alreadyAddedAccounts: [] (optional, from add-more-accounts response)
@@ -76,7 +76,7 @@ export default function PlaidAccountSelector({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: user.user_id,
+          user_id: user.id,
           plaid_item_id: plaidItemId,
           selected_accounts,
         }),
