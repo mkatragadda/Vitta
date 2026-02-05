@@ -44,7 +44,7 @@ const PlaidLinkButton = ({
 
           // Load Plaid script dynamically if not already loaded
           const script = document.createElement('script');
-          script.src = 'https://cdn.plaid.com/link/v1/stable/link-initialize.js';
+          script.src = 'https://cdn.plaid.com/link/v2/stable/link.js';
           script.async = true;
           script.onload = () => {
             console.log('[PlaidLinkButton] Plaid SDK loaded');
