@@ -52,8 +52,7 @@ export default async function handler(req, res) {
             client_user_id: user_id,
           },
           client_name: 'Vitta',
-          products: ['auth', 'transactions'], // Auth for account/routing numbers, Transactions for transaction history
-          required_if_supported_products: ['liabilities'], // Also request liabilities (APR, min payment) if available
+          products: ['auth', 'connect'], // Auth for account/routing numbers, Connect for transactions and liabilities
           country_codes: ['US'],
           language: 'en',
           webhook: process.env.PLAID_WEBHOOK_URL,

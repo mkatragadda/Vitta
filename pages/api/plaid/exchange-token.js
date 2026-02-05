@@ -102,7 +102,7 @@ export default async function handler(req, res) {
             access_token_enc: encryptedToken,
             institution_id: accountsResult.institution?.institution_id || null,
             institution_name: accountsResult.institution?.name || null,
-            products: ['auth', 'transactions', 'liabilities'],
+            products: ['auth', 'connect'],
             status: 'active',
             transactions_cursor: '', // Empty = full historical sync on first call
           },
