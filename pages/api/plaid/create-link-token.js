@@ -52,7 +52,7 @@ export default async function handler(req, res) {
             client_user_id: user_id,
           },
           client_name: 'Vitta',
-          products: ['auth'], // Auth product for account verification and basic account info
+          products: ['auth','connect'], // Auth product for account verification and basic account info
           country_codes: ['US'],
           language: 'en',
           webhook: process.env.PLAID_WEBHOOK_URL,
