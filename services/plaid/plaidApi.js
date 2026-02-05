@@ -43,16 +43,29 @@ async function plaidPost(endpoint, body, { signal } = {}) {
     body_keys: Object.keys(body),
   });
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: process.env.PLAID_CLIENT_ID,
-      secret: process.env.PLAID_SECRET,
-      ...body,
-    }),
-    ...(signal && { signal }),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.PLAID_CLIENT_ID,
+        secret: process.env.PLAID_SECRET,
+        ...body,
+      }),
+      ...(signal && { signal }),
+    });
+  } catch (fetchNetworkError) {
+    console.error('[plaidApi] Network error during fetch:', {
+      error_name: fetchNetworkError.name,
+      error_message: fetchNetworkError.message,
+      error_code: fetchNetworkError.code,
+      cause: fetchNetworkError.cause,
+      url,
+      endpoint,
+    });
+    throw fetchNetworkError;
+  }
 
   console.log('[plaidApi] Response status:', response.status, 'Content-Type:', response.headers.get('content-type'));
 
