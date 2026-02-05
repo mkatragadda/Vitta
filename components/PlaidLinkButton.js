@@ -207,6 +207,7 @@ const PlaidLinkButton = ({
 
     const config = {
       token: linkToken,
+      clientName: 'Vitta',
       onSuccess: handlePlaidSuccess,
       onExit: handlePlaidExit,
     };
