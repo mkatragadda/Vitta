@@ -65,7 +65,18 @@ export default async function handler(req, res) {
       console.log('[plaid/create-link-token] Link token created successfully');
       console.log('[plaid/create-link-token] Response expiration:', linkTokenResponse.expiration);
 
-      return res.status(200).json({ link_token: linkTokenResponse.link_token });
+      // Map PLAID_ENV to Plaid SDK environment names
+      const envMap = {
+        sandbox: 'tartan',
+        development: 'development',
+        production: 'production',
+      };
+      const sdkEnv = envMap[process.env.PLAID_ENV] || 'tartan';
+
+      return res.status(200).json({
+        link_token: linkTokenResponse.link_token,
+        env: sdkEnv,
+      });
     } catch (fetchError) {
       clearTimeout(timeoutId);
 

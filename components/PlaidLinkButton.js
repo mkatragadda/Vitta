@@ -69,8 +69,10 @@ const PlaidLinkButton = ({
           throw new Error(errorData.error || 'Failed to create link token');
         }
 
-        const { link_token } = await response.json();
+        const { link_token, env } = await response.json();
         setLinkToken(link_token);
+        // Store env in window for use in handleClick
+        window.plaidEnv = env;
         setLinkReady(true);
         setError(null);
 
@@ -208,6 +210,7 @@ const PlaidLinkButton = ({
     const config = {
       token: linkToken,
       clientName: 'Vitta',
+      env: window.plaidEnv || 'tartan', // Default to tartan (sandbox)
       onSuccess: handlePlaidSuccess,
       onExit: handlePlaidExit,
     };
