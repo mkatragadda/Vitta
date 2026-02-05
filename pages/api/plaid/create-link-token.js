@@ -50,7 +50,6 @@ export default async function handler(req, res) {
         {
           user: {
             client_user_id: user_id,
-            name: 'Vitta User',
           },
           client_name: 'Vitta',
           products: ['transactions', 'liabilities'], // Request both products
