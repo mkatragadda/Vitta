@@ -11,7 +11,7 @@
  */
 
 const PLAID_URLS = {
-  sandbox: 'https://sandbox.plaidapi.com',
+  sandbox: 'https://sandbox.plaid.com',
   development: 'https://development.plaidapi.com',
   production: 'https://api.plaidapi.com',
 };
