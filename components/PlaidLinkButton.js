@@ -207,21 +207,17 @@ const PlaidLinkButton = ({
 
     console.log('[PlaidLinkButton] Opening Plaid Link...');
 
+    // v2 SDK config - only essential fields
     const config = {
       token: linkToken,
-      clientName: 'Vitta',
-      env: window.plaidEnv || 'tartan', // Default to tartan (sandbox)
       onSuccess: handlePlaidSuccess,
       onExit: handlePlaidExit,
     };
 
-    // Pre-select institution if provided
-    if (institutionId) {
-      config.institutionId = institutionId;
-    }
-
     try {
-      window.Plaid.create(config).open();
+      const handler = window.Plaid.create(config);
+      console.log('[PlaidLinkButton] Handler created, opening...');
+      handler.open();
     } catch (err) {
       console.error('[PlaidLinkButton] Error opening Plaid Link:', err);
       setError('Failed to open Plaid Link');
