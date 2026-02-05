@@ -42,6 +42,9 @@ export default async function handler(req, res) {
 
     try {
       // 5. Call Plaid API
+      console.log('[plaid/create-link-token] Calling Plaid with client_id:', process.env.PLAID_CLIENT_ID?.substring(0, 10) + '...');
+      console.log('[plaid/create-link-token] Plaid environment:', process.env.PLAID_ENV);
+
       const linkTokenResponse = await plaidPost(
         '/link/token/create',
         {
@@ -61,32 +64,64 @@ export default async function handler(req, res) {
       clearTimeout(timeoutId);
 
       console.log('[plaid/create-link-token] Link token created successfully');
+      console.log('[plaid/create-link-token] Response expiration:', linkTokenResponse.expiration);
 
       return res.status(200).json({ link_token: linkTokenResponse.link_token });
     } catch (fetchError) {
       clearTimeout(timeoutId);
 
       if (fetchError.name === 'AbortError') {
-        console.error('[plaid/create-link-token] Request timeout');
+        console.error('[plaid/create-link-token] Request timeout (30s)');
         return res.status(504).json({ error: 'Request timeout' });
       }
 
       // Forward Plaid errors with their status code
       if (fetchError.plaidError) {
-        console.error('[plaid/create-link-token] Plaid error:', fetchError.plaidError);
+        console.error('[plaid/create-link-token] Plaid API error response:', {
+          status: fetchError.statusCode,
+          error_type: fetchError.plaidError?.error_type,
+          error_code: fetchError.plaidError?.error_code,
+          error_message: fetchError.plaidError?.error_message,
+          display_message: fetchError.plaidError?.display_message,
+          request_id: fetchError.plaidError?.request_id,
+          full_response: fetchError.plaidError,
+        });
         return res.status(fetchError.statusCode || 400).json({
           error: 'Plaid API error',
+          error_type: fetchError.plaidError?.error_type,
+          error_code: fetchError.plaidError?.error_code,
+          error_message: fetchError.plaidError?.error_message,
+          display_message: fetchError.plaidError?.display_message,
+          request_id: fetchError.plaidError?.request_id,
           details: fetchError.plaidError,
         });
       }
 
+      // Log non-Plaid errors with full stack trace
+      console.error('[plaid/create-link-token] Unexpected error:', {
+        name: fetchError.name,
+        message: fetchError.message,
+        status: fetchError.status,
+        statusCode: fetchError.statusCode,
+        stack: fetchError.stack,
+      });
+
       throw fetchError;
     }
   } catch (error) {
-    console.error('[plaid/create-link-token] Error:', error);
+    console.error('[plaid/create-link-token] Outer catch - Unexpected error:', {
+      name: error.name,
+      message: error.message,
+      status: error.status,
+      statusCode: error.statusCode,
+      stack: error.stack,
+      fullError: error,
+    });
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message,
+      error_type: error.name,
+      debug_info: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 }

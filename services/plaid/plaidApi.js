@@ -35,6 +35,14 @@ async function plaidPost(endpoint, body, { signal } = {}) {
 
   const url = `${baseUrl}${endpoint}`;
 
+  console.log('[plaidApi] Making request:', {
+    endpoint,
+    environment: env,
+    url,
+    client_id: process.env.PLAID_CLIENT_ID?.substring(0, 10) + '...',
+    body_keys: Object.keys(body),
+  });
+
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -46,13 +54,27 @@ async function plaidPost(endpoint, body, { signal } = {}) {
     ...(signal && { signal }),
   });
 
+  console.log('[plaidApi] Response status:', response.status, 'Content-Type:', response.headers.get('content-type'));
+
   if (!response.ok) {
     let errorData;
     try {
       errorData = await response.json();
     } catch (parseError) {
+      console.error('[plaidApi] Failed to parse error response:', parseError.message);
       errorData = { display_message: 'Unknown Plaid error' };
     }
+
+    console.error('[plaidApi] Plaid API error response:', {
+      status: response.status,
+      endpoint,
+      error_type: errorData.error_type,
+      error_code: errorData.error_code,
+      error_message: errorData.error_message,
+      display_message: errorData.display_message,
+      request_id: errorData.request_id,
+      full_response: errorData,
+    });
 
     const plaidError = new Error(
       errorData.display_message || `Plaid API error: ${response.status}`
@@ -62,7 +84,9 @@ async function plaidPost(endpoint, body, { signal } = {}) {
     throw plaidError;
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log('[plaidApi] Success response received for endpoint:', endpoint);
+  return data;
 }
 
 module.exports = { plaidPost };
