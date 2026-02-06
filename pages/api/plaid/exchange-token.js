@@ -92,27 +92,11 @@ export default async function handler(req, res) {
       }
 
       // ────────────────────────────────────────────────────────────────────────
-      // 5. Check if this bank is already linked (prevent duplicate links)
-      // ────────────────────────────────────────────────────────────────────────
-      const { data: existingItem } = await supabase
-        .from('plaid_items')
-        .select('id, institution_name')
-        .eq('user_id', user_id)
-        .eq('plaid_item_id', item_id)
-        .single();
-
-      if (existingItem) {
-        // Bank already linked. Guide user to add more accounts instead.
-        return res.status(409).json({
-          error: 'Bank already linked',
-          message: `${existingItem.institution_name} is already connected to your Vitta account.`,
-          suggestion: 'Use "Add More Accounts" to add additional accounts from this bank.',
-          plaid_item_id: existingItem.id,
-        });
-      }
-
-      // ────────────────────────────────────────────────────────────────────────
-      // 6. Insert plaid_items (new bank link)
+      // 5. Insert plaid_items (new bank link)
+      // NOTE: We allow multiple plaid_items from the same institution.
+      // Each link gets its own unique plaid_item_id from Plaid and its own
+      // access_token. Duplicate handling (pending account detection) will be
+      // implemented in Task Group 3 (CardBrowserScreen UI).
       // ────────────────────────────────────────────────────────────────────────
       const { data: insertedItem, error: itemError } = await supabase
         .from('plaid_items')

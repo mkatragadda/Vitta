@@ -10,7 +10,7 @@
  *  - onSuccess: (response) => {} - Called after exchange-token succeeds
  *                                  { plaid_item_id, accounts[] }
  *  - onError: (error) => {} - Called on error
- *                             { status: 400|409|500, error: string, message: string }
+ *                             { status: 400|500, error: string, message: string }
  *  - onExit: () => {} - Called when user cancels Plaid Link
  *  - institutionId: string (optional) - Pre-select specific institution
  *  - disabled: boolean (optional) - Disable button
@@ -121,24 +121,7 @@ const PlaidLinkButton = ({
 
         const data = await response.json();
 
-        // Handle 409 Conflict (duplicate bank link)
-        if (response.status === 409) {
-          console.log('[PlaidLinkButton] Bank already linked (409)');
-          setError(data.message);
-          if (onError) {
-            onError({
-              status: 409,
-              error: data.error,
-              message: data.message,
-              suggestion: data.suggestion,
-              plaid_item_id: data.plaid_item_id,
-            });
-          }
-          setIsLoading(false);
-          return;
-        }
-
-        // Handle other errors
+        // Handle errors
         if (!response.ok) {
           console.error('[PlaidLinkButton] Exchange token failed:', data);
           setError(data.message || 'Failed to exchange token');
