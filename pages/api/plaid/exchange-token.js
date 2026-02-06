@@ -57,6 +57,17 @@ export default async function handler(req, res) {
       const accountsResult = await plaidPost('/accounts/get', { access_token }, { signal: controller.signal });
       const accounts = accountsResult.accounts || [];
 
+      // Debug logging: Show exactly what Plaid returned
+      console.log('[plaid/exchange-token] Accounts returned from Plaid /accounts/get:', {
+        total_accounts: accounts.length,
+        account_details: accounts.map((acc) => ({
+          name: acc.name,
+          type: acc.type,
+          subtype: acc.subtype,
+          account_id: acc.account_id,
+        })),
+      });
+
       // Try to fetch liabilities, but don't fail if not available
       let creditLiabilities = [];
       try {
