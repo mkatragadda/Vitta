@@ -107,6 +107,29 @@ export default function PlaidAccountSelector({
     },
   });
 
+  // Enhanced debug: show all accounts with detailed filtering info
+  console.log('[PlaidAccountSelector] DETAILED ACCOUNT ANALYSIS:');
+  accounts.forEach((acc, idx) => {
+    const subtype = acc.account_subtype?.toLowerCase().trim() || '';
+    const isSupported = isAccountTypeSupported(acc.account_subtype);
+    console.log(`  Account ${idx}: ${acc.name}`, {
+      subtype: acc.account_subtype,
+      subtype_normalized: subtype,
+      account_type: acc.account_type,
+      is_supported: isSupported,
+      category: isSupported
+        ? subtype.includes('credit')
+          ? 'CREDIT'
+          : subtype.includes('debit')
+          ? 'DEBIT'
+          : 'BANK ACCOUNTS'
+        : 'NOT SUPPORTED',
+      reason: !isSupported
+        ? `Subtype "${acc.account_subtype}" not in supported list`
+        : 'OK',
+    });
+  });
+
   // Separate into already-added and available
   const alreadyAddedIds = new Set(
     alreadyAddedAccounts.map((acc) => acc.plaid_account_id)
@@ -305,6 +328,28 @@ export default function PlaidAccountSelector({
             )}
           </div>
         )}
+      </div>
+
+      {/* Debug Section: Show all accounts returned by Plaid */}
+      <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <details className="text-xs text-gray-600">
+          <summary className="cursor-pointer font-semibold text-gray-700 mb-2">
+            DEBUG: View all accounts returned by Plaid ({accounts.length} total)
+          </summary>
+          <div className="bg-white p-2 rounded border border-gray-200 overflow-auto max-h-64 mt-2">
+            <pre>{JSON.stringify(
+              accounts.map((acc) => ({
+                name: acc.name,
+                subtype: acc.account_subtype,
+                type: acc.account_type,
+                balance: acc.current_balance,
+                mask: acc.mask,
+              })),
+              null,
+              2
+            )}</pre>
+          </div>
+        </details>
       </div>
 
       {/* Summary of auto-populated fields */}
