@@ -52,6 +52,7 @@ export default async function handler(req, res) {
         },
         client_name: 'Vitta',
         products: ['auth'], // Auth product for account verification and basic account info
+        optional_products: ['liabilities', 'transactions'], // Request liabilities/transactions if available
         country_codes: ['US'],
         language: 'en',
       };

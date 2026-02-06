@@ -53,15 +53,21 @@ export default async function handler(req, res) {
       // 2. Encrypt access_token immediately
       const encryptedToken = encryptToken(access_token);
 
-      // 3. Fetch accounts and liabilities in parallel
-      const [accountsResult, liabilitiesResult] = await Promise.all([
-        plaidPost('/accounts/get', { access_token }, { signal: controller.signal }),
-        plaidPost('/liabilities/get', { access_token }, { signal: controller.signal }),
-      ]);
-
+      // 3. Fetch accounts (required) and liabilities (optional) in parallel
+      const accountsResult = await plaidPost('/accounts/get', { access_token }, { signal: controller.signal });
       const accounts = accountsResult.accounts || [];
-      const liabilities = liabilitiesResult.liabilities || {};
-      const creditLiabilities = liabilities.credit || [];
+
+      // Try to fetch liabilities, but don't fail if not available
+      let creditLiabilities = [];
+      try {
+        const liabilitiesResult = await plaidPost('/liabilities/get', { access_token }, { signal: controller.signal });
+        const liabilities = liabilitiesResult.liabilities || {};
+        creditLiabilities = liabilities.credit || [];
+      } catch (liabilityError) {
+        // Liabilities might not be available for this bank/user
+        console.log('[plaid/exchange-token] Liabilities not available:', liabilityError.message);
+        // Continue without liabilities data
+      }
 
       clearTimeout(timeoutId);
 
