@@ -48,23 +48,22 @@ export default function PlaidAccountSelector({
     }
   }, [accounts]);
 
-  // Supported account types: credit cards, debit cards, checking accounts
-  // Handle variations in Plaid's naming conventions
+  // Supported account types: any depository or credit type
+  // Includes: credit cards, debit cards, checking, savings, money market, etc.
+  // Excludes: loans, investments, and other non-transactional accounts
   const isAccountTypeSupported = (subtype) => {
     if (!subtype) return false;
     const normalized = subtype.toLowerCase().trim();
-    return (
-      normalized === 'credit_card' ||
-      normalized === 'credit card' ||
-      normalized === 'creditcard' ||
-      normalized === 'credit' ||
-      normalized === 'debit_card' ||
-      normalized === 'debit card' ||
-      normalized === 'debitcard' ||
-      normalized === 'debit' ||
-      normalized === 'checking' ||
-      normalized === 'depository'
-    );
+
+    // Explicitly supported account subtypes
+    const supported = [
+      'credit_card', 'credit card', 'creditcard', 'credit',
+      'debit_card', 'debit card', 'debitcard', 'debit',
+      'checking', 'savings', 'money_market', 'money market',
+      'cd', 'certificate_of_deposit', 'prepaid', 'depository'
+    ];
+
+    return supported.includes(normalized);
   };
 
   // Filter and categorize accounts
@@ -74,24 +73,27 @@ export default function PlaidAccountSelector({
 
   // Group accounts by category for better UX
   const accountsByCategory = {
-    credit: supportedAccounts.filter(
-      (acc) =>
-        acc.account_subtype?.toLowerCase().includes('credit') ||
-        acc.account_type?.toLowerCase().includes('credit')
-    ),
-    debit: supportedAccounts.filter(
-      (acc) =>
-        acc.account_subtype?.toLowerCase().includes('debit') ||
-        (acc.account_type?.toLowerCase().includes('depository') &&
-          !acc.account_subtype?.toLowerCase().includes('credit') &&
-          acc.account_subtype?.toLowerCase() !== 'checking')
-    ),
-    checking: supportedAccounts.filter(
-      (acc) =>
-        acc.account_subtype?.toLowerCase().trim() === 'checking' ||
-        (acc.account_subtype?.toLowerCase().trim() === 'depository' &&
-          !acc.account_subtype?.toLowerCase().includes('credit'))
-    ),
+    credit: supportedAccounts.filter((acc) => {
+      const subtype = acc.account_subtype?.toLowerCase().trim() || '';
+      return subtype.includes('credit') || acc.account_type?.toLowerCase().includes('credit');
+    }),
+    debit: supportedAccounts.filter((acc) => {
+      const subtype = acc.account_subtype?.toLowerCase().trim() || '';
+      return subtype.includes('debit') && !subtype.includes('credit');
+    }),
+    checking: supportedAccounts.filter((acc) => {
+      const subtype = acc.account_subtype?.toLowerCase().trim() || '';
+      // Include: checking, savings, money market, CD, and other depository accounts (but not credit)
+      return (
+        subtype === 'checking' ||
+        subtype === 'savings' ||
+        subtype === 'money_market' ||
+        subtype === 'cd' ||
+        subtype === 'certificate_of_deposit' ||
+        subtype === 'prepaid' ||
+        (subtype === 'depository' && !subtype.includes('credit'))
+      );
+    }),
   };
 
   console.log('[PlaidAccountSelector] Account categorization:', {
@@ -281,11 +283,11 @@ export default function PlaidAccountSelector({
               </div>
             )}
 
-            {/* Checking Accounts Section */}
+            {/* Bank Accounts Section (Checking, Savings, Money Market, etc.) */}
             {accountsByCategory.checking.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold text-green-700 mb-2 flex items-center gap-2">
-                  <span className="text-lg">🧾</span> Checking Accounts (ACH)
+                  <span className="text-lg">🧾</span> Bank Accounts
                 </h4>
                 <div className="space-y-2">
                   {accountsByCategory.checking
