@@ -38,6 +38,9 @@ export default async function handler(req, res) {
 
     try {
       // 1. Exchange public_token for access_token
+      console.log('[plaid/exchange-token] Exchanging public_token...');
+      console.log('[plaid/exchange-token] Public token received:', public_token ? public_token.substring(0, 20) + '...' : 'MISSING');
+
       const exchangeResult = await plaidPost(
         '/item/public_token/exchange',
         { public_token },
@@ -45,6 +48,7 @@ export default async function handler(req, res) {
       );
 
       const { access_token, item_id } = exchangeResult;
+      console.log('[plaid/exchange-token] Exchange successful, item_id:', item_id);
 
       // 2. Encrypt access_token immediately
       const encryptedToken = encryptToken(access_token);

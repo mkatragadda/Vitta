@@ -100,18 +100,23 @@ const PlaidLinkButton = ({
   const handlePlaidSuccess = useCallback(
     async (publicToken, metadata) => {
       console.log('[PlaidLinkButton] Plaid Link success. Exchanging token...');
+      console.log('[PlaidLinkButton] Public token:', publicToken ? publicToken.substring(0, 20) + '...' : 'MISSING');
+      console.log('[PlaidLinkButton] Metadata:', metadata);
       setIsLoading(true);
       setError(null);
 
       try {
         // Exchange public token for access token on backend
+        const requestBody = {
+          public_token: publicToken,
+          user_id: user.id,
+        };
+        console.log('[PlaidLinkButton] Sending exchange request with body:', requestBody);
+
         const response = await fetch('/api/plaid/exchange-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            public_token: publicToken,
-            user_id: user.id,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const data = await response.json();
