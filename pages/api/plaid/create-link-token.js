@@ -45,18 +45,25 @@ export default async function handler(req, res) {
       console.log('[plaid/create-link-token] Calling Plaid with client_id:', process.env.PLAID_CLIENT_ID?.substring(0, 10) + '...');
       console.log('[plaid/create-link-token] Plaid environment:', process.env.PLAID_ENV);
 
+      // Build request body
+      const requestBody = {
+        user: {
+          client_user_id: user_id,
+        },
+        client_name: 'Vitta',
+        products: ['auth'], // Auth product for account verification and basic account info
+        country_codes: ['US'],
+        language: 'en',
+      };
+
+      // Add webhook only if configured
+      if (process.env.PLAID_WEBHOOK_URL) {
+        requestBody.webhook = process.env.PLAID_WEBHOOK_URL;
+      }
+
       const linkTokenResponse = await plaidPost(
         '/link/token/create',
-        {
-          user: {
-            client_user_id: user_id,
-          },
-          client_name: 'Vitta',
-          products: ['auth'], // Auth product for account verification and basic account info
-          country_codes: ['US'],
-          language: 'en',
-          webhook: process.env.PLAID_WEBHOOK_URL,
-        },
+        requestBody,
         { signal: controller.signal }
       );
 

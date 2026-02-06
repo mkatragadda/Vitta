@@ -207,11 +207,14 @@ const PlaidLinkButton = ({
 
     console.log('[PlaidLinkButton] Opening Plaid Link...');
 
-    // v2 SDK config - only essential fields
+    // v2 SDK config with event tracking
     const config = {
       token: linkToken,
       onSuccess: handlePlaidSuccess,
       onExit: handlePlaidExit,
+      onEvent: (eventName, metadata) => {
+        console.log('[PlaidLinkButton] Plaid event:', eventName, metadata);
+      },
     };
 
     try {
