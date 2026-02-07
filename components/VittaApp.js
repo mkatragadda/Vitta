@@ -574,11 +574,10 @@ const VittaApp = () => {
               </div>
 
               <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
-                AGENTIC WALLET THAT ACTS<br />
-                <span className="text-blue-200">Not just chats</span>
+                Agentic Wallet That Acts
               </h1>
               <p className="text-blue-100 text-lg mb-12">
-                Vitta executes for global families. Snipes peak FX → $20 UPI in 2min. Times bills around paychecks. Routes via optimal rails—no manual work.
+                Vitta executes for global families. Not just chats. Snipes peak FX → $20 UPI 2min. Times bills around paychecks. Routes via optimal rails.
               </p>
             </div>
 
