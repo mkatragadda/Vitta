@@ -8,6 +8,7 @@ import RecommendationScreen from './RecommendationScreen';
 import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
+import { warmupCache } from '../services/cache/cacheWarmup';
 
 // Component to render message content with clickable links and tables
 const MessageContent = ({ content, onNavigate }) => {
@@ -513,6 +514,15 @@ const VittaApp = () => {
       }
     }
   }, [isGsiInitialized, hasRenderedGsiButton]);
+
+  // Phase 7: Warm up embedding cache on app initialization
+  // Runs once to pre-cache common queries
+  useEffect(() => {
+    // Run warmup in background, non-blocking
+    warmupCache().catch(error => {
+      console.warn('[VittaApp] Cache warmup error:', error);
+    });
+  }, []); // Run once on mount
 
   // Logout handler
   const handleLogout = () => {

@@ -596,9 +596,16 @@ export const processQuery = async (query, userData = {}, context = {}) => {
     // Use rewritten query for classification if confidence is high enough
     const queryToClassify = rewriteResult.confidence >= 0.70 ? rewriteResult.rewritten : query;
 
-    // STEP 1: Classify into high-level category (TASK / GUIDANCE / CHAT)
-  let category = await classifyCategory(queryToClassify);
+    // STEP 1 & 2 (PARALLELIZED): Classify category AND generate embedding in parallel
+    // Phase 7: Optimization - Both operations are independent, so parallelize for ~200ms savings
+    console.log('[ConversationEngineV2] Step 1-2: Classifying category + generating embedding (parallel)...');
+    const [rawCategory, queryEmbedding] = await Promise.all([
+      classifyCategory(queryToClassify),
+      getCachedEmbedding(query)
+    ]);
 
+    // Apply post-classification rules
+    let category = rawCategory;
   const memoryPattern = /\b(memory|memories|remember|tag|tags|note|log|save)\b/i;
   if (category === 'CHAT' && memoryPattern.test(queryToClassify)) {
     category = 'TASK';
@@ -608,10 +615,6 @@ export const processQuery = async (query, userData = {}, context = {}) => {
   }
     const allowedIntents = INTENT_CATEGORIES[category] || [];
     console.log('[ConversationEngineV2] Category:', category, '- Allowed intents:', allowedIntents);
-
-    // STEP 2: Generate query embedding
-    console.log('[ConversationEngineV2] Step 2: Generating query embedding...');
-    const queryEmbedding = await getCachedEmbedding(query);
 
     if (!queryEmbedding) {
       console.error('[ConversationEngineV2] Failed to generate embedding, using GPT fallback');

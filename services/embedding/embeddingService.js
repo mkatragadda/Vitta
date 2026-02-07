@@ -1,13 +1,21 @@
 /**
  * Embedding Service
  * Handles OpenAI embeddings generation and vector similarity search
+ *
+ * Performance optimizations (Phase 7):
+ * - Enhanced embedding cache with 1000-entry capacity and TTL
+ * - Request coalescing to dedupe identical requests within 100ms
  */
 
 import { supabase } from '../../config/supabase.js';
+import EmbeddingCache from '../cache/embeddingCache.js';
+import { embeddingCoalescer } from '../performance/requestCoalescer.js';
 
-// In-memory cache to avoid redundant API calls
-const embeddingCache = new Map();
-const CACHE_SIZE_LIMIT = 100;
+// Enhanced embedding cache with TTL and LRU eviction
+const embeddingCache = new EmbeddingCache({
+  capacity: 1000,        // 10x the previous limit
+  ttlMs: 3600000         // 1 hour TTL
+});
 
 /**
  * Generate embedding for text using OpenAI API via server route
@@ -47,7 +55,7 @@ export async function getEmbedding(text) {
 }
 
 /**
- * Get embedding with caching to reduce API calls
+ * Get embedding with caching and request coalescing to reduce API calls
  * @param {string} text - Text to embed
  * @returns {Promise<number[]>} - Cached or freshly generated embedding
  */
@@ -55,25 +63,18 @@ export async function getCachedEmbedding(text) {
   const cacheKey = text.toLowerCase().trim();
 
   // Check cache first
-  if (embeddingCache.has(cacheKey)) {
+  const cached = embeddingCache.get(cacheKey);
+  if (cached) {
     console.log('[EmbeddingService] Cache hit for:', text.substring(0, 50));
-    return embeddingCache.get(cacheKey);
+    return cached;
   }
 
-  // Generate new embedding
-  const embedding = await getEmbedding(text);
-
-  // Store in cache
-  embeddingCache.set(cacheKey, embedding);
-
-  // Limit cache size (LRU-style eviction)
-  if (embeddingCache.size > CACHE_SIZE_LIMIT) {
-    const firstKey = embeddingCache.keys().next().value;
-    embeddingCache.delete(firstKey);
-    console.log('[EmbeddingService] Cache evicted oldest entry');
-  }
-
-  return embedding;
+  // Coalesce identical requests to avoid duplicate API calls
+  return embeddingCoalescer.coalesce(cacheKey, async () => {
+    const embedding = await getEmbedding(text);
+    embeddingCache.set(cacheKey, embedding);
+    return embedding;
+  });
 }
 
 /**
@@ -153,16 +154,27 @@ export async function logIntentDetection(query, intent, similarity, method, user
  */
 export function clearEmbeddingCache() {
   embeddingCache.clear();
-  console.log('[EmbeddingService] Cache cleared');
+  embeddingCoalescer.clear();
+  console.log('[EmbeddingService] Cache and coalescer cleared');
 }
 
 /**
  * Get cache statistics
  */
 export function getCacheStats() {
-  return {
-    size: embeddingCache.size,
-    limit: CACHE_SIZE_LIMIT,
-    keys: Array.from(embeddingCache.keys()).map(k => k.substring(0, 30))
-  };
+  return embeddingCache.getStats();
+}
+
+/**
+ * Get request coalescer statistics
+ */
+export function getCoalescerStats() {
+  return embeddingCoalescer.getStats();
+}
+
+/**
+ * Get top cached entries by access frequency
+ */
+export function getTopCachedEntries(n = 10) {
+  return embeddingCache.getTopEntries(n);
 }
