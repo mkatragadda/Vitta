@@ -574,48 +574,49 @@ const VittaApp = () => {
               </div>
 
               <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
-                Chat with Your Wallet
+                AGENTIC WALLET THAT ACTS<br />
+                <span className="text-blue-200">Not just chats</span>
               </h1>
               <p className="text-blue-100 text-lg mb-12">
-                Meet Agentic Wallet, your intelligent financial assistant. Get real-time credit card recommendations, optimize payments, maximize rewards—all through natural conversation.
+                Vitta executes for global families. Snipes peak FX → $20 UPI in 2min. Times bills around paychecks. Routes via optimal rails—no manual work.
               </p>
             </div>
 
-            {/* Features List */}
+            {/* Vitta Agent Skills */}
             <div className="space-y-5">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Ask, Don&apos;t Click</p>
-                  <p className="text-blue-200 text-sm">Just ask &quot;which card for groceries?&quot; and get instant answers</p>
+                  <p className="text-white font-semibold">The Sniper</p>
+                  <p className="text-blue-200 text-sm">Monitors USD/INR 24/7. Triggers transfers only at peak rates.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-cyan-400 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Instant Insights</p>
-                  <p className="text-blue-200 text-sm">AI analyzes your cards and suggests payment strategies</p>
+                  <p className="text-white font-semibold">The Shield</p>
+                  <p className="text-blue-200 text-sm">Scans bank balances via Plaid. Times domestic bills to prevent overdrafts.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-400 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 12a7 7 0 11-14 0 7 7 0 0114 0zm-7-5a2 2 0 11-4 0 2 2 0 014 0zm0 6a3 3 0 11-6 0 3 3 0 016 0z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Save & Earn More</p>
-                  <p className="text-blue-200 text-sm">Minimize interest, maximize rewards through smart advice</p>
+                  <p className="text-white font-semibold">The Optimizer</p>
+                  <p className="text-blue-200 text-sm">Automatically routes payments to the best card or ACH rail to save you every cent.</p>
                 </div>
               </div>
             </div>
@@ -630,14 +631,14 @@ const VittaApp = () => {
               <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-white font-bold text-2xl">V</span>
               </div>
-              <h1 className="text-3xl font-bold text-gray-900">Chat with Your Wallet</h1>
-              <p className="text-gray-600 text-sm mt-2">Your AI financial assistant</p>
+              <h1 className="text-3xl font-bold text-gray-900">Agentic Wallet</h1>
+              <p className="text-gray-600 text-sm mt-2">Autonomous execution for global families</p>
             </div>
 
             {/* Heading */}
             <div className="hidden lg:block mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Agentic Wallet</h2>
-              <p className="text-gray-600">Start your financial conversation</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Vitta</h2>
+              <p className="text-gray-600">Autonomous execution for global families</p>
             </div>
 
             {/* Google Sign-In Button */}
