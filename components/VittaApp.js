@@ -11,8 +11,8 @@ import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
 import { warmupCache } from '../services/cache/cacheWarmup';
 
-// Component to render message content with clickable links and tables
-const MessageContent = ({ content, onNavigate }) => {
+// Component to render message content with clickable links, tables, rich components, and action buttons
+const MessageContent = ({ content, component, actions, onNavigate, onAction }) => {
   // Parse markdown-style links [text](url)
   const parseMarkdownLinks = (text) => {
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -155,16 +155,91 @@ const MessageContent = ({ content, onNavigate }) => {
   
   // Regular content without tables
   const lines = content.split('\n');
-  
+
   return (
-    <>
-      {lines.map((line, index) => (
-        <React.Fragment key={index}>
-          {parseMarkdownLinks(line)}
-          {index < lines.length - 1 && <br />}
-        </React.Fragment>
-      ))}
-    </>
+    <div className="flex flex-col gap-3">
+      <div>
+        {lines.map((line, index) => (
+          <React.Fragment key={index}>
+            {parseMarkdownLinks(line)}
+            {index < lines.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Render rich component if present */}
+      {component && (
+        <div className="mt-2">
+          {component.type === 'fx_rate_card' && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="font-semibold text-sm">Exchange Rate Monitor</div>
+              <div className="text-xs text-gray-600">
+                Current: <span className="font-semibold">$1 = ₹{component.data?.currentRate || 83.5}</span>
+              </div>
+              <input
+                type="number"
+                placeholder="Target rate (e.g., 84)"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.defaultRate}
+                onBlur={(e) => onAction?.({action: 'set_target_rate', value: e.target.value})}
+              />
+              <div className="text-xs text-gray-600">
+                Estimated: <span className="font-semibold">₹{(component.data?.amount || 5000) * (component.data?.currentRate || 83.5).toFixed(0)}</span>
+              </div>
+            </div>
+          )}
+
+          {component.type === 'recipient_form' && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="font-semibold text-sm">Recipient Details</div>
+              <input
+                type="text"
+                placeholder="Recipient name"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.name || 'Mom'}
+              />
+              <input
+                type="text"
+                placeholder="Bank name"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.bank || 'HDFC Bank'}
+              />
+              <input
+                type="text"
+                placeholder="Account number"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.account || ''}
+              />
+              <input
+                type="text"
+                placeholder="IFSC code"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.ifsc || 'HDFC0001234'}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Render action buttons if present */}
+      {actions && actions.length > 0 && (
+        <div className="flex gap-2 mt-2 flex-wrap">
+          {actions.map((action, index) => (
+            <button
+              key={index}
+              onClick={() => onAction?.({action: action.action})}
+              className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                action.variant === 'primary'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+              }`}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -193,6 +268,12 @@ const VittaApp = () => {
   const fileInputRef = useRef(null);
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const userId = user?.id;
+
+  // Demo flow state management
+  const [demoFlowState, setDemoFlowState] = useState({ step: 'idle', data: {} });
+  const [showNotification, setShowNotification] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [modalData, setModalData] = useState({});
 
 
   const processGoogleProfile = useCallback(async ({ email, name, picture, sub }) => {
@@ -701,6 +782,8 @@ const VittaApp = () => {
                   if (authResult.success && authResult.user) {
                     // Demo user authenticated successfully
                     console.log('[VittaApp] Demo user authenticated:', authResult.user.email);
+                    console.log('[VittaApp] Full user object:', authResult.user);
+                    console.log('[VittaApp] User ID:', authResult.user.id);
                     setUser(authResult.user);
                     setIsAuthenticated(true);
                     setLocalAuthError('');
@@ -1211,6 +1294,87 @@ const VittaApp = () => {
     setIsOpen(false); // Close chat when navigating
   };
 
+  // Handle demo action callbacks from rich components
+  const handleDemoAction = useCallback((actionData) => {
+    console.log('[VittaApp] Demo action:', actionData);
+    const { action, value } = actionData;
+
+    if (action === 'set_target_rate') {
+      setDemoFlowState(prev => ({
+        ...prev,
+        step: 'recipient_details',
+        data: { ...prev.data, targetRate: parseFloat(value) }
+      }));
+
+      // Add recipient form message
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Got it! I\'ll monitor the rate and notify you when it reaches your target. Now let me confirm the recipient details.",
+        component: {
+          type: 'recipient_form',
+          data: {
+            name: 'Mom',
+            bank: 'HDFC Bank',
+            account: '50100123456789',
+            ifsc: 'HDFC0001234'
+          }
+        },
+        actions: [
+          { label: 'Confirm & Monitor', action: 'submit_recipient', variant: 'primary' },
+          { label: 'Cancel', action: 'cancel_transfer', variant: 'secondary' }
+        ],
+        timestamp: new Date()
+      }]);
+    } else if (action === 'submit_recipient') {
+      setDemoFlowState(prev => ({
+        ...prev,
+        step: 'monitoring',
+        data: { ...prev.data, recipientConfirmed: true }
+      }));
+
+      // Add monitoring message
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Perfect! I\'m now monitoring the USD/INR exchange rate 24/7. I\'ll automatically notify you when the rate reaches your target of ₹" + (demoFlowState.data.targetRate || 84) + ". You can check the status anytime, and I\'ll request your approval before executing the transfer.",
+        timestamp: new Date()
+      }]);
+    } else if (action === 'cancel_transfer') {
+      setDemoFlowState({ step: 'idle', data: {} });
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Transfer cancelled. Let me know if you\'d like to try again!",
+        timestamp: new Date()
+      }]);
+    } else if (action === 'review_transfer') {
+      setShowConfirmModal(true);
+      setModalData({
+        amount: 5000,
+        currency: 'USD',
+        targetRate: demoFlowState.data.targetRate,
+        currentRate: 84.2,
+        recipient: 'Mom',
+        bank: 'HDFC Bank',
+        estimatedINR: (5000 * 84.2).toFixed(2)
+      });
+    } else if (action === 'approve_transfer') {
+      setShowConfirmModal(false);
+      setDemoFlowState({ step: 'complete', data: {} });
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "✓ Transfer approved! I\'ve executed the transfer of $5,000 to Mom in India at the rate of ₹84.2/USD.\n\n**Transfer Details:**\n- Amount: $5,000\n- Recipient: Mom (HDFC Bank)\n- INR Transferred: ₹421,000\n- Status: **Completed**\n- Timestamp: " + new Date().toLocaleString(),
+        timestamp: new Date()
+      }]);
+    } else if (action === 'deny_transfer') {
+      setShowConfirmModal(false);
+      setDemoFlowState({ step: 'idle', data: {} });
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Transfer denied. No funds have been transferred. Let me know if you want to adjust the rate and try again!",
+        timestamp: new Date()
+      }]);
+    }
+  }, [demoFlowState.data.targetRate]);
+
   const sampleQuestions = [
     "What cards are in my wallet?",
     "Which card should I use at Costco?",
@@ -1235,10 +1399,12 @@ const VittaApp = () => {
 
   // If credit card screen is active, show it
   if (currentScreen === 'creditCards') {
+    console.log('[VittaApp] Rendering CreditCardScreen with user:', user);
     return (
       <CreditCardScreen
         onBack={() => setCurrentScreen('main')}
         user={user}
+        cards={userCards}
         onCardsChanged={refreshCards} // Refresh cards when add/update/delete happens
       />
     );
@@ -1308,6 +1474,9 @@ const VittaApp = () => {
         MessageContent={MessageContent}
         isDemoMode={user.provider !== 'google'}
         onCardsChanged={refreshCards}
+        currentScreen={currentScreen}
+        setCurrentScreen={setCurrentScreen}
+        userCards={userCards}
       />
     );
   }
@@ -1477,8 +1646,8 @@ const VittaApp = () => {
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                         message.type === 'user' ? 'bg-blue-600' : 'bg-gray-600'
                       }`}>
-                        {message.type === 'user' ? 
-                          <User className="w-3 h-3 text-white" /> : 
+                        {message.type === 'user' ?
+                          <User className="w-3 h-3 text-white" /> :
                           <Bot className="w-3 h-3 text-white" />
                         }
                       </div>
@@ -1488,7 +1657,13 @@ const VittaApp = () => {
                           : 'bg-gray-50 text-gray-900 rounded-bl-md'
                       }`}>
                         <div className="whitespace-pre-line text-sm leading-relaxed">
-                          <MessageContent content={message.content} onNavigate={handleChatNavigate} />
+                          <MessageContent
+                            content={message.content}
+                            component={message.component}
+                            actions={message.actions}
+                            onNavigate={handleChatNavigate}
+                            onAction={handleDemoAction}
+                          />
                         </div>
                         <div className="text-xs opacity-70 mt-1">
                           {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}

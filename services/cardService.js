@@ -1,7 +1,11 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { getCardById } from './cardDatabase/cardCatalogService';
+import { isDemoUser } from './demoUserService';
 
 const DEMO_USER_ID = 'demo-user';
+const DEMO_USER_ID_V2 = 'demo-vitta-wallet'; // Phase 1: Old fixed demo user ID (string format)
+const DEMO_USER_ID_V3 = '550e8400-e29b-41d4-a716-demo01000000'; // Phase 1: Valid UUID format (old)
+const DEMO_USER_ID_V4 = '12345678-1234-5678-9abc-def012345678'; // Current: Valid UUID v4 (all hex)
 
 const BASE_DEMO_CARDS = [
   {
@@ -153,7 +157,8 @@ const cloneDemoCards = (cards) => cards.map(card => ({ ...card, reward_structure
  * @returns {Promise<Object>} Created card object
  */
 export const addCard = async (cardData) => {
-  if (cardData.user_id === DEMO_USER_ID) {
+  // Support all demo user ID formats (backward compatibility)
+  if (cardData.user_id === DEMO_USER_ID || cardData.user_id === DEMO_USER_ID_V2 || cardData.user_id === DEMO_USER_ID_V3 || cardData.user_id === DEMO_USER_ID_V4) {
     const newCard = {
       id: 'demo-card-' + Date.now(),
       ...cardData,
@@ -209,8 +214,10 @@ export const addCard = async (cardData) => {
  * @returns {Promise<Array>} Array of card objects
  */
 export const getUserCards = async (userId) => {
-  if (userId === DEMO_USER_ID) {
-    console.log('[Vitta] Returning demo cards for demo user');
+  // Support all demo user ID formats (backward compatibility)
+  if (userId === DEMO_USER_ID || userId === DEMO_USER_ID_V2 || userId === DEMO_USER_ID_V3 || userId === DEMO_USER_ID_V4) {
+    console.log('[Vitta] Returning demo cards for demo user:', userId);
+    // Return demo cards, using the old DEMO_USER_ID for the data
     return cloneDemoCards(demoCardStore.filter(card => card.user_id === DEMO_USER_ID));
   }
 

@@ -18,7 +18,7 @@ import {
 describe('demoUserService', () => {
   const DEMO_EMAIL = 'vittademo@gmail.com';
   const DEMO_PASSWORD = 'vitta26demo';
-  const DEMO_USER_ID = 'demo-vitta-wallet';
+  const DEMO_USER_ID = '12345678-1234-5678-9abc-def012345678'; // Valid UUID v4 format
 
   // ========================================================================
   // GUARD RAIL TESTS - Critical Security Tests

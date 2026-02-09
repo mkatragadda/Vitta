@@ -76,6 +76,10 @@ export default function App({ Component, pageProps }) {
         src="https://accounts.google.com/gsi/client"
         strategy="afterInteractive"
       />
+      <Script
+        src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"
+        strategy="afterInteractive"
+      />
       <Component {...pageProps} offlineContext={offlineContext} />
     </>
   )

@@ -56,7 +56,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
     }
   }, [input]);
 
-  // Load cards for Google users
+  // Load cards for all users (Google and demo)
   const loadCards = useCallback(async () => {
     try {
       setIsLoadingCards(true);
@@ -64,18 +64,17 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
       setCards(userCards);
     } catch (error) {
       console.error('Error loading cards:', error);
+      setCards([]);
     } finally {
       setIsLoadingCards(false);
     }
   }, [user?.id]);
 
   useEffect(() => {
-    if (!isDemoMode && user?.id) {
+    if (user?.id) {
       loadCards();
-    } else {
-      setIsLoadingCards(false);
     }
-  }, [isDemoMode, loadCards, user?.id]);
+  }, [user?.id, loadCards]);
 
   const handleAddCard = useCallback(async (e) => {
     e.preventDefault();
@@ -398,7 +397,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         <h1 className="text-3xl font-bold text-gray-900 mb-6">My Wallet</h1>
 
         {isDemoMode ? (
-          <CreditCardScreen />
+          <CreditCardScreen cards={cards} onCardsChanged={loadCards} />
         ) : (
           <div className="space-y-6">
             {/* Add Card Button */}

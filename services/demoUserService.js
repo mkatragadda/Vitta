@@ -25,7 +25,7 @@ import { supabase, isSupabaseConfigured } from '../config/supabase';
 const DEMO_CREDENTIALS = {
   email: 'vittademo@gmail.com',
   password: 'vitta26demo',
-  userId: 'demo-vitta-wallet',
+  userId: '12345678-1234-5678-9abc-def012345678', // Valid UUID v4 (all hex chars: 0-9, a-f)
   name: 'Demo User'
 };
 
@@ -196,11 +196,16 @@ async function getOrCreateDemoUserInDatabase() {
 
   try {
     // Step 1: Try to find existing demo user by ID
-    console.log('[demoUserService] Checking for existing demo user by ID:', DEMO_CREDENTIALS.userId);
+    const demoUserId = DEMO_CREDENTIALS.userId;
+    console.log('[demoUserService] Demo user ID:', demoUserId);
+    console.log('[demoUserService] Demo user ID length:', demoUserId.length);
+    console.log('[demoUserService] Demo user ID chars:', [...demoUserId].join('-'));
+    console.log('[demoUserService] Checking for existing demo user by ID:', demoUserId);
+    console.log('[demoUserService] About to query Supabase with userId:', demoUserId, 'Type:', typeof demoUserId);
     const { data: existingUser, error: fetchError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', DEMO_CREDENTIALS.userId)
+      .eq('id', demoUserId)
       .single();
 
     if (!fetchError && existingUser) {
@@ -215,11 +220,12 @@ async function getOrCreateDemoUserInDatabase() {
     }
 
     // Step 2: User doesn't exist, create it with fixed ID
-    console.log('[demoUserService] Creating new demo user with fixed ID:', DEMO_CREDENTIALS.userId);
+    console.log('[demoUserService] Creating new demo user with fixed ID:', demoUserId);
+    console.log('[demoUserService] About to insert user with ID:', demoUserId, 'Type:', typeof demoUserId);
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert({
-        id: DEMO_CREDENTIALS.userId,
+        id: demoUserId,
         email: DEMO_CREDENTIALS.email,
         name: DEMO_CREDENTIALS.name,
         provider: 'demo',
