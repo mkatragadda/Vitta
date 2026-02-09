@@ -570,52 +570,40 @@ const VittaApp = () => {
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
                   <span className="text-white font-bold text-xl">V</span>
                 </div>
-                <span className="text-2xl font-bold text-white">Agentic Wallet</span>
+                <span className="text-4xl font-bold text-white">Vitta</span>
               </div>
 
-              <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
-                Chat with Your Wallet
+              <h1 className="text-5xl font-bold text-white mb-2 leading-tight">
+                Agentic Wallet That Acts
               </h1>
               <p className="text-blue-100 text-lg mb-12">
-                Meet Agentic Wallet, your intelligent financial assistant. Get real-time credit card recommendations, optimize payments, maximize rewards—all through natural conversation.
+                AI Wallet for everyday payments
               </p>
             </div>
 
-            {/* Features List */}
+            {/* Agent Skills */}
             <div className="space-y-5">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                </div>
+                <div className="flex-shrink-0 text-3xl">🎯</div>
                 <div>
-                  <p className="text-white font-semibold">Ask, Don&apos;t Click</p>
-                  <p className="text-blue-200 text-sm">Just ask &quot;which card for groceries?&quot; and get instant answers</p>
+                  <p className="text-white font-semibold">The Sniper</p>
+                  <p className="text-blue-200 text-sm">Watches FX 24/7 and sends money home when your target rate is hit.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
+                <div className="flex-shrink-0 text-3xl">🛡️</div>
                 <div>
-                  <p className="text-white font-semibold">Instant Insights</p>
-                  <p className="text-blue-200 text-sm">AI analyzes your cards and suggests payment strategies</p>
+                  <p className="text-white font-semibold">The Shield</p>
+                  <p className="text-blue-200 text-sm">Checks balances via Plaid and pays bills on time to avoid overdrafts.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
+                <div className="flex-shrink-0 text-3xl">⚡</div>
                 <div>
-                  <p className="text-white font-semibold">Save & Earn More</p>
-                  <p className="text-blue-200 text-sm">Minimize interest, maximize rewards through smart advice</p>
+                  <p className="text-white font-semibold">The Optimizer (coming soon)</p>
+                  <p className="text-blue-200 text-sm">Picks the cheapest payment method for each bill.</p>
                 </div>
               </div>
             </div>
@@ -630,15 +618,10 @@ const VittaApp = () => {
               <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-white font-bold text-2xl">V</span>
               </div>
-              <h1 className="text-3xl font-bold text-gray-900">Chat with Your Wallet</h1>
-              <p className="text-gray-600 text-sm mt-2">Your AI financial assistant</p>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Agentic Wallet That Acts</h1>
+              <p className="text-gray-600 text-lg">Not just chats</p>
             </div>
 
-            {/* Heading */}
-            <div className="hidden lg:block mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Agentic Wallet</h2>
-              <p className="text-gray-600">Start your financial conversation</p>
-            </div>
 
             {/* Google Sign-In Button */}
             {gsiStatus !== 'disabled' && (
