@@ -5,13 +5,14 @@ import PaymentOptimizer from './PaymentOptimizer';
 import DashboardWithTabs from './DashboardWithTabs';
 import VittaChatInterface from './VittaChatInterface';
 import RecommendationScreen from './RecommendationScreen';
-import { saveGoogleUser } from '../services/userService';
+import { saveGoogleUser, getOrCreateDemoUser } from '../services/userService';
+import { authenticateDemoUser } from '../services/demoUserService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
 import { warmupCache } from '../services/cache/cacheWarmup';
 
-// Component to render message content with clickable links and tables
-const MessageContent = ({ content, onNavigate }) => {
+// Component to render message content with clickable links, tables, rich components, and action buttons
+const MessageContent = ({ content, component, actions, onNavigate, onAction }) => {
   // Parse markdown-style links [text](url)
   const parseMarkdownLinks = (text) => {
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -154,16 +155,91 @@ const MessageContent = ({ content, onNavigate }) => {
   
   // Regular content without tables
   const lines = content.split('\n');
-  
+
   return (
-    <>
-      {lines.map((line, index) => (
-        <React.Fragment key={index}>
-          {parseMarkdownLinks(line)}
-          {index < lines.length - 1 && <br />}
-        </React.Fragment>
-      ))}
-    </>
+    <div className="flex flex-col gap-3">
+      <div>
+        {lines.map((line, index) => (
+          <React.Fragment key={index}>
+            {parseMarkdownLinks(line)}
+            {index < lines.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Render rich component if present */}
+      {component && (
+        <div className="mt-2">
+          {component.type === 'fx_rate_card' && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="font-semibold text-sm">Exchange Rate Monitor</div>
+              <div className="text-xs text-gray-600">
+                Current: <span className="font-semibold">$1 = ₹{component.data?.currentRate || 83.5}</span>
+              </div>
+              <input
+                type="number"
+                placeholder="Target rate (e.g., 84)"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.defaultRate}
+                onBlur={(e) => onAction?.({action: 'set_target_rate', value: e.target.value})}
+              />
+              <div className="text-xs text-gray-600">
+                Estimated: <span className="font-semibold">₹{(component.data?.amount || 5000) * (component.data?.currentRate || 83.5).toFixed(0)}</span>
+              </div>
+            </div>
+          )}
+
+          {component.type === 'recipient_form' && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="font-semibold text-sm">Recipient Details</div>
+              <input
+                type="text"
+                placeholder="Recipient name"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.name || 'Mom'}
+              />
+              <input
+                type="text"
+                placeholder="Bank name"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.bank || 'HDFC Bank'}
+              />
+              <input
+                type="text"
+                placeholder="Account number"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.account || ''}
+              />
+              <input
+                type="text"
+                placeholder="IFSC code"
+                className="w-full px-3 py-2 border border-gray-200 rounded text-sm"
+                defaultValue={component.data?.ifsc || 'HDFC0001234'}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Render action buttons if present */}
+      {actions && actions.length > 0 && (
+        <div className="flex gap-2 mt-2 flex-wrap">
+          {actions.map((action, index) => (
+            <button
+              key={index}
+              onClick={() => onAction?.({action: action.action})}
+              className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                action.variant === 'primary'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+              }`}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -192,6 +268,12 @@ const VittaApp = () => {
   const fileInputRef = useRef(null);
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const userId = user?.id;
+
+  // Demo flow state management
+  const [demoFlowState, setDemoFlowState] = useState({ step: 'idle', data: {} });
+  const [showNotification, setShowNotification] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [modalData, setModalData] = useState({});
 
 
   const processGoogleProfile = useCallback(async ({ email, name, picture, sub }) => {
@@ -574,48 +656,48 @@ const VittaApp = () => {
               </div>
 
               <h1 className="text-5xl font-bold text-white mb-4 leading-tight">
-                Chat with Your Wallet
+                Agentic Wallet That Acts
               </h1>
               <p className="text-blue-100 text-lg mb-12">
-                Meet Agentic Wallet, your intelligent financial assistant. Get real-time credit card recommendations, optimize payments, maximize rewards—all through natural conversation.
+                Vitta executes for global families. Not just chats. Snipes peak FX → $20 UPI 2min. Times bills around paychecks. Routes via optimal rails.
               </p>
             </div>
 
-            {/* Features List */}
+            {/* Vitta Agent Skills */}
             <div className="space-y-5">
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Ask, Don&apos;t Click</p>
-                  <p className="text-blue-200 text-sm">Just ask &quot;which card for groceries?&quot; and get instant answers</p>
+                  <p className="text-white font-semibold">The Sniper</p>
+                  <p className="text-blue-200 text-sm">Monitors USD/INR 24/7. Triggers transfers only at peak rates.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-cyan-400 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Instant Insights</p>
-                  <p className="text-blue-200 text-sm">AI analyzes your cards and suggests payment strategies</p>
+                  <p className="text-white font-semibold">The Shield</p>
+                  <p className="text-blue-200 text-sm">Scans bank balances via Plaid. Times domestic bills to prevent overdrafts.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-pink-500 flex items-center justify-center mt-1">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-400 flex items-center justify-center mt-1">
+                  <svg className="w-4 h-4 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 12a7 7 0 11-14 0 7 7 0 0114 0zm-7-5a2 2 0 11-4 0 2 2 0 014 0zm0 6a3 3 0 11-6 0 3 3 0 016 0z"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Save & Earn More</p>
-                  <p className="text-blue-200 text-sm">Minimize interest, maximize rewards through smart advice</p>
+                  <p className="text-white font-semibold">The Optimizer</p>
+                  <p className="text-blue-200 text-sm">Automatically routes payments to the best card or ACH rail to save you every cent.</p>
                 </div>
               </div>
             </div>
@@ -630,14 +712,14 @@ const VittaApp = () => {
               <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-white font-bold text-2xl">V</span>
               </div>
-              <h1 className="text-3xl font-bold text-gray-900">Chat with Your Wallet</h1>
-              <p className="text-gray-600 text-sm mt-2">Your AI financial assistant</p>
+              <h1 className="text-3xl font-bold text-gray-900">Agentic Wallet</h1>
+              <p className="text-gray-600 text-sm mt-2">Autonomous execution for global families</p>
             </div>
 
             {/* Heading */}
             <div className="hidden lg:block mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Agentic Wallet</h2>
-              <p className="text-gray-600">Start your financial conversation</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Vitta</h2>
+              <p className="text-gray-600">Autonomous execution for global families</p>
             </div>
 
             {/* Google Sign-In Button */}
@@ -691,11 +773,46 @@ const VittaApp = () => {
               }
               setLocalAuthError('');
               setLocalAuthLoading(true);
-              // Simulate auth delay
-              setTimeout(() => {
-                setLocalAuthError('Email/password authentication is coming soon. Please sign in with Google.');
-                setLocalAuthLoading(false);
-              }, 500);
+
+              // Handle demo user authentication
+              (async () => {
+                try {
+                  const authResult = await authenticateDemoUser(localEmailForm.email, localEmailForm.password);
+
+                  if (authResult.success && authResult.user) {
+                    // Demo user authenticated successfully
+                    console.log('[VittaApp] Demo user authenticated:', authResult.user.email);
+                    console.log('[VittaApp] Full user object:', authResult.user);
+                    console.log('[VittaApp] User ID:', authResult.user.id);
+                    setUser(authResult.user);
+                    setIsAuthenticated(true);
+                    setLocalAuthError('');
+
+                    // Load initial data
+                    const cards = await getUserCards(authResult.user.id);
+                    setUserCards(cards);
+
+                    // Warmup cache
+                    warmupCache();
+
+                    // Add welcome message
+                    setMessages([{
+                      type: 'bot',
+                      content: `👋 Welcome to Vitta, Demo User! I'm your agentic wallet assistant. I can help you with:\n\n• **Send money to India** - Set a target FX rate and I'll monitor USD/INR continuously\n• **View your cards** - Check balances, rewards, and APR\n• **Optimize payments** - Get recommendations on which card to use\n• **Track spending** - Analyze your expenses by category\n\nTry asking me to send money to someone in India, or check your available cards!`,
+                      timestamp: new Date()
+                    }]);
+                    return;
+                  }
+
+                  // Authentication failed
+                  setLocalAuthError(authResult.error || 'Authentication failed');
+                } catch (error) {
+                  console.error('[VittaApp] Unexpected error during demo auth:', error);
+                  setLocalAuthError('An unexpected error occurred. Please try again.');
+                } finally {
+                  setLocalAuthLoading(false);
+                }
+              })();
             }} className="space-y-4 mb-6">
               {/* Error Message */}
               {localAuthError && (
@@ -712,12 +829,13 @@ const VittaApp = () => {
                   onChange={(e) => {
                     setLocalEmailForm({ ...localEmailForm, email: e.target.value });
                   }}
-                  placeholder="john@example.com"
+                  placeholder="vittademo@gmail.com (demo)"
                   disabled={localAuthLoading}
                   autoComplete="email"
                   inputMode="email"
                   className="w-full px-4 py-3 lg:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 text-base min-h-[44px]"
                 />
+                <p className="text-xs text-gray-500 mt-1">Demo: vittademo@gmail.com / vitta26demo</p>
               </div>
 
               <div>
@@ -1176,6 +1294,87 @@ const VittaApp = () => {
     setIsOpen(false); // Close chat when navigating
   };
 
+  // Handle demo action callbacks from rich components
+  const handleDemoAction = useCallback((actionData) => {
+    console.log('[VittaApp] Demo action:', actionData);
+    const { action, value } = actionData;
+
+    if (action === 'set_target_rate') {
+      setDemoFlowState(prev => ({
+        ...prev,
+        step: 'recipient_details',
+        data: { ...prev.data, targetRate: parseFloat(value) }
+      }));
+
+      // Add recipient form message
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Got it! I\'ll monitor the rate and notify you when it reaches your target. Now let me confirm the recipient details.",
+        component: {
+          type: 'recipient_form',
+          data: {
+            name: 'Mom',
+            bank: 'HDFC Bank',
+            account: '50100123456789',
+            ifsc: 'HDFC0001234'
+          }
+        },
+        actions: [
+          { label: 'Confirm & Monitor', action: 'submit_recipient', variant: 'primary' },
+          { label: 'Cancel', action: 'cancel_transfer', variant: 'secondary' }
+        ],
+        timestamp: new Date()
+      }]);
+    } else if (action === 'submit_recipient') {
+      setDemoFlowState(prev => ({
+        ...prev,
+        step: 'monitoring',
+        data: { ...prev.data, recipientConfirmed: true }
+      }));
+
+      // Add monitoring message
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Perfect! I\'m now monitoring the USD/INR exchange rate 24/7. I\'ll automatically notify you when the rate reaches your target of ₹" + (demoFlowState.data.targetRate || 84) + ". You can check the status anytime, and I\'ll request your approval before executing the transfer.",
+        timestamp: new Date()
+      }]);
+    } else if (action === 'cancel_transfer') {
+      setDemoFlowState({ step: 'idle', data: {} });
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Transfer cancelled. Let me know if you\'d like to try again!",
+        timestamp: new Date()
+      }]);
+    } else if (action === 'review_transfer') {
+      setShowConfirmModal(true);
+      setModalData({
+        amount: 5000,
+        currency: 'USD',
+        targetRate: demoFlowState.data.targetRate,
+        currentRate: 84.2,
+        recipient: 'Mom',
+        bank: 'HDFC Bank',
+        estimatedINR: (5000 * 84.2).toFixed(2)
+      });
+    } else if (action === 'approve_transfer') {
+      setShowConfirmModal(false);
+      setDemoFlowState({ step: 'complete', data: {} });
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "✓ Transfer approved! I\'ve executed the transfer of $5,000 to Mom in India at the rate of ₹84.2/USD.\n\n**Transfer Details:**\n- Amount: $5,000\n- Recipient: Mom (HDFC Bank)\n- INR Transferred: ₹421,000\n- Status: **Completed**\n- Timestamp: " + new Date().toLocaleString(),
+        timestamp: new Date()
+      }]);
+    } else if (action === 'deny_transfer') {
+      setShowConfirmModal(false);
+      setDemoFlowState({ step: 'idle', data: {} });
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Transfer denied. No funds have been transferred. Let me know if you want to adjust the rate and try again!",
+        timestamp: new Date()
+      }]);
+    }
+  }, [demoFlowState.data.targetRate]);
+
   const sampleQuestions = [
     "What cards are in my wallet?",
     "Which card should I use at Costco?",
@@ -1200,10 +1399,12 @@ const VittaApp = () => {
 
   // If credit card screen is active, show it
   if (currentScreen === 'creditCards') {
+    console.log('[VittaApp] Rendering CreditCardScreen with user:', user);
     return (
       <CreditCardScreen
         onBack={() => setCurrentScreen('main')}
         user={user}
+        cards={userCards}
         onCardsChanged={refreshCards} // Refresh cards when add/update/delete happens
       />
     );
@@ -1273,6 +1474,9 @@ const VittaApp = () => {
         MessageContent={MessageContent}
         isDemoMode={user.provider !== 'google'}
         onCardsChanged={refreshCards}
+        currentScreen={currentScreen}
+        setCurrentScreen={setCurrentScreen}
+        userCards={userCards}
       />
     );
   }
@@ -1442,8 +1646,8 @@ const VittaApp = () => {
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                         message.type === 'user' ? 'bg-blue-600' : 'bg-gray-600'
                       }`}>
-                        {message.type === 'user' ? 
-                          <User className="w-3 h-3 text-white" /> : 
+                        {message.type === 'user' ?
+                          <User className="w-3 h-3 text-white" /> :
                           <Bot className="w-3 h-3 text-white" />
                         }
                       </div>
@@ -1453,7 +1657,13 @@ const VittaApp = () => {
                           : 'bg-gray-50 text-gray-900 rounded-bl-md'
                       }`}>
                         <div className="whitespace-pre-line text-sm leading-relaxed">
-                          <MessageContent content={message.content} onNavigate={handleChatNavigate} />
+                          <MessageContent
+                            content={message.content}
+                            component={message.component}
+                            actions={message.actions}
+                            onNavigate={handleChatNavigate}
+                            onAction={handleDemoAction}
+                          />
                         </div>
                         <div className="text-xs opacity-70 mt-1">
                           {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}

@@ -18,7 +18,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Vitta is a Next.js 14 application - your intelligent credit card platform. Vitta is like chatGPT of your wallet. The app helps users choose the best credit card for every purchase, optimize payments to minimize interest, and maximize rewards with AI-powered insights. Users interact with the app through a chat interface.
+Vitta is a Next.js 14 application - an **agentic wallet platform** for global families. Unlike traditional chat-based fintech, Vitta **autonomously executes** financial transactions:
+- **The Sniper**: Monitors USD/INR rates 24/7, snipes peak rates for remittances via stablecoin rails
+- **The Shield**: Scans bank balances via Plaid, times bill payments to prevent overdrafts
+- **The Optimizer**: Routes payments via optimal cards or ACH rails to minimize costs
+
+Users can still interact via chat interface, but Vitta acts autonomously on their behalf.
 
 ## Architecture
 

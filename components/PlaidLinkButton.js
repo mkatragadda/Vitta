@@ -38,23 +38,22 @@ const PlaidLinkButton = ({
   useEffect(() => {
     const initPlaidLink = async () => {
       try {
-        // Ensure Plaid SDK is loaded
-        if (!window.Plaid) {
-          console.log('[PlaidLinkButton] Loading Plaid SDK...');
+        // Wait for Plaid SDK to be available (loaded globally in _app.js)
+        let attempts = 0;
+        const maxAttempts = 50; // Wait up to 5 seconds (50 * 100ms)
 
-          // Load Plaid script dynamically if not already loaded
-          const script = document.createElement('script');
-          script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
-          script.async = true;
-          script.onload = () => {
-            console.log('[PlaidLinkButton] Plaid SDK loaded');
-          };
-          script.onerror = () => {
-            console.error('[PlaidLinkButton] Failed to load Plaid SDK');
-            setError('Failed to load Plaid SDK');
-          };
-          document.body.appendChild(script);
+        while (!window.Plaid && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
         }
+
+        if (!window.Plaid) {
+          console.error('[PlaidLinkButton] Plaid SDK failed to load after waiting');
+          setError('Failed to load Plaid SDK');
+          throw new Error('Plaid SDK not available');
+        }
+
+        console.log('[PlaidLinkButton] Plaid SDK available');
 
         // Fetch link token from backend
         console.log('[PlaidLinkButton] Fetching link token...');

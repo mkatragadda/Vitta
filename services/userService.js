@@ -205,3 +205,90 @@ export const deleteUser = async (userId) => {
     return false;
   }
 };
+
+/**
+ * Get or create demo user with fixed ID
+ * Used for vittademo@gmail.com demo flow
+ *
+ * @param {string} email - Demo user email
+ * @param {string} fixedUserId - Fixed UUID for consistency across sessions
+ * @returns {Promise<Object>} User object with demo user
+ */
+export const getOrCreateDemoUser = async (email, fixedUserId) => {
+  if (!isSupabaseConfigured()) {
+    console.log('[userService] Supabase not configured - returning in-memory demo user');
+    return {
+      id: fixedUserId,
+      email: email,
+      name: 'Demo User',
+      picture: null,
+      provider: 'demo',
+      isDemoMode: true
+    };
+  }
+
+  try {
+    // Try to find existing user by fixed ID
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', fixedUserId)
+      .single();
+
+    if (!fetchError && existingUser) {
+      console.log('[userService] Demo user found by ID:', email);
+      return existingUser;
+    }
+
+    // PGRST116 = no rows returned
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+
+    // Try to find by email as fallback
+    const { data: userByEmail } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (userByEmail) {
+      console.log('[userService] Demo user found by email');
+      return userByEmail;
+    }
+
+    // Create new demo user with fixed ID
+    console.log('[userService] Creating new demo user with fixed ID');
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert({
+        id: fixedUserId,
+        email: email,
+        name: 'Demo User',
+        provider: 'demo',
+        picture: null
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[userService] Error creating demo user:', insertError);
+      // Fallback to in-memory
+      throw insertError;
+    }
+
+    console.log('[userService] Demo user created successfully');
+    return newUser;
+  } catch (error) {
+    console.error('[userService] Error in getOrCreateDemoUser:', error);
+    // Fallback to in-memory demo user on any error
+    return {
+      id: fixedUserId,
+      email: email,
+      name: 'Demo User',
+      picture: null,
+      provider: 'demo',
+      isDemoMode: true
+    };
+  }
+};

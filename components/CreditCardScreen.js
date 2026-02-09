@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Shield, Zap, ArrowRight, Plus, Eye, EyeOff, Trash2, Edit, Utensils, ShoppingBag, Plane, Fuel, Star } from 'lucide-react';
-import { getUserCards, addCard, updateCard, deleteCard } from '../services/cardService';
+import { addCard, updateCard, deleteCard } from '../services/cardService';
 
-const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
+const CreditCardScreen = ({ onBack, user, cards = [], onCardsChanged }) => {
+  console.log('[CreditCardScreen] Component mounted with cards prop:', cards?.length || 0, cards);
   const userId = user?.id;
   const [showCardNumbers, setShowCardNumbers] = useState(false);
   const [selectedCard, setSelectedCard] = useState(0);
-  const [creditCards, setCreditCards] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [creditCards, setCreditCards] = useState(cards || []);
+  const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCard, setNewCard] = useState({
     // Card Identity
@@ -46,28 +47,11 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
     is_manual_entry: true
   });
 
-  const loadCards = useCallback(async () => {
-    if (!userId) return;
-
-    setIsLoading(true);
-    try {
-      const cards = await getUserCards(userId);
-      setCreditCards(cards || []);
-      console.log('[CreditCardScreen] Loaded cards:', cards?.length || 0);
-      console.log('[CreditCardScreen] First card:', cards && cards[0]);
-      if (cards && cards[0]) {
-        console.log('[CreditCardScreen] First card has nickname?', cards[0].nickname);
-      }
-    } catch (error) {
-      console.error('[CreditCardScreen] Error loading cards:', error);
-      setCreditCards([]);
-    }
-    setIsLoading(false);
-  }, [userId]);
-
+  // Sync cards from parent prop whenever they change
   useEffect(() => {
-    loadCards();
-  }, [loadCards]);
+    setCreditCards(cards || []);
+    console.log('[CreditCardScreen] Synced cards from parent:', cards?.length || 0);
+  }, [cards]);
 
   const handleAddCard = async () => {
     try {
@@ -153,8 +137,7 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
       await addCard(cardData);
       console.log('[CreditCardScreen] Card added successfully');
 
-      // Reload cards and trigger parent refresh
-      await loadCards();
+      // Trigger parent refresh to reload cards from database
       console.log('[CreditCardScreen] Calling onCardsChanged callback...');
       if (onCardsChanged) {
         await onCardsChanged();
@@ -201,8 +184,7 @@ const CreditCardScreen = ({ onBack, user, onCardsChanged }) => {
       await deleteCard(cardId);
       console.log('[CreditCardScreen] Card deleted successfully');
 
-      // Reload cards and trigger parent refresh
-      await loadCards();
+      // Trigger parent refresh to reload cards from database
       console.log('[CreditCardScreen] Calling onCardsChanged callback after delete...');
       if (onCardsChanged) {
         await onCardsChanged();
