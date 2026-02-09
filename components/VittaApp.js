@@ -5,7 +5,8 @@ import PaymentOptimizer from './PaymentOptimizer';
 import DashboardWithTabs from './DashboardWithTabs';
 import VittaChatInterface from './VittaChatInterface';
 import RecommendationScreen from './RecommendationScreen';
-import { saveGoogleUser } from '../services/userService';
+import { saveGoogleUser, getOrCreateDemoUser } from '../services/userService';
+import { authenticateDemoUser } from '../services/demoUserService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
 import { warmupCache } from '../services/cache/cacheWarmup';
@@ -691,11 +692,44 @@ const VittaApp = () => {
               }
               setLocalAuthError('');
               setLocalAuthLoading(true);
-              // Simulate auth delay
-              setTimeout(() => {
-                setLocalAuthError('Email/password authentication is coming soon. Please sign in with Google.');
-                setLocalAuthLoading(false);
-              }, 500);
+
+              // Handle demo user authentication
+              (async () => {
+                try {
+                  const authResult = await authenticateDemoUser(localEmailForm.email, localEmailForm.password);
+
+                  if (authResult.success && authResult.user) {
+                    // Demo user authenticated successfully
+                    console.log('[VittaApp] Demo user authenticated:', authResult.user.email);
+                    setUser(authResult.user);
+                    setIsAuthenticated(true);
+                    setLocalAuthError('');
+
+                    // Load initial data
+                    const cards = await getUserCards(authResult.user.id);
+                    setUserCards(cards);
+
+                    // Warmup cache
+                    warmupCache();
+
+                    // Add welcome message
+                    setMessages([{
+                      type: 'bot',
+                      content: `👋 Welcome to Vitta, Demo User! I'm your agentic wallet assistant. I can help you with:\n\n• **Send money to India** - Set a target FX rate and I'll monitor USD/INR continuously\n• **View your cards** - Check balances, rewards, and APR\n• **Optimize payments** - Get recommendations on which card to use\n• **Track spending** - Analyze your expenses by category\n\nTry asking me to send money to someone in India, or check your available cards!`,
+                      timestamp: new Date()
+                    }]);
+                    return;
+                  }
+
+                  // Authentication failed
+                  setLocalAuthError(authResult.error || 'Authentication failed');
+                } catch (error) {
+                  console.error('[VittaApp] Unexpected error during demo auth:', error);
+                  setLocalAuthError('An unexpected error occurred. Please try again.');
+                } finally {
+                  setLocalAuthLoading(false);
+                }
+              })();
             }} className="space-y-4 mb-6">
               {/* Error Message */}
               {localAuthError && (
@@ -712,12 +746,13 @@ const VittaApp = () => {
                   onChange={(e) => {
                     setLocalEmailForm({ ...localEmailForm, email: e.target.value });
                   }}
-                  placeholder="john@example.com"
+                  placeholder="vittademo@gmail.com (demo)"
                   disabled={localAuthLoading}
                   autoComplete="email"
                   inputMode="email"
                   className="w-full px-4 py-3 lg:py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500 text-base min-h-[44px]"
                 />
+                <p className="text-xs text-gray-500 mt-1">Demo: vittademo@gmail.com / vitta26demo</p>
               </div>
 
               <div>
