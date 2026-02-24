@@ -20,7 +20,8 @@ export const INTENT_CATEGORIES = {
     'navigate_screen',
     'remember_memory',
     'recall_memory',
-    'reminder_settings'
+    'reminder_settings',
+    'transfer_money_international'
   ],
   GUIDANCE: [
     'debt_guidance',
@@ -181,6 +182,71 @@ export const INTENT_EXAMPLES = {
     "list expenses tagged childcare",
     "what memories are tagged goals",
     "tell me what i tagged supplies last week"
+  ],
+
+  transfer_money_international: [
+    // Direct money transfer intents
+    "send money to India",
+    "transfer funds to India",
+    "send money abroad",
+    "transfer money internationally",
+    "I want to send money to India",
+    "send $500 to India",
+    "transfer funds overseas",
+
+    // Snipe and settle (automated FX monitoring)
+    "snipe and settle",
+    "snipe and settle for India",
+    "set up snipe and settle",
+    "enable snipe and settle",
+    "activate snipe and settle",
+    "monitor and transfer",
+
+    // Beneficiary management
+    "add international recipient",
+    "add beneficiary",
+    "add money transfer recipient",
+    "save beneficiary for transfers",
+    "add recipient in India",
+    "register international beneficiary",
+
+    // Rate monitoring and optimization
+    "monitor exchange rate",
+    "wait for better FX rate",
+    "trigger transfer at best rate",
+    "automatic transfer at rate",
+    "set rate alert for transfer",
+    "find optimal rate for transfer",
+
+    // FX transfer execution
+    "execute international transfer",
+    "send funds to foreign account",
+    "initiate international payment",
+    "process money transfer",
+    "trigger transfer now",
+    "send money right now",
+
+    // Remittance-specific
+    "send remittance",
+    "send money to family",
+    "send funds to relatives",
+    "transfer to family member",
+    "send allowance internationally",
+    "family money transfer",
+
+    // Multi-currency transfers
+    "convert and send",
+    "send with currency conversion",
+    "convert to INR and send",
+    "send USD to India",
+    "send in different currency",
+
+    // Transfer status
+    "check transfer status",
+    "when will transfer arrive",
+    "track my international transfer",
+    "show transfer history",
+    "list recent transfers"
   ],
 
   debt_guidance: [

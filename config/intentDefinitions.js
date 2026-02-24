@@ -174,6 +174,27 @@ export const INTENT_DEFINITIONS = {
       "What expenses did I tag dining this month?",
       "Recall notes tagged travel deals"
     ]
+  },
+
+  transfer_money_international: {
+    name: "Transfer Money International",
+    description: "User wants to send money internationally or transfer funds to a beneficiary abroad",
+    capabilities: [
+      "Navigate to beneficiary management screen",
+      "Add international recipient/beneficiary",
+      "Initiate international money transfer",
+      "Monitor and trigger transfers at optimal rates",
+      "Execute automated transfers ('Snipe & Settle' feature)",
+      "Track transfer status and settlement times"
+    ],
+    examples: [
+      "Send money to India",
+      "Transfer funds abroad",
+      "Add international recipient",
+      "I want to send money internationally",
+      "Snipe and settle",
+      "Monitor for best FX rate"
+    ]
   }
 };
 
