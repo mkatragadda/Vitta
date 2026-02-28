@@ -1,0 +1,174 @@
+@startuml Recipient Addition - State Machine
+
+participant User
+participant App as "Frontend"
+participant Backend as "Backend API"
+participant Chimoney as "Chimoney API"
+participant DB as "Database"
+
+autonumber
+
+note over User, DB
+  PHASE 1: RECIPIENT DETAILS INPUT
+end note
+
+User ->> App: Click Add Recipient
+App ->> User: Show Payment Method Selector
+User ->> App: Select UPI or Bank Account
+App ->> User: Show Recipient Form
+
+User ->> App: Enter Recipient Details
+note right of User
+  For UPI:
+  - Name
+  - Phone
+  - UPI ID
+  - Relationship
+
+  For Bank:
+  - Name
+  - Phone
+  - Account Number
+  - IFSC Code
+  - Bank Name
+  - Relationship
+end note
+
+App ->> App: Validate Input
+note right of App
+  - Name length (2-255)
+  - Phone format (10 digits)
+  - UPI format OR
+  - Bank details format
+end note
+
+App ->> User: Show Review Screen
+User ->> App: Confirm & Verify
+
+note over User, DB
+  PHASE 2: SEND TO BACKEND
+end note
+
+App ->> Backend: POST /api/recipients/add
+Backend ->> Backend: Validate Input Again
+
+note right of Backend
+  - Sanitize inputs
+  - Check duplicates
+  - Verify format
+end note
+
+Backend ->> DB: Check if recipient exists
+DB -->> Backend: Result
+
+note over User, DB
+  PHASE 3: CHIMONEY VERIFICATION
+end note
+
+Backend ->> Chimoney: POST /recipients/verify
+note right of Backend
+  Request payload:
+  - name
+  - phone
+  - country_code: IN
+  - payment_method
+  - upi_id OR
+  - bank_account + ifsc
+end note
+
+Chimoney -->> Backend: Response
+
+note right of Chimoney
+  Success response:
+  - recipient_id
+  - verification_status
+  - verified_at
+
+  Failure response:
+  - error_code
+  - error_message
+  - suggestion
+end note
+
+Backend ->> Backend: Handle Response
+
+alt Verification SUCCESS
+  note over Backend, DB
+    Save verified recipient to DB
+  end note
+
+  Backend ->> DB: INSERT recipient
+  note right of Backend
+    - chimoney_recipient_id
+    - verification_status: verified
+    - verified_at: now
+    - encrypted UPI/account
+  end note
+
+  DB -->> Backend: Created
+  Backend ->> DB: INSERT verification_log\n(recipient_id, user_id, status, chimoney_response)
+  Backend -->> App: 200 OK (Success)
+  note right of Backend
+    {
+      success: true,
+      recipient_id: UUID,
+      name: "Amit Kumar",
+      verificationStatus: "verified"
+    }
+  end note
+
+  App ->> User: Show Success Message
+  note right of App
+    "Recipient added successfully!"
+    "Ready to use for transfers"
+  end note
+
+else Verification FAILED
+
+  note over Backend, DB
+    Log failure and reject
+  end note
+
+  Backend ->> DB: INSERT verification_log\n(user_id, status: failed, error_code, chimoney_response)
+  note right of Backend
+    - verification_status: failed
+    - error_code
+    - chimoney_response
+    - user_id (for audit trail)
+  end note
+
+  Backend -->> App: 400 Error
+  note right of Backend
+    {
+      success: false,
+      error_code: "INVALID_UPI_FORMAT",
+      error_message: "UPI format invalid",
+      suggestion: "Use format: name@bank"
+    }
+  end note
+
+  App ->> User: Show Error Message
+  note right of App
+    Error + Suggestion
+    [Retry] [Cancel]
+  end note
+
+  alt User Clicks RETRY
+    User ->> App: Click Retry
+    App ->> User: Show Form Again
+    note right of App
+      Pre-fill with previous data
+      Allow user to edit
+    end note
+  else User Clicks CANCEL
+    User ->> App: Click Cancel
+    App ->> User: Back to Recipients List
+  end
+
+end
+
+note over User, DB
+  PHASE 4: COMPLETION
+end note
+
+@enduml

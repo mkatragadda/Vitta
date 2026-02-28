@@ -1,0 +1,135 @@
+@startuml Recipient Addition - State Machine
+
+!define COLOR_DRAFT #E8F4F8
+!define COLOR_FORM #FFF9E6
+!define COLOR_VERIFY #F0F8FF
+!define COLOR_SUCCESS #E8F8E8
+!define COLOR_ERROR #FFE8E8
+
+skinparam backgroundColor #FFFFFF
+skinparam state {
+    BackgroundColor COLOR_DRAFT
+    BorderColor #333333
+    FontColor #000000
+}
+
+title Recipient Addition - State Machine
+
+' ==================== STATES ====================
+state draft: "DRAFT\n(Initial state)"
+state form_filled: "FORM FILLED\n(User entered details)"
+state validating: "VALIDATING\n(Client validation)"
+state chimoney_verification: "CHIMONEY VERIFYING\n(API verification)"
+state verified: "VERIFIED\n(Recipient ready)"
+state verification_failed: "VERIFICATION FAILED\n(Error occurred)"
+state cancelled: "CANCELLED\n(User cancelled)"
+
+' ==================== TRANSITIONS ====================
+[*] --> draft
+
+draft --> form_filled: 1. User selects payment method\n(UPI or Bank Account)
+form_filled --> validating: 2. User clicks "Review"\n(Client-side validation)
+
+validating --> form_filled: Validation FAILED\n[Show error, allow edit]
+
+validating --> chimoney_verification: 3. Validation PASSED\n[Send to backend]
+
+chimoney_verification --> verified: 4A. Chimoney API SUCCESS\n[recipient_id received]
+verified --> [*]
+
+chimoney_verification --> verification_failed: 4B. Chimoney API FAILED\n[error_code received]
+
+verification_failed --> form_filled: 5A. User clicks RETRY\n[Pre-fill with previous data]
+verification_failed --> cancelled: 5B. User clicks CANCEL\n[Abandon recipient addition]
+
+cancelled --> [*]
+
+' ==================== NOTES ====================
+note right of draft
+  Initial state when user
+  clicks "Add Recipient"
+  No data entered yet
+end note
+
+note right of form_filled
+  User has entered
+  recipient details:
+
+  For UPI:
+  - Name
+  - Phone
+  - UPI ID
+  - Relationship
+
+  For Bank:
+  - Name
+  - Phone
+  - Account Number
+  - IFSC Code
+  - Bank Name
+  - Relationship
+end note
+
+note right of validating
+  Client-side checks:
+  - Name: 2-255 chars
+  - Phone: 10 digits
+  - UPI format: user@bank
+  - Account: numeric
+  - IFSC: 11 chars (alphanumeric)
+
+  Quick feedback before
+  server round-trip
+end note
+
+note right of chimoney_verification
+  Backend calls Chimoney API:
+  POST /recipients/verify
+
+  Request:
+  {
+    name,
+    phone,
+    country_code: "IN",
+    payment_method: "upi" | "bank",
+    upi_id OR
+    bank_account + ifsc
+  }
+end note
+
+note right of verified
+  Success Response:
+  {
+    recipient_id: "rec_xyz",
+    verification_status: "verified",
+    verified_at: timestamp
+  }
+
+  Recipient saved to DB
+  User can now use for transfers
+end note
+
+note right of verification_failed
+  Failure Response:
+  {
+    error_code: "INVALID_UPI_FORMAT",
+    error_message: "UPI format invalid",
+    suggestion: "Use format: name@bank"
+  }
+
+  Logged to verification audit trail
+  User can retry or cancel
+end note
+
+note bottom
+  FLOW: DRAFT -> FORM -> VALIDATE -> VERIFY -> SUCCESS/FAILED
+
+  Key Design Points:
+  - Client validation prevents bad requests
+  - Chimoney verification is authoritative
+  - Retry allowed for failed verifications
+  - All verification attempts logged
+  - No OTP required (server-side verification)
+end note
+
+@enduml

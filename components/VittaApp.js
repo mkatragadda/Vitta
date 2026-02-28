@@ -1151,6 +1151,7 @@ const VittaApp = () => {
       'optimizer': 'paymentOptimizer',
       'dashboard': 'dashboard',
       'recommendations': 'recommendations',
+      'beneficiaries': 'main',
       'expenses': 'main' // Default to main if not implemented
     };
 

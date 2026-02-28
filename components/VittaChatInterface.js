@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { MessageCircle, CreditCard, TrendingUp, LogOut, Send, Bot, User, Menu, X, Wallet, Plus, Trash2, Sparkles } from 'lucide-react';
+import { MessageCircle, CreditCard, TrendingUp, LogOut, Send, Bot, User, Menu, X, Wallet, Plus, Trash2, Sparkles, Users } from 'lucide-react';
 import PaymentOptimizer from './PaymentOptimizer';
 import CreditCardScreen from './CreditCardScreen';
 import RecommendationScreen from './RecommendationScreen';
 import AddCardFlow from './AddCardFlow';
+import BeneficiaryManagementScreen from './beneficiary/BeneficiaryManagementScreen';
 import { getUserCards, addCard, deleteCard, calculateUtilization } from '../services/cardService';
 
 const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoading, handleSendMessage, handleKeyPress, MessageContent, isDemoMode = false, onCardsChanged }) => {
@@ -24,7 +25,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
     }
   }, [quickActionTrigger, input, handleSendMessage]);
 
-  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'optimizer', 'cards', 'add-card'
+  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'optimizer', 'cards', 'add-card', 'beneficiaries'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Navigation handler for deep links
@@ -32,6 +33,11 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
     console.log('[VittaChatInterface] Navigating to:', screenPath);
     setCurrentView(screenPath);
   }, []);
+
+  // Beneficiary state
+  const [beneficiaries, setBeneficiaries] = useState([]);
+  const [activeBeneficiary, setActiveBeneficiary] = useState(null);
+
   const [cards, setCards] = useState([]);
   const [isLoadingCards, setIsLoadingCards] = useState(true);
   const [showAddCard, setShowAddCard] = useState(false);
@@ -69,13 +75,34 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
     }
   }, [user?.id]);
 
+  // Load beneficiaries
+  const loadBeneficiaries = useCallback(async () => {
+    if (user?.id) {
+      try {
+        const response = await fetch('/api/beneficiaries/list', {
+          headers: {
+            'X-User-Id': user.id,
+            Authorization: `Bearer ${localStorage.getItem('auth_token') || 'demo-token'}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setBeneficiaries(data.beneficiaries || []);
+        }
+      } catch (error) {
+        console.error('[VittaChatInterface] Error loading beneficiaries:', error);
+      }
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!isDemoMode && user?.id) {
       loadCards();
+      loadBeneficiaries();
     } else {
       setIsLoadingCards(false);
     }
-  }, [isDemoMode, loadCards, user?.id]);
+  }, [isDemoMode, loadCards, loadBeneficiaries, user?.id]);
 
   const handleAddCard = useCallback(async (e) => {
     e.preventDefault();
@@ -190,6 +217,18 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         </button>
 
         <button
+          onClick={() => setCurrentView('beneficiaries')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            currentView === 'beneficiaries'
+              ? 'bg-white/20 text-white shadow-lg'
+              : 'text-blue-100 hover:bg-white/10'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span>Beneficiaries</span>
+        </button>
+
+        <button
           onClick={() => setCurrentView('recommendations')}
           className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
             currentView === 'recommendations'
@@ -240,6 +279,21 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         }}
       >
         <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 space-y-6">
+          {/* Beneficiary CTA Banner */}
+          {beneficiaries.length === 0 && messages.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between">
+              <p className="text-sm text-amber-800">
+                💡 <span className="font-medium">Tip:</span> Add a beneficiary to send money internationally
+              </p>
+              <button
+                onClick={() => setCurrentView('beneficiaries')}
+                className="flex-shrink-0 px-3 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors text-sm font-medium ml-2"
+              >
+                Add Recipient →
+              </button>
+            </div>
+          )}
+
         {messages.map((message, index) => (
           <div key={index} className={`flex gap-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex gap-4 w-full ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -334,6 +388,21 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
                 >
                   ➕ Add new card
                 </button>
+                <button
+                  onClick={() => setCurrentView('beneficiaries')}
+                  className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+                  disabled={isLoading}
+                >
+                  👤 My Beneficiaries
+                </button>
+                <button
+                  onClick={() => sendQuickAction('send money to india')}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg hover:from-orange-600 hover:to-red-600 transition-colors text-sm font-medium shadow-md hover:shadow-lg"
+                  disabled={isLoading}
+                  title="Find the best exchange rate and settle a transfer to India"
+                >
+                  🎯 Snipe & Settle
+                </button>
               </div>
             </div>
           )}
@@ -379,7 +448,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         </div>
       </div>
     </div>
-  ), [messages, isLoading, input, user, handleKeyPress, handleSendMessage, handleNavigate, sendQuickAction, setInput]);
+  ), [messages, isLoading, input, user, handleKeyPress, handleSendMessage, handleNavigate, sendQuickAction, setInput, beneficiaries, setCurrentView]);
 
   // Payment Optimizer View
   const OptimizerView = useMemo(() => (
@@ -657,6 +726,18 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
               setCurrentView('cards');
             }}
             onCancel={() => setCurrentView('cards')}
+          />
+        )}
+        {currentView === 'beneficiaries' && (
+          <BeneficiaryManagementScreen
+            user={user}
+            onBeneficiarySelected={(beneficiary) => {
+              console.log('[VittaChatInterface] Beneficiary selected:', beneficiary.beneficiaryId);
+              setActiveBeneficiary(beneficiary);
+              // Optionally proceed to chat or transfer flow
+              setCurrentView('chat');
+            }}
+            onClose={() => setCurrentView('chat')}
           />
         )}
       </div>

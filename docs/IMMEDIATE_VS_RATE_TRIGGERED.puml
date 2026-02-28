@@ -1,0 +1,115 @@
+@startuml Immediate Transfer vs Rate-Triggered Transfer
+!define COLOR_IMMEDIATE #FFE8E8
+!define COLOR_TRIGGERED #E8F8E8
+
+skinparam backgroundColor #FFFFFF
+skinparam state {
+    BackgroundColor<<immediate>> COLOR_IMMEDIATE
+    BackgroundColor<<triggered>> COLOR_TRIGGERED
+    BorderColor #333
+    FontColor #000
+}
+
+title Immediate vs Rate-Triggered Transfer Comparison
+
+state "IMMEDIATE TRANSFER\n💨 Fast & Simple" as immediate_group <<immediate>> {
+    state immediate_1: "draft" <<immediate>>
+    state immediate_2: "rate_quoted\n(Current: 83.72)" <<immediate>>
+    state immediate_3: "approved\n(User confirms)" <<immediate>>
+    state immediate_4: "payment_initiated" <<immediate>>
+    state immediate_5: "completed\n✅ ₹41,860 received" <<immediate>>
+
+    immediate_1 --> immediate_2: User: "Send $500\nNOW to India"
+    immediate_2 --> immediate_3: User sees current rate\n83.72 (no waiting)
+    immediate_3 --> immediate_4: Click: [CONFIRM]
+    immediate_4 --> immediate_5: Chimoney settles\n2-5 minutes
+}
+
+state "RATE-TRIGGERED TRANSFER\n⏰ Maximize Returns" as triggered_group <<triggered>> {
+    state triggered_1: "draft" <<triggered>>
+    state triggered_2: "rate_quoted\n(Current: 83.72)" <<triggered>>
+    state triggered_3: "rate_locked" <<triggered>>
+    state triggered_4: "monitoring\n(Every 15 min check)" <<triggered>>
+    state triggered_5: "rate_met\n(84.55 ≥ 84.50)" <<triggered>>
+    state triggered_6: "notification_sent\n[✅ APPROVE] [❌ DENY]" <<triggered>>
+    state triggered_7: "pending_approval\n(User approved)" <<triggered>>
+    state triggered_8: "payment_initiated" <<triggered>>
+    state triggered_9: "completed\n✅ ₹42,275 received" <<triggered>>
+
+    triggered_1 --> triggered_2: User: "Send $500\nwhen rate is 84.50"
+    triggered_2 --> triggered_3: Validate: 84.50 > 83.72 ✅
+    triggered_3 --> triggered_4: User confirms\nMonitoring starts
+    triggered_4 --> triggered_4: 14:00 - 83.98 (wait)\n14:15 - 84.15 (wait)\n14:30 - 84.55 ✅ MET
+    triggered_4 --> triggered_5: Rate condition met
+    triggered_5 --> triggered_6: 🔔 Notification:\n"Rate available!"
+    triggered_6 --> triggered_7: User clicks:\n[✅ APPROVE]
+    triggered_7 --> triggered_8: Tolerance check:\n±2% OK ✅
+    triggered_8 --> triggered_9: Chimoney settles\n2-5 minutes
+
+    triggered_1 -.-> triggered_1: [❌ DENY option]
+}
+
+note right of immediate_2
+  **Execution:** NOW
+  **Rate:** Current market
+  **Duration:** Minutes
+  **Benefit:** No waiting
+end note
+
+note right of triggered_2
+  **Execution:** Delayed
+  **Rate:** User-specified (higher)
+  **Duration:** Hours to days
+  **Benefit:** More destination currency
+end note
+
+note right of immediate_5
+  **Result:**
+  $500 × 83.72 = ₹41,860
+
+  **Paid:** $5 fee
+  **Net:** ₹41,860
+end note
+
+note right of triggered_9
+  **Result:**
+  $500 × 84.55 = ₹42,275
+
+  **Paid:** $5 fee
+  **Net:** ₹42,275
+  **Saved:** ₹415 MORE!
+end note
+
+note bottom
+  **KEY DIFFERENCE:**
+
+  🚀 IMMEDIATE: Send now, get current rate
+  ⏰ RATE-TRIGGERED: Wait for better rate, maximize rupees
+
+  **Example Timeline:**
+
+  ┌─────────────────────────────────────┐
+  │ IMMEDIATE:                          │
+  │ 14:00 - User confirms               │
+  │ 14:05 - Payment settled             │
+  │ Total time: 5 minutes               │
+  │ Received: ₹41,860                   │
+  └─────────────────────────────────────┘
+
+  ┌─────────────────────────────────────┐
+  │ RATE-TRIGGERED:                     │
+  │ 14:00 - Monitoring starts           │
+  │ 14:30 - Rate 84.55 available        │
+  │ 14:31 - User approves               │
+  │ 14:32 - Payment initiated           │
+  │ 14:37 - Payment settled             │
+  │ Total time: 37 minutes (worth ₹415!) │
+  │ Received: ₹42,275                   │
+  └─────────────────────────────────────┘
+
+  **User Preference Factors:**
+  • IMMEDIATE: Need money urgently, certainty preferred
+  • RATE-TRIGGERED: Can wait, want to maximize value
+end note
+
+@enduml

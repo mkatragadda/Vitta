@@ -360,6 +360,92 @@ CREATE TRIGGER trg_transactions_updated_at BEFORE UPDATE ON transactions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
+-- 12. BENEFICIARIES TABLE (International Money Transfers)
+-- ============================================================================
+-- Stores beneficiary/recipient details for international money transfers
+-- Recipients are verified locally (no external API call during addition)
+-- Sensitive fields (UPI ID, account number) are encrypted with AES-256
+CREATE TABLE IF NOT EXISTS beneficiaries (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Basic Info
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(20) NOT NULL,
+  email VARCHAR(255),
+
+  -- Payment Method: 'upi' or 'bank_account'
+  payment_method VARCHAR(50) NOT NULL,
+
+  -- UPI Fields (Encrypted)
+  upi_encrypted VARCHAR(500),
+
+  -- Bank Account Fields
+  account_encrypted VARCHAR(500),    -- Encrypted account number
+  ifsc VARCHAR(20),                   -- IFSC code (not sensitive, plaintext)
+  bank_name VARCHAR(255),             -- Bank name (plaintext)
+
+  -- Verification Status
+  verification_status VARCHAR(50) DEFAULT 'verified',  -- 'pending', 'verified', 'failed'
+  verified_at TIMESTAMP WITH TIME ZONE,
+  verified_by_system VARCHAR(50),     -- 'local_validation'
+  verification_attempts INT DEFAULT 0,
+  last_verification_attempt TIMESTAMP WITH TIME ZONE,
+
+  -- Metadata
+  relationship VARCHAR(100),          -- 'family', 'friend', 'business', 'other'
+  is_active BOOLEAN DEFAULT true,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  -- Constraints
+  CONSTRAINT check_payment_method CHECK (payment_method IN ('upi', 'bank_account')),
+  CONSTRAINT check_verification_status CHECK (verification_status IN ('pending', 'verified', 'failed')),
+  CONSTRAINT check_relationship CHECK (relationship IN ('family', 'friend', 'business', 'other'))
+);
+
+CREATE INDEX idx_beneficiaries_user_id ON beneficiaries(user_id);
+CREATE INDEX idx_beneficiaries_verification_status ON beneficiaries(verification_status);
+CREATE INDEX idx_beneficiaries_is_active ON beneficiaries(is_active);
+CREATE INDEX idx_beneficiaries_payment_method ON beneficiaries(payment_method);
+
+CREATE TRIGGER trg_beneficiaries_updated_at BEFORE UPDATE ON beneficiaries
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- 13. BENEFICIARY VERIFICATION LOG TABLE
+-- ============================================================================
+-- Audit trail for all beneficiary verification attempts
+-- Tracks successful verifications, failures, and retry attempts
+-- Immutable: records never updated, only inserted
+CREATE TABLE IF NOT EXISTS beneficiary_verification_log (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  beneficiary_id UUID REFERENCES beneficiaries(id) ON DELETE SET NULL,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Verification Status & Details
+  verification_status VARCHAR(50) NOT NULL,
+  attempt_number INT DEFAULT 1,
+
+  -- Request Context
+  ip_address VARCHAR(45),
+  user_agent TEXT,
+
+  -- Response Data (JSON)
+  verification_response JSONB,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  -- Constraints
+  CONSTRAINT check_log_status CHECK (verification_status IN ('pending', 'verified', 'failed'))
+);
+
+CREATE INDEX idx_beneficiary_verification_log_beneficiary_id ON beneficiary_verification_log(beneficiary_id);
+CREATE INDEX idx_beneficiary_verification_log_user_id ON beneficiary_verification_log(user_id);
+CREATE INDEX idx_beneficiary_verification_log_created_at ON beneficiary_verification_log(created_at DESC);
+
+-- ============================================================================
 -- SEED DATA (Optional - for development)
 -- ============================================================================
 

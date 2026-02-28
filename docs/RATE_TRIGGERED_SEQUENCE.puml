@@ -1,0 +1,105 @@
+@startuml Rate-Triggered Transfer Sequence
+
+participant User
+participant App as "Vitta App"
+participant Backend as "Backend"
+participant Cron as "Cron"
+participant Chimoney as "Chimoney"
+participant DB as "Database"
+
+autonumber
+
+note over User, DB
+  PHASE 1-2: SETUP & RATE LOCK
+end note
+
+User ->> App: Send $500 when rate is 84.50
+App ->> Backend: POST /api/transfers/quote
+Backend ->> Chimoney: GET current FX rate
+Chimoney -->> Backend: current_rate: 83.72
+Backend ->> DB: INSERT transfer_requests
+Backend -->> App: quoteId, currentRate
+App ->> User: Show Current: 83.72, Target: 84.50
+User ->> App: Click Lock Rate
+App ->> Backend: POST /api/transfers/lock-rate
+Backend ->> DB: UPDATE status=rate_locked
+Backend -->> App: lockId, expiresAt
+
+note over User, DB
+  PHASE 3: BACKGROUND MONITORING
+end note
+
+loop Every 15 minutes (Iteration 1)
+  Cron ->> Backend: GET /api/cron/check-fx-rates
+  Backend ->> Chimoney: GET FX rate
+  Chimoney -->> Backend: current_rate: 83.98
+  Backend ->> DB: INSERT rate_check
+  note right of Backend
+    83.98 >= 84.50?
+    NO - Continue
+  end note
+end
+
+loop Every 15 minutes (Iteration 2)
+  Cron ->> Backend: GET /api/cron/check-fx-rates
+  Backend ->> Chimoney: GET FX rate
+  Chimoney -->> Backend: current_rate: 84.15
+  Backend ->> DB: INSERT rate_check
+  note right of Backend
+    84.15 >= 84.50?
+    NO - Continue
+  end note
+end
+
+note over User, DB
+  PHASE 4: RATE MET
+end note
+
+Cron ->> Backend: GET /api/cron/check-fx-rates
+Backend ->> Chimoney: GET FX rate
+Chimoney -->> Backend: current_rate: 84.55
+note right of Backend
+  84.55 >= 84.50?
+  YES - TARGET MET
+end note
+
+Backend ->> DB: UPDATE status=rate_met
+Backend ->> DB: INSERT activity_log
+Backend ->> App: PUSH NOTIFICATION
+App ->> User: Rate Available!
+
+note over User, DB
+  PHASE 5: USER APPROVAL
+end note
+
+User ->> App: Click APPROVE
+App ->> Backend: POST /api/transfers/approve
+Backend ->> DB: UPDATE status=pending_approval
+Backend ->> DB: INSERT user_approved
+
+note over User, DB
+  PHASE 6: PAYMENT INIT
+end note
+
+Backend ->> Backend: Verify rate tolerance
+Backend ->> Chimoney: POST /transfers/initiate
+Chimoney -->> Backend: transaction_id: txn_xyz
+Backend ->> DB: UPDATE status=payment_initiated
+Backend -->> App: Payment initiated
+App ->> User: Transfer processing...
+
+note over User, DB
+  PHASE 7: SETTLEMENT
+end note
+
+Chimoney ->> Backend: WEBHOOK payment.completed
+Backend ->> DB: UPDATE status=completed
+Backend ->> DB: INSERT payment_completed
+Backend ->> App: PUSH NOTIFICATION
+App ->> User: Transfer Complete!
+
+note over User, DB
+  COMPLETE - User received 415 INR more
+end note
+
+@enduml

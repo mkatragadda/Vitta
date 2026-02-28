@@ -1,0 +1,324 @@
+@startuml Rate-Triggered Transfer - API Endpoints
+!define COLOR_GET #E8F4F8
+!define COLOR_POST #E8F8E8
+!define COLOR_WEBHOOK #FFF9E6
+
+skinparam backgroundColor #FFFFFF
+skinparam rectangle {
+    BackgroundColor<<get>> COLOR_GET
+    BackgroundColor<<post>> COLOR_POST
+    BackgroundColor<<webhook>> COLOR_WEBHOOK
+    BorderColor #333
+    FontColor #000
+}
+
+title Rate-Triggered Transfer - Backend API Endpoints
+
+rectangle "PHASE 1-2: SETUP & QUOTE" as phase_setup {
+    rectangle "POST /api/transfers/quote" as quote <<post>> {
+        : **Request:**
+        {
+          recipientId: UUID,
+          sourceAmount: 500,
+          corridor: "USD-INR",
+          transferType: "rate_triggered"
+        }
+        ---
+        **Response:**
+        {
+          quoteId: UUID,
+          currentRate: 83.72,
+          destinationAmount: 41860,
+          fee: 5,
+          validitySeconds: 300,
+          corridorId: UUID
+        };
+    }
+
+    rectangle "POST /api/transfers/lock-rate" as lock_rate <<post>> {
+        : **Request:**
+        {
+          quoteId: UUID,
+          targetRate: 84.50
+        }
+        ---
+        **Response:**
+        {
+          lockId: UUID,
+          rate: 83.72,
+          expiresAt: timestamp,
+          status: "rate_locked"
+        };
+    }
+}
+
+rectangle "PHASE 3: MONITORING" as phase_monitoring {
+    rectangle "GET /api/cron/check-fx-rates" as cron_check <<get>> {
+        : **Triggered by:** Cron job (every 15 min)
+
+        **Internal call (no user input)**
+        ---
+        **Logic:**
+        1. SELECT transfers WHERE status='monitoring'
+        2. FOR EACH transfer:
+           - GET current rate from Chimoney
+           - IF current_rate ≥ target_rate:
+             * status → 'rate_met'
+             * Send notification
+           - ELSE:
+             * Log rate check
+             * Continue;
+    }
+
+    rectangle "GET /api/transfers/rates/today/:corridor" as rates_today <<get>> {
+        : **Request:** (Optional, for UI display)
+        /api/transfers/rates/today/USD-INR
+        ---
+        **Response:**
+        {
+          current: 84.55,
+          min24h: 83.40,
+          max24h: 84.60,
+          bid: 84.50,
+          ask: 84.60
+        };
+    }
+}
+
+rectangle "PHASE 4-5: APPROVAL" as phase_approval {
+    rectangle "POST /api/transfers/:id/approve" as approve <<post>> {
+        : **Request:**
+        {
+          transferId: UUID,
+          userApprovalToken: token
+        }
+        ---
+        **Backend Actions:**
+        1. Verify transfer exists
+        2. Verify status = 'rate_met'
+        3. Verify rate within ±2% tolerance
+        4. Update: status → 'pending_approval'
+        5. Log: user_approved
+        ---
+        **Response:**
+        {
+          transferId: UUID,
+          status: "pending_approval",
+          nextStep: "payment_initiating"
+        };
+    }
+
+    rectangle "POST /api/transfers/:id/deny" as deny <<post>> {
+        : **Request:**
+        {
+          transferId: UUID,
+          reason: "rate_changed" | "changed_mind"
+        }
+        ---
+        **Backend Actions:**
+        1. Update: status → 'cancelled'
+        2. Log: user_denied
+        3. Release rate lock
+        ---
+        **Response:**
+        {
+          transferId: UUID,
+          status: "cancelled",
+          message: "Transfer cancelled"
+        };
+    }
+}
+
+rectangle "PHASE 6-7: EXECUTION" as phase_execution {
+    rectangle "INTERNAL: Initiate Payment\n(After approval)" as payment_internal <<post>> {
+        : **Triggered by:** approve endpoint
+
+        **Internal Logic:**
+        1. Fetch transfer_requests
+        2. Verify rate tolerance (±2%)
+        3. Call Chimoney API:
+           POST /transfers/initiate
+           {
+             recipient_id,
+             amount: 500,
+             rate: 84.55,
+             idempotency_key: UUID,
+             payment_method: "upi"
+           }
+        4. Get chimoney_transaction_id
+        5. Update: status → 'payment_initiated'
+        6. Log: payment_initiated;
+    }
+}
+
+rectangle "PHASE 8: SETTLEMENT" as phase_settlement {
+    rectangle "POST /api/webhooks/chimoney" as webhook <<webhook>> {
+        : **Triggered by:** Chimoney (async)
+
+        **Headers:**
+        x-chimoney-signature: HMAC-SHA256
+        ---
+        **Payload Examples:**
+
+        **Success:**
+        {
+          event: "payment.completed",
+          transaction_id: "txn_xyz",
+          status: "completed",
+          amount: 500,
+          destination_amount: 42275,
+          timestamp: "2026-02-21T14:37:00Z"
+        }
+
+        **Failure:**
+        {
+          event: "payment.failed",
+          transaction_id: "txn_xyz",
+          status: "failed",
+          error_code: "INSUFFICIENT_FUNDS",
+          error_message: "Recipient has low balance"
+        }
+        ---
+        **Backend Actions:**
+        1. Verify signature
+        2. Find transfer by txn_id
+        3. IF success:
+           - status → 'completed'
+           - Log: payment_completed
+        4. IF failure:
+           - status → 'failed'
+           - Log: payment_failed
+        5. Send notification
+        ---
+        **Response:**
+        {
+          success: true,
+          processed: true
+        };
+    }
+}
+
+rectangle "ACTIVITY & MANAGEMENT" as phase_activity {
+    rectangle "GET /api/transfers/activity" as activity <<get>> {
+        : **Request:**
+        Query params:
+        - page: 1
+        - limit: 20
+        - status: "all" | "monitoring" | "completed"
+        ---
+        **Response:**
+        {
+          transfers: [
+            {
+              id: UUID,
+              type: "rate_triggered",
+              recipient: "Amit",
+              amount: 500,
+              status: "completed",
+              targetRate: 84.50,
+              actualRate: 84.55,
+              destination: 42275,
+              timestamp: "2026-02-21T14:37:00Z"
+            }
+          ],
+          pagination: { page: 1, total: 45 }
+        };
+    }
+
+    rectangle "GET /api/transfers/:id/status" as transfer_status <<get>> {
+        : **Request:**
+        /api/transfers/uuid-123/status
+        ---
+        **Response:**
+        {
+          transferId: UUID,
+          status: "completed",
+          paymentStatus: "settled",
+          currentRate: 84.55,
+          targetRate: 84.50,
+          sourceAmount: 500,
+          destinationAmount: 42275,
+          timeline: {
+            setup: "14:00",
+            locked: "14:02",
+            metAt: "14:30",
+            approved: "14:31",
+            initiated: "14:32",
+            completed: "14:37"
+          }
+        };
+    }
+
+    rectangle "GET /api/transfers/rates/history/:corridor" as rates_history <<get>> {
+        : **Request:**
+        /api/transfers/rates/history/USD-INR?days=7
+        ---
+        **Response:**
+        {
+          corridor: "USD-INR",
+          period: "7 days",
+          hourly: [
+            {
+              hour: "2026-02-21T14:00Z",
+              minRate: 83.40,
+              maxRate: 84.60,
+              avgRate: 84.15,
+              samples: 24
+            },
+            ...
+          ]
+        };
+    }
+}
+
+' Connections
+quote --> lock_rate: quoteId
+lock_rate --> cron_check: monitoring\nstarts
+cron_check --> approve: rate_met\nnotification
+approve --> payment_internal: auto-trigger
+deny --> activity: cancelled
+payment_internal --> webhook: chimoney\nprocesses
+webhook --> activity: settled
+transfer_status --> activity: query
+
+' Legend
+note bottom
+  **API FLOW SUMMARY:**
+
+  1️⃣ **Quote Phase**
+     POST /quote → GET current rate
+
+  2️⃣ **Lock Phase**
+     POST /lock-rate → Lock for 5 min
+
+  3️⃣ **Monitoring Phase**
+     GET /cron/check-fx-rates → Poll every 15 min
+     (Agent checks, user doesn't call)
+
+  4️⃣ **Approval Phase**
+     POST /approve → User approves
+     POST /deny → User denies
+
+  5️⃣ **Execution Phase**
+     (Internal) Call Chimoney API
+     status → payment_initiated
+
+  6️⃣ **Settlement Phase**
+     POST /webhooks/chimoney → Chimoney notifies
+     Status → completed/failed
+
+  7️⃣ **Activity Phase**
+     GET /activity → View history
+     GET /status → Track single transfer
+     GET /rates/history → Rate trends
+
+  **Security Notes:**
+  ✅ All endpoints require auth
+  ✅ Webhook signature verified (HMAC-SHA256)
+  ✅ Idempotency keys prevent duplicates
+  ✅ Rate lock prevents race conditions
+  ✅ Tolerance check prevents slippage
+  ✅ All actions immutably logged
+end note
+
+@enduml

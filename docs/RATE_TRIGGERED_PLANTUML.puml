@@ -1,0 +1,130 @@
+@startuml Rate-Triggered Transfer State Machine
+!define COLOR_SETUP #E8F4F8
+!define COLOR_MONITORING #FFF9E6
+!define COLOR_APPROVAL #F0F8FF
+!define COLOR_EXECUTION #E8F8E8
+!define COLOR_END #FFE8E8
+
+skinparam backgroundColor #FFFFFF
+skinparam state {
+    BackgroundColor COLOR_SETUP
+    BorderColor #333333
+    FontColor #000000
+}
+
+title Rate-Triggered Transfer - State Machine
+
+' ==================== STATES ====================
+state draft: "DRAFT\n(Initial state)"
+state rate_quoted: "RATE QUOTED\n(FX quote fetched)"
+state rate_locked: "RATE LOCKED\n(5 min window)"
+state monitoring: "MONITORING\n(Every 15 min check)"
+state rate_met: "RATE MET\n(Target reached)"
+state notification_sent: "NOTIFICATION SENT\n(Await user)"
+state pending_approval: "PENDING APPROVAL\n(User approved)"
+state cancelled: "CANCELLED\n(User denied)"
+state payment_initiated: "PAYMENT INITIATED\n(Chimoney called)"
+state completed: "COMPLETED\n(Success)"
+state failed: "FAILED\n(Error)"
+
+' ==================== TRANSITIONS ====================
+[*] --> draft
+
+draft --> rate_quoted: 1. User specifies target rate\n(amount, recipient, target)
+rate_quoted --> rate_locked: 2. User confirms\n[Lock Rate & Monitor]
+rate_locked --> monitoring: 3. Start monitoring
+
+monitoring --> rate_met: 4. Rate condition met\n(current_rate >= target_rate)
+monitoring --> monitoring: Check continues\n(Every 15 minutes)
+
+rate_met --> notification_sent: 5. Send notification\n"Rate available!"
+
+notification_sent --> pending_approval: 6A. User clicks APPROVE\n(status = pending_approval)
+notification_sent --> cancelled: 6B. User clicks DENY\n(status = cancelled)
+
+pending_approval --> payment_initiated: 7. Payment initiated\n(Call Chimoney API)
+
+payment_initiated --> completed: 8A. Webhook received\nevent = payment.completed
+
+payment_initiated --> failed: 8B. Webhook received\nevent = payment.failed
+
+cancelled --> [*]
+completed --> [*]
+failed --> [*]
+
+' ==================== NOTES ====================
+note right of draft
+  User Input:
+  "Send $500 when rate is 84.50"
+
+  Validation:
+  target_rate (84.50) >
+  current_rate (83.72)
+end note
+
+note right of rate_locked
+  Rate Lock Duration: 5 min
+  Monitoring: Continues
+  even after lock expires
+
+  Benefit: User waits for
+  BETTER rate = MORE rupees
+end note
+
+note right of monitoring
+  Check Logic:
+  if current_rate >= 84.50:
+    trigger rate_met
+  else:
+    continue monitoring
+
+  Frequency: Every 15 min
+end note
+
+note right of notification_sent
+  Notification Shows:
+  - Current rate: 84.55
+  - Target rate: 84.50
+  - Amount: $500
+  - Destination: 42,275 INR
+  - Recipient: Amit (UPI)
+
+  No timeout - User decides
+end note
+
+note right of payment_initiated
+  Idempotency Protection:
+  Same idempotency_key
+  returns same transaction_id
+
+  Rate Tolerance: +/- 2%
+  If changed > 2%, ask user
+end note
+
+note right of completed
+  Final Status:
+  APPROVED: $500 sent to Amit
+  RECEIVED: 42,275 INR
+  RATE: 84.55
+  REFERENCE: txn_xyz
+  AUDIT: All logged
+end note
+
+note right of cancelled
+  User Denial:
+  Transfer cancelled
+  User can create new
+  transfer anytime
+end note
+
+note bottom
+  SETUP -> MONITORING -> APPROVAL -> EXECUTION -> COMPLETED
+
+  Key Design Points:
+  - Target rate ALWAYS > current (wait for better rate)
+  - Agent NEVER autonomous (user approves)
+  - Immutable audit trail for compliance
+  - Idempotent API calls prevent duplicates
+end note
+
+@enduml

@@ -1,0 +1,273 @@
+@startuml Rate-Triggered Transfer - Database Schema
+!define LIGHT_BLUE #E8F4F8
+!define LIGHT_GREEN #E8F8E8
+!define LIGHT_YELLOW #FFF9E6
+!define LIGHT_RED #FFE8E8
+
+skinparam backgroundColor #FFFFFF
+skinparam class {
+    BackgroundColor<<main>> LIGHT_BLUE
+    BackgroundColor<<log>> LIGHT_GREEN
+    BackgroundColor<<rates>> LIGHT_YELLOW
+    BorderColor #333
+    FontColor #000
+}
+
+title Rate-Triggered Transfer - Data Flow & Schema
+
+package "TRANSFER MANAGEMENT" {
+    class transfer_requests <<main>> {
+        {field} id: UUID [PK]
+        {field} user_id: UUID [FK]
+        {field} recipient_id: UUID [FK]
+        {field} corridor_id: UUID [FK]
+        --
+        {field} transfer_type: VARCHAR
+          "immediate | rate_triggered"
+        {field} source_amount: DECIMAL
+          "$500"
+        {field} destination_amount: DECIMAL
+          "₹42,275"
+        {field} fee_amount: DECIMAL
+          "$5"
+        --
+        {field} target_rate: DECIMAL
+          "84.50 (for rate_triggered)"
+        {field} quoted_rate: DECIMAL
+          "83.72 (when quoted)"
+        {field} triggered_rate: DECIMAL
+          "84.55 (when rate met)"
+        --
+        {field} status: ENUM
+          "draft, rate_quoted, rate_locked,
+           monitoring, rate_met,
+           pending_approval, payment_initiated,
+           completed, failed, cancelled"
+        --
+        {field} chimoney_transaction_id: VARCHAR
+        {field} payment_status: VARCHAR
+        {field} rate_tolerance_percent: DECIMAL
+          "default: 2.0"
+        --
+        {field} rate_locked_at: TIMESTAMP
+        {field} rate_lock_expires_at: TIMESTAMP
+        {field} monitoring_started_at: TIMESTAMP
+        {field} rate_met_at: TIMESTAMP
+        {field} user_approved_at: TIMESTAMP
+        {field} user_denied_at: TIMESTAMP
+        {field} completed_at: TIMESTAMP
+        {field} created_at: TIMESTAMP
+        {field} updated_at: TIMESTAMP
+    }
+
+    class transfer_corridors <<main>> {
+        {field} id: UUID [PK]
+        {field} source_country: VARCHAR "US"
+        {field} destination_country: VARCHAR "IN"
+        {field} currency_pair: VARCHAR "USD-INR"
+        {field} provider: VARCHAR "chimoney"
+        {field} min_amount: DECIMAL
+        {field} max_amount: DECIMAL
+        {field} fee_structure: JSONB
+          "{fixed: 5, percentage: 0.5}"
+        {field} is_active: BOOLEAN
+        {field} created_at: TIMESTAMP
+        {field} updated_at: TIMESTAMP
+    }
+
+    class recipients <<main>> {
+        {field} id: UUID [PK]
+        {field} user_id: UUID [FK]
+        {field} chimoney_recipient_id: VARCHAR
+        {field} recipient_name: VARCHAR
+        {field} recipient_phone: VARCHAR
+        {field} payment_method: VARCHAR
+          "upi | bank_account"
+        {field} verification_status: ENUM
+          "pending, verified, failed"
+        {field} verified_at: TIMESTAMP
+        {field} created_at: TIMESTAMP
+        {field} updated_at: TIMESTAMP
+    }
+}
+
+package "AUDIT & LOGGING" {
+    class transfer_activity_log <<log>> {
+        {field} id: UUID [PK]
+        {field} transfer_id: UUID [FK]
+        {field} user_id: UUID [FK]
+        --
+        {field} activity_type: ENUM
+          "rate_setup,
+           rate_locked,
+           rate_check_completed,
+           rate_met,
+           rate_met_notification_sent,
+           user_approved,
+           user_denied,
+           payment_initiated,
+           payment_completed,
+           payment_failed"
+        --
+        {field} details: JSONB
+          "{ rate: 84.55, amount: 500,
+              timestamp: '...' }"
+        {field} ip_address: INET
+        {field} user_agent: VARCHAR
+        {field} triggered_by: ENUM
+          "user_action, system_cron,
+           webhook, admin"
+        {field} created_at: TIMESTAMP
+    }
+
+    class chimoney_webhook_logs <<log>> {
+        {field} id: UUID [PK]
+        {field} webhook_id: VARCHAR
+        {field} transfer_id: UUID [FK]
+        {field} event_type: VARCHAR
+          "payment.completed,
+           payment.failed"
+        {field} payload: JSONB
+        {field} processed: BOOLEAN
+        {field} error: TEXT
+        {field} received_at: TIMESTAMP
+        {field} processed_at: TIMESTAMP
+    }
+}
+
+package "RATE MANAGEMENT" {
+    class fx_rates <<rates>> {
+        {field} id: UUID [PK]
+        {field} corridor_id: UUID [FK]
+        {field} rate: DECIMAL "84.55"
+        {field} mid_rate: DECIMAL
+        {field} buy_rate: DECIMAL
+        {field} source_amount: DECIMAL
+        {field} destination_amount: DECIMAL
+        {field} fee_amount: DECIMAL
+        {field} rate_validity_seconds: INT
+        {field} source: VARCHAR
+          "chimoney | market_data"
+        {field} recorded_at: TIMESTAMP
+    }
+
+    class fx_rates_hourly <<rates>> {
+        {field} corridor_id: UUID
+        {field} hour: TIMESTAMP
+        {field} min_rate: DECIMAL
+        {field} max_rate: DECIMAL
+        {field} avg_rate: DECIMAL
+        {field} samples: INT
+    }
+}
+
+' ==================== RELATIONSHIPS ====================
+
+transfer_requests --> transfer_corridors: corridor_id
+transfer_requests --> recipients: recipient_id
+transfer_requests --> transfer_activity_log: transfer_id
+transfer_requests --> chimoney_webhook_logs: transfer_id
+transfer_corridors --> fx_rates: corridor_id
+fx_rates --> fx_rates_hourly: corridor_id
+
+' ==================== DATA FLOW NOTES ====================
+
+note on link : transfer_requests|transfer_activity_log
+  All state changes logged
+  for compliance audit
+end note
+
+note on link : transfer_requests|fx_rates
+  Quote rate stored,
+  triggered rate stored
+end note
+
+' ==================== KEY QUERIES ====================
+
+note right of transfer_requests
+  **Key Queries:**
+
+  Monitoring transfers:
+  SELECT * FROM transfer_requests
+  WHERE status = 'monitoring'
+
+  Check if rate met:
+  SELECT * FROM fx_rates
+  WHERE corridor_id = X
+  ORDER BY recorded_at DESC
+  LIMIT 1
+
+  Rate history (24h):
+  SELECT * FROM fx_rates
+  WHERE corridor_id = X
+  AND recorded_at > now() - interval '24h'
+
+  Audit trail:
+  SELECT * FROM transfer_activity_log
+  WHERE transfer_id = X
+  ORDER BY created_at DESC
+end note
+
+note right of transfer_activity_log
+  **Immutable Audit Log:**
+
+  Entry for every action:
+  ✅ rate_setup
+  ✅ rate_locked
+  ✅ rate_check (every 15 min)
+  ✅ rate_met
+  ✅ user_approved/denied
+  ✅ payment_initiated
+  ✅ payment_completed
+
+  Compliance requirement:
+  Cannot modify/delete entries
+  Cannot access plaintext amounts
+  Only IDs and rates logged
+end note
+
+note bottom of transfer_requests
+  **Data Example:**
+
+  When rate-triggered transfer created:
+  ┌──────────────────────────────────┐
+  │ id: uuid-123                      │
+  │ user_id: user-456                 │
+  │ recipient_id: recipient-789       │
+  │ transfer_type: rate_triggered     │
+  │ source_amount: 500                │
+  │ target_rate: 84.50                │
+  │ quoted_rate: 83.72                │
+  │ status: rate_quoted               │
+  │ created_at: 2026-02-21 14:00:00   │
+  └──────────────────────────────────┘
+
+  When rate met:
+  ┌──────────────────────────────────┐
+  │ triggered_rate: 84.55             │
+  │ destination_amount: 42275         │
+  │ status: rate_met                  │
+  │ rate_met_at: 2026-02-21 14:30:00  │
+  └──────────────────────────────────┘
+
+  After user approval:
+  ┌──────────────────────────────────┐
+  │ status: pending_approval          │
+  │ user_approved_at: 14:31:00        │
+  └──────────────────────────────────┘
+
+  After payment:
+  ┌──────────────────────────────────┐
+  │ status: payment_initiated         │
+  │ chimoney_transaction_id: txn_xyz  │
+  └──────────────────────────────────┘
+
+  After settlement:
+  ┌──────────────────────────────────┐
+  │ status: completed                 │
+  │ payment_status: completed         │
+  │ completed_at: 14:37:00            │
+  └──────────────────────────────────┘
+end note
+
+@enduml

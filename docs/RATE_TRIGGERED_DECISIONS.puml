@@ -1,0 +1,218 @@
+@startuml Rate-Triggered Transfer - Decision Tree
+!define COLOR_START #E8F4F8
+!define COLOR_DECISION #FFF9E6
+!define COLOR_SUCCESS #E8F8E8
+!define COLOR_ERROR #FFE8E8
+
+skinparam backgroundColor #FFFFFF
+skinparam rectangle {
+    BackgroundColor<<start>> COLOR_START
+    BackgroundColor<<process>> COLOR_DECISION
+    BackgroundColor<<success>> COLOR_SUCCESS
+    BackgroundColor<<error>> COLOR_ERROR
+    BorderColor #333
+    FontColor #000
+}
+
+rectangle "🚀 START: User Requests Rate-Triggered Transfer" as start <<start>> {
+}
+
+rectangle "User Input Validation" as validate <<process>> {
+    : **Check:**
+    - target_rate > current_rate?
+    - Recipient verified?
+    - User KYC valid?;
+}
+
+rectangle "❌ Invalid Setup?" as invalid_check <<decision>> {
+}
+
+rectangle "❌ Error: Invalid Setup" as error_setup <<error>> {
+    : **Reject with message:**
+    - If target ≤ current: "Use Immediate Transfer"
+    - If no recipient: "Add recipient first"
+    - If KYC expired: "Update KYC";
+}
+
+rectangle "✅ Monitoring Active" as monitoring_active <<success>> {
+    : **Status:** monitoring
+    - Poll every 15 minutes
+    - Check: current_rate ≥ target_rate?;
+}
+
+rectangle "Rate Check Loop" as rate_loop <<process>> {
+    : **Current Rate Check:**
+    - 84.15? NO → Continue
+    - 84.25? NO → Continue
+    - 84.55? YES → Proceed;
+}
+
+rectangle "🔔 TARGET RATE MET" as rate_met <<success>> {
+    : **Status:** rate_met
+    - Send notification to user
+    - Display: Current, Target, Amount, Destination
+    - Show: [✅ APPROVE] [❌ DENY];
+}
+
+rectangle "⏱️ User Decision Point" as user_decision <<decision>> {
+}
+
+rectangle "❌ User Clicks [DENY]" as user_deny <<process>> {
+    : **Status:** cancelled
+    - Transfer cancelled
+    - User can retry anytime
+    - Create new transfer;
+}
+
+rectangle "✅ Finalize: Transfer Cancelled" as deny_end <<error>> {
+}
+
+rectangle "✅ User Clicks [APPROVE]" as user_approve <<process>> {
+    : **Status:** pending_approval
+    - Ready for payment initiation;
+}
+
+rectangle "Rate Tolerance Check" as tolerance_check <<process>> {
+    : **Verify rate hasn't changed:**
+    - Fetch live rate from Chimoney
+    - Compare with triggered_rate
+    - Tolerance: ±2%;
+}
+
+rectangle "❌ Rate Changed Too Much?" as change_check <<decision>> {
+}
+
+rectangle "❌ Rate Changed" as rate_changed <<error>> {
+    : **Current: 84.30**
+    (outside 2% tolerance)
+
+    Ask user:
+    "Rate changed. Continue?"
+    [Yes] [No];
+}
+
+rectangle "🔗 Call Chimoney API" as chimoney_call <<process>> {
+    : **POST /transfers/initiate**
+    - Recipient ID: upi_12345
+    - Amount: $500
+    - Rate: 84.55
+    - Idempotency Key: uuid
+
+    **Idempotency Protection:**
+    If called twice, returns
+    same transaction_id;
+}
+
+rectangle "❌ Chimoney API Error?" as api_error_check <<decision>> {
+}
+
+rectangle "❌ API Error" as api_error <<error>> {
+    : **Transient Error (429, 503)?**
+    - Retry with backoff
+
+    **Permanent Error?**
+    - Notify user: "Transfer failed"
+    - Store error details
+    - Status: failed;
+}
+
+rectangle "💾 Payment Processing" as payment_processing <<process>> {
+    : **Status:** payment_initiated
+    - Awaiting Chimoney settlement
+    - Typical: 2-5 min (UPI);
+}
+
+rectangle "🎉 Webhook Received" as webhook_received <<process>> {
+    : **Chimoney Webhook:**
+    event = 'payment.completed'
+
+    Verify HMAC-SHA256 signature
+    Update transfer status;
+}
+
+rectangle "✅ FINALIZE: Transfer Complete" as success_end <<success>> {
+    : **Status:** completed
+
+    ✅ $500 sent to Amit
+    ✅ ₹42,275 received
+    ✅ Rate: 84.55
+    ✅ Reference: txn_xyz
+
+    **User Received ₹415 MORE
+    than immediate transfer!**
+
+    Activity logged immutably
+    for compliance;
+}
+
+rectangle "📊 Monitoring Analytics" as analytics <<process>> {
+    : Log all metrics:
+    - Setup time
+    - Monitoring duration
+    - Approval time
+    - Settlement time
+    - Rate improvement (₹415 saved);
+}
+
+' Connections
+start --> validate
+validate --> invalid_check
+
+invalid_check -->|NO: All valid| monitoring_active
+invalid_check -->|YES: Invalid| error_setup
+error_setup --> deny_end
+
+monitoring_active --> rate_loop
+rate_loop -->|Still checking| rate_loop
+rate_loop -->|TARGET MET| rate_met
+
+rate_met --> user_decision
+
+user_decision -->|Deny| user_deny
+user_decision -->|Approve| user_approve
+
+user_deny --> deny_end
+
+user_approve --> tolerance_check
+tolerance_check --> change_check
+
+change_check -->|NO: Within 2%| chimoney_call
+change_check -->|YES: Changed| rate_changed
+rate_changed -->|Retry| tolerance_check
+rate_changed -->|Cancel| deny_end
+
+chimoney_call --> api_error_check
+
+api_error_check -->|NO: Success| payment_processing
+api_error_check -->|YES: Error| api_error
+api_error --> deny_end
+
+payment_processing --> webhook_received
+webhook_received --> success_end
+success_end --> analytics
+
+note bottom of start
+  **CRITICAL DESIGN POINTS:**
+
+  1. **Higher Rate = Better Deal**
+     User waits for rate to improve (83.72 → 84.55)
+     More rupees received (₹42,275 vs ₹41,860)
+
+  2. **Never Autonomous**
+     Agent monitors but user ALWAYS approves
+
+  3. **Two-Step Approval**
+     1. User approves notification when rate met
+     2. System verifies rate within tolerance
+
+  4. **Idempotency**
+     All API calls safe to retry
+
+  5. **Immutable Audit Trail**
+     Every action logged for compliance
+
+  6. **Rate Lock Window**
+     5 minutes to confirm, but monitoring continues
+end note
+
+@enduml

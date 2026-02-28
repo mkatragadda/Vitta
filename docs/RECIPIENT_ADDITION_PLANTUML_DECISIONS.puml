@@ -1,0 +1,142 @@
+@startuml Recipient Addition - Decision Tree
+
+skinparam backgroundColor #FFFFFF
+
+title Recipient Addition - Verification Decision Tree
+
+start
+:User enters recipient details;
+
+:Validate input format
+(Name, Phone, Method);
+
+if (Name 2-255 chars?) then (NO)
+  :Show error: "Name too short/long";
+  :Allow retry;
+  end
+else (YES)
+endif
+
+if (Phone valid 10 digits?) then (NO)
+  :Show error: "Phone must be 10 digits";
+  :Allow retry;
+  end
+else (YES)
+endif
+
+if (UPI selected?) then (YES)
+  if (UPI format: user@bank?) then (NO)
+    :Show error: "Invalid UPI format";
+    :Suggestion: "Use format: name@bank";
+    :Allow retry;
+    end
+  else (YES)
+  endif
+else (NO - Bank Account selected)
+  if (Account number valid?) then (NO)
+    :Show error: "Invalid account number";
+    :Allow retry;
+    end
+  else (YES)
+  endif
+
+  if (IFSC 11 chars alphanumeric?) then (NO)
+    :Show error: "Invalid IFSC code";
+    :Allow retry;
+    end
+  else (YES)
+  endif
+endif
+
+:Send to backend for Chimoney verification;
+
+if (Chimoney API call successful?) then (NO - Network error)
+  :Log error to verification_log;
+  :Show error: "Network error";
+  :Allow retry;
+  end
+else (YES)
+endif
+
+if (Chimoney verify response success?) then (NO - Verification failed)
+  :Extract error_code from response;
+
+  if (error_code?) then (INVALID_UPI_FORMAT)
+    :Show: "UPI format not recognized";
+    :Suggestion: "Check UPI with your bank";
+    :Allow retry;
+    end
+  else if (error_code?) then (INVALID_ACCOUNT_NUMBER)
+    :Show: "Account number invalid";
+    :Suggestion: "Use 9-18 digit account";
+    :Allow retry;
+    end
+  else if (error_code?) then (INVALID_IFSC_CODE)
+    :Show: "IFSC code not found";
+    :Suggestion: "Check bank's IFSC code";
+    :Allow retry;
+    end
+  else if (error_code?) then (ACCOUNT_NOT_FOUND)
+    :Show: "Account not found";
+    :Suggestion: "Verify account holder name";
+    :Allow retry;
+    end
+  else if (error_code?) then (RATE_LIMIT_EXCEEDED)
+    :Show: "Too many attempts (max 3/day)";
+    :Show retry time: 24 hours;
+    :Cannot retry;
+    end
+  else if (error_code?) then (NAME_MISMATCH)
+    :Show: "Name doesn't match account";
+    :Suggestion: "Use exact account holder name";
+    :Allow retry;
+    end
+  else (Unknown error)
+    :Show: "Verification failed";
+    :Log full error response;
+    :Allow retry;
+    end
+  endif
+
+else (YES - Verification success)
+  :Extract recipient_id from response;
+  :Extract verified_at from response;
+
+  :Encrypt sensitive fields
+  (UPI ID or account number);
+
+  :Insert recipient record:
+  {
+    id: UUID,
+    user_id: from JWT,
+    payment_method: "upi" | "bank",
+    name: recipient_name,
+    phone: recipient_phone,
+    upi_id or bank_account: encrypted,
+    ifsc: encrypted,
+    chimoney_recipient_id: recipient_id,
+    verification_status: "verified",
+    verified_at: from Chimoney,
+    created_at: now,
+    updated_at: now
+  };
+
+  :Insert verification_log:
+  {
+    recipient_id: UUID,
+    attempt_number: 1,
+    verification_status: "verified",
+    chimoney_response: full_response,
+    verified_at: now,
+    ip_address: from request
+  };
+
+  :Show success message:
+  "Recipient added successfully";
+
+  :Redirect to recipients list;
+
+  stop
+endif
+
+@enduml
