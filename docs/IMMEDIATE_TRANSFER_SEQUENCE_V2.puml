@@ -1,0 +1,176 @@
+@startuml Immediate Transfer Flow with Smart Rate Handling
+title Immediate Transfer Sequence Diagram (v2 - Smart Rate Handling)
+participant User as U
+participant Frontend as FE
+participant Backend as API
+participant Supabase as DB
+participant Chimoney as CHI
+
+autonumber
+
+== 1. TRANSFER INITIATION ==
+
+U -> FE: Opens "Send Money" screen
+activate FE
+
+FE -> API: GET /api/beneficiaries/list\n(X-User-Id: user_uuid)
+activate API
+API -> DB: SELECT * FROM beneficiaries\nWHERE user_id = ?
+activate DB
+DB --> API: List of saved beneficiaries
+deactivate DB
+API --> FE: { beneficiaries: [...] }
+deactivate API
+
+FE -> FE: Display beneficiary list\nfor selection
+
+U -> FE: Selects beneficiary (Amit Kumar)
+FE -> FE: Shows selected beneficiary details
+
+U -> FE: Enters amount: $500 USD
+FE -> FE: Validate amount\n($10 - $50,000)
+
+== 2. GET EXCHANGE RATE ==
+
+FE -> API: GET /api/transfers/exchange-rate?\namount=500&source=USD&target=INR
+activate API
+
+API -> CHI: GET /v0.2.4/payouts/rates\n?countryTo=IN
+activate CHI
+CHI --> API: { rates: { USD: { rate: 83.25 } } }
+deactivate CHI
+
+API -> API: Calculate amounts\n500 USD × 83.25 = 41,625 INR\nFee: $2.50\nTotal: $502.50
+
+API --> FE: {\n  exchange_rate: 83.25,\n  target_amount: 41625,\n  fee_amount: 2.50,\n  expires_at: now + 30s,\n  is_locked: false\n}
+deactivate API
+
+FE -> FE: Display rate breakdown:\n- You send: $502.50\n- Recipient gets: ₹41,625\n- Rate: 1 USD = ₹83.25\n- Countdown: 30s ⏱️
+
+== 3. USER CONFIRMS DETAILS ==
+
+U -> FE: Clicks "Confirm & Review"
+FE -> FE: Move to review screen\nShow all details with\n"Cannot be reversed" warning
+
+U -> FE: Clicks "Confirm & Send"
+FE -> FE: Show loading spinner
+
+== 4. TRANSFER INITIATION (Create Record) ==
+
+FE -> API: POST /api/transfers/initiate\nAuthorization: Bearer token\nX-User-Id: user_uuid\n{\n  beneficiary_id: "abc-123",\n  source_amount: 502.50,\n  exchange_rate: 83.25,\n  target_amount: 41625,\n  fee_amount: 2.50\n}
+activate API
+
+API -> API: Validate authorization\nValidate amount, beneficiary
+
+API -> DB: INSERT INTO transfers (\n  user_id, beneficiary_id,\n  source_amount, target_amount,\n  exchange_rate: 83.25,\n  status: 'pending'\n)
+activate DB
+DB --> API: transfer_id: "txn-xyz-789"
+deactivate DB
+
+API -> DB: INSERT INTO transfer_status_log (\n  transfer_id, old_status: NULL,\n  new_status: 'pending'\n)
+deactivate DB
+
+API --> FE: {\n  success: true,\n  transfer_id: "txn-xyz-789",\n  status: "pending"\n}
+deactivate API
+
+== 5. TRANSFER EXECUTION (Send to Chimoney) ==
+
+FE -> API: POST /api/transfers/execute\nAuthorization: Bearer token\nX-User-Id: user_uuid\n{\n  transfer_id: "txn-xyz-789"\n}
+activate API
+
+API -> API: BEGIN TRANSACTION
+
+note over API: ✅ SMART RATE CHECK\n(Favor user when possible)
+
+API -> CHI: GET /v0.2.4/payouts/rates\n(Re-check CURRENT rate)
+activate CHI
+CHI --> API: Current rate: ?
+deactivate CHI
+
+API -> API: Compare rates:\nOriginal: 83.25\nCurrent: ??
+
+alt Rate became BETTER (favorable)
+  note over API: 🎉 User gets MORE money\nRate: 83.25 → 83.50\nAmount: 41,625 → 41,750\n✅ Accept silently (no alert)
+
+  API -> API: Update transfer\noriginal_rate: 83.25\nfinal_rate: 83.50\nfinal_amount: 41,750\nrate_improved: true
+
+else Rate became WORSE (unfavorable) AND change > 1%
+  note over API: ⚠️ User gets LESS money\nRate: 83.25 → 83.00\nAmount: 41,625 → 41,500\n🚨 ALERT USER FOR CONFIRMATION
+
+  API --> FE: {\n  error_code: 'RATE_CHANGED',\n  old_rate: 83.25,\n  new_rate: 83.00,\n  old_amount: 41625,\n  new_amount: 41500,\n  difference_percent: -0.30%,\n  requires_confirmation: true\n}
+  deactivate API
+
+  FE -> FE: Show RateChangeModal:\n"Exchange rate dropped"\n"Old: ₹83.25 (₹41,625)"\n"New: ₹83.00 (₹41,500)"\n[Accept New Rate] [Go Back]
+
+  alt User clicks "Accept New Rate"
+    U -> FE: Accepts new rate
+
+    FE -> API: POST /api/transfers/execute\n(RETRY with accept_rate_change: true)
+    activate API
+
+    API -> API: Update transfer with new rate\nfinal_rate: 83.00\nfinal_amount: 41500\nrate_worsened: true\nuser_confirmed: true
+
+  else User clicks "Go Back"
+    U -> FE: Cancels
+    FE -> FE: Return to review screen
+
+    API --> FE: { cancelled: true }
+    deactivate API
+
+    note over FE: User can:\n1. Adjust amount\n2. Try again\n3. Cancel transfer
+  end
+
+else Rate became WORSE BUT change ≤ 1%
+  note over API: Rate changed but ≤1%\nRate: 83.25 → 83.15 (-0.12%)\n✅ Accept silently\n(Minor change, not worth alerting)
+
+  API -> API: Update transfer\noriginal_rate: 83.25\nfinal_rate: 83.15\nfinal_amount: 41,575\nrate_slightly_worse: true
+
+end
+
+== 6. FINALIZE TRANSFER (If Rate Accepted) ==
+
+API -> DB: BEGIN TRANSACTION
+API -> DB: UPDATE transfers\nSET status = 'processing'
+activate DB
+DB --> API: OK
+deactivate DB
+
+API -> DB: INSERT INTO transfer_status_log (\n  transfer_id, new_status: 'processing'\n)
+deactivate DB
+
+note over API: Get beneficiary details\nfrom database
+
+API -> DB: SELECT beneficiaries\nWHERE id = ?
+activate DB
+DB --> API: Beneficiary data
+deactivate DB
+
+API -> CHI: POST /v0.2.4/payouts/bank\nHeaders: X-API-Key: chimoney_key\n{\n  amount: 500,\n  account_number: "...",\n  bank_code: "HDFC0000123",\n  fullname: "Amit Kumar"\n}
+activate CHI
+
+note over CHI: Chimoney validates\nProcesses transfer\nReturns transaction ID
+
+CHI --> API: {\n  success: true,\n  id: "chi_9876543210"\n}
+deactivate CHI
+
+API -> DB: UPDATE transfers\nSET\n  status = 'processing',\n  chimoney_transaction_id = 'chi_9876543210',\n  final_exchange_rate = 83.00,\n  final_target_amount = 41500,\n  executed_at = NOW()\nWHERE id = ?
+activate DB
+DB --> API: OK
+deactivate DB
+
+API -> DB: COMMIT TRANSACTION
+deactivate DB
+
+API --> FE: {\n  success: true,\n  transfer_id: "txn-xyz-789",\n  status: "processing",\n  chimoney_transaction_id: "chi_9876543210",\n  final_exchange_rate: 83.00,\n  final_target_amount: 41500,\n  executed_at: "2026-02-28T12:46:00Z"\n}
+deactivate API
+
+== 7. SHOW CONFIRMATION RECEIPT ==
+
+FE -> FE: Hide loading spinner
+FE -> FE: Show confirmation screen with:\n- Transaction ID\n- Final amounts (with rate change if any)\n- Recipient: Amit Kumar (UPI)\n- Amount sent: $502.50\n- Amount received: ₹41,500\n- Status: Processing (2-5 min)\n- ℹ️ Rate changed during processing\n  From: ₹83.25 → To: ₹83.00
+
+U -> FE: Views receipt / Shares / Done
+
+note over DB,CHI: Chimoney processes transfer\nin background (2-5 minutes)\nWill send webhook when completed\n(Future enhancement)
+
+@enduml
