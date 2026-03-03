@@ -2,12 +2,21 @@
  * POST /api/transfers/execute
  * Execute a pending transfer with Chimoney payout
  * Implements smart rate logic: improves → silent, worsens <1% → silent, worsens >1% → alert
+ *
+ * Flow:
+ * 1. Fetch transfer record with plaid_account_id
+ * 2. Get plaid_item and access_token from database
+ * 3. Call Plaid /auth/get API to get account and routing numbers
+ * 4. Call Chimoney with beneficiary details and account info
  */
 
 import { createClient } from '@supabase/supabase-js';
 import transferService from '../../../services/transfer/transferService';
 import encryptionService from '../../../services/encryption/encryptionService';
 import getChimoneyConfig from '../../../config/chimoney';
+import { getAuthData } from '../../../services/plaid/plaidAuthService';
+import { executeWithIdempotency, buildIdempotencyKey } from '../../../services/payment/idempotencyService';
+import { decryptToken } from '../../../utils/encryption';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -49,7 +58,7 @@ export default async function handler(req, res) {
       .select(
         `*,
         beneficiaries(*),
-        plaid_transfer_accounts(*)
+        plaid_accounts(*)
       `
       )
       .eq('id', transfer_id)
@@ -168,41 +177,223 @@ export default async function handler(req, res) {
       0.5 // fee percentage
     );
 
-    // Call Chimoney API for payout
-    let chimonyResponse;
+    // ═════════════════════════════════════════════════════════════════════
+    // STEP: Retrieve Plaid account details for source account
+    // ═════════════════════════════════════════════════════════════════════
+    console.log('[execute] Retrieving Plaid account details', {
+      plaid_account_id: `${transfer.plaid_transfer_account_id.substring(0, 15)}...`,
+    });
+
+    let plaidAccountDetails;
     try {
+      // Fetch plaid_item to get access_token
+      // NOTE: Search by plaid_account_id (Plaid ID), not by database id
+      console.log('[execute] Looking up Plaid account', {
+        searching_by_plaid_account_id: transfer.plaid_transfer_account_id,
+      });
+
+      const { data: plaidAccount, error: plaidAccountError } = await db
+        .from('plaid_accounts')
+        .select('id, plaid_item_id, plaid_account_id')
+        .eq('plaid_account_id', transfer.plaid_transfer_account_id)
+        .single();
+
+      console.log('[execute] Plaid account lookup result', {
+        found: !!plaidAccount,
+        error: plaidAccountError?.message,
+        account_data: plaidAccount ? { id: plaidAccount.id, plaid_item_id: plaidAccount.plaid_item_id } : null,
+      });
+
+      if (plaidAccountError || !plaidAccount) {
+        console.error('[execute] Failed to fetch plaid_account', {
+          account_id: transfer.plaid_transfer_account_id,
+          error: plaidAccountError?.message,
+        });
+        throw new Error('Source account not found in database');
+      }
+
+      // Fetch plaid_item to get access_token (stored encrypted as access_token_enc)
+      console.log('[execute] Fetching Plaid item for access token', {
+        plaid_item_id: plaidAccount.plaid_item_id,
+      });
+
+      const { data: plaidItem, error: plaidItemError } = await db
+        .from('plaid_items')
+        .select('id, access_token_enc, created_at')
+        .eq('id', plaidAccount.plaid_item_id)
+        .single();
+
+      console.log('[execute] Plaid item lookup result', {
+        found: !!plaidItem,
+        error: plaidItemError?.message,
+        has_access_token_enc: !!plaidItem?.access_token_enc,
+      });
+
+      if (plaidItemError || !plaidItem || !plaidItem.access_token_enc) {
+        console.error('[execute] Failed to fetch plaid_item', {
+          plaid_item_id: plaidAccount.plaid_item_id,
+          error: plaidItemError?.message,
+          has_token: !!plaidItem?.access_token_enc,
+        });
+        throw new Error('Plaid access token not found');
+      }
+
+      // Decrypt the access token
+      let accessToken;
+      try {
+        console.log('[execute] Decrypting Plaid access token', {
+          token_length: plaidItem.access_token_enc?.length || 0,
+        });
+
+        accessToken = decryptToken(plaidItem.access_token_enc);
+        console.log('[execute] Successfully decrypted Plaid access token', {
+          decrypted_token_preview: `${accessToken.substring(0, 20)}...`,
+        });
+      } catch (decryptError) {
+        console.error('[execute] Failed to decrypt access token:', {
+          error: decryptError.message,
+          token_length: plaidItem.access_token_enc?.length || 0,
+          token_preview: plaidItem.access_token_enc?.substring(0, 50) || 'N/A',
+        });
+        throw new Error('Failed to decrypt Plaid access token');
+      }
+
+      // Call Plaid /auth/get to retrieve account and routing numbers
+      plaidAccountDetails = await getAuthData(
+        accessToken,
+        transfer.plaid_transfer_account_id
+      );
+
+      console.log('[execute] Successfully retrieved Plaid account details', {
+        account_id: `****${plaidAccountDetails.account_number.slice(-4)}`,
+        routing: plaidAccountDetails.routing_number,
+      });
+    } catch (plaidError) {
+      console.error('[execute] Plaid auth error:', {
+        error_message: plaidError.message,
+        account_id: transfer.plaid_transfer_account_id,
+      });
+
+      // Log failed Plaid retrieval
+      await db.from('transfer_status_log').insert({
+        transfer_id: transfer.id,
+        old_status: transfer.status,
+        new_status: 'failed',
+        reason: 'Failed to retrieve bank account details from Plaid',
+        metadata: { error_message: plaidError.message },
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve source account details',
+        error_code: 'PLAID_AUTH_FAILED',
+        error_message: plaidError.message,
+      });
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // Call Chimoney API with idempotency protection
+    // ═════════════════════════════════════════════════════════════════════
+    const idempotencyKey = buildIdempotencyKey(transfer.id);
+
+    // Define execute callback for Chimoney payout
+    const executeChimonyPayout = async () => {
       if (decryptedBeneficiary.payment_method === 'upi') {
-        chimonyResponse = await callChimoneyUPI(
+        return await callChimoneyUPI(
           decryptedBeneficiary,
           finalAmounts,
           transfer.id,
-          chimonyApiKey
+          chimonyApiKey,
+          plaidAccountDetails
         );
       } else if (decryptedBeneficiary.payment_method === 'bank_account') {
-        chimonyResponse = await callChimoneyBank(
+        return await callChimoneyBank(
           decryptedBeneficiary,
           finalAmounts,
           transfer.id,
-          chimonyApiKey
+          chimonyApiKey,
+          plaidAccountDetails
         );
       } else {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid payment method',
-          error_code: 'INVALID_PAYMENT_METHOD',
-        });
+        const error = new Error('Invalid payment method');
+        error.statusCode = 400;
+        error.code = 'INVALID_PAYMENT_METHOD';
+        throw error;
       }
-    } catch (chimonyError) {
-      console.error('[execute] Chimoney error:', chimonyError);
+    };
+
+    // Define verify callback to check if transfer already processed
+    const verifyTransferProcessed = async () => {
+      const { data: existingTransfer, error: queryError } = await db
+        .from('transfers')
+        .select('status, chimoney_transaction_id, chimoney_reference')
+        .eq('id', transfer.id)
+        .single();
+
+      if (queryError) {
+        console.error('[execute] Verification query error:', queryError);
+        return { processed: false };
+      }
+
+      // If transfer already has a Chimoney transaction ID, it was processed
+      if (existingTransfer?.chimoney_transaction_id) {
+        console.log('[execute] Transfer verified as already processed', {
+          transfer_id: transfer.id,
+          chimoney_transaction_id: existingTransfer.chimoney_transaction_id,
+        });
+
+        return {
+          processed: true,
+          data: {
+            transaction_id: existingTransfer.chimoney_transaction_id,
+            reference: existingTransfer.chimoney_reference,
+          },
+        };
+      }
+
+      return { processed: false };
+    };
+
+    // Execute with idempotency
+    let idempotencyResult;
+    try {
+      idempotencyResult = await executeWithIdempotency({
+        idempotencyKey,
+        execute: executeChimonyPayout,
+        verify: verifyTransferProcessed,
+        logger: console,
+        maxRetries: 3,
+        initialBackoffMs: 100,
+      });
+    } catch (error) {
+      console.error('[execute] Idempotency error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to execute transfer',
+        error_code: 'IDEMPOTENCY_ERROR',
+        details: error.message,
+      });
+    }
+
+    // Handle idempotency result
+    if (!idempotencyResult.success) {
+      console.error('[execute] Transfer execution failed after retries', {
+        transfer_id: transfer.id,
+        error: idempotencyResult.error,
+        errorCode: idempotencyResult.errorCode,
+        attempt: idempotencyResult.attempt,
+      });
 
       // Log failed execution
       await db.from('transfer_status_log').insert({
         transfer_id: transfer.id,
         old_status: 'pending',
         new_status: 'failed',
-        reason: 'Chimoney API call failed',
+        reason: 'Chimoney API call failed after retries',
         metadata: {
-          error: chimonyError.message,
+          error: idempotencyResult.error,
+          errorCode: idempotencyResult.errorCode,
+          attempts: idempotencyResult.attempt,
         },
       });
 
@@ -210,7 +401,27 @@ export default async function handler(req, res) {
         success: false,
         error: 'Failed to execute transfer with Chimoney',
         error_code: 'CHIMONEY_EXECUTION_FAILED',
-        details: chimonyError.message,
+        details: idempotencyResult.error,
+      });
+    }
+
+    // Extract Chimoney response from idempotency result
+    const chimonyResponse = idempotencyResult.data;
+
+    // If this was a duplicate request (409), log it but continue
+    if (idempotencyResult.isDuplicate) {
+      console.log('[execute] Duplicate transfer execution detected', {
+        transfer_id: transfer.id,
+        chimoney_transaction_id: chimonyResponse.transaction_id,
+      });
+    }
+
+    // If this was reconciled from a failed attempt, log it
+    if (idempotencyResult.isReconciled) {
+      console.log('[execute] Transfer execution reconciled after server error', {
+        transfer_id: transfer.id,
+        chimoney_transaction_id: chimonyResponse.transaction_id,
+        failureReconciled: idempotencyResult.failureReconciled,
       });
     }
 
@@ -297,7 +508,7 @@ export default async function handler(req, res) {
 /**
  * Call Chimoney API for UPI payout
  */
-async function callChimoneyUPI(beneficiary, amounts, transferId, apiKey) {
+async function callChimoneyUPI(beneficiary, amounts, transferId, apiKey, sourceAccountDetails) {
   const url = 'https://api.chimoney.io/v0.2.4/payouts/upi';
   const payload = {
     receiver: [
@@ -356,7 +567,7 @@ async function callChimoneyUPI(beneficiary, amounts, transferId, apiKey) {
 /**
  * Call Chimoney API for Bank Account payout
  */
-async function callChimoneyBank(beneficiary, amounts, transferId, apiKey) {
+async function callChimoneyBank(beneficiary, amounts, transferId, apiKey, sourceAccountDetails) {
   const url = 'https://api.chimoney.io/v0.2.4/payouts/bank';
   const payload = {
     receiver: [
@@ -378,6 +589,7 @@ async function callChimoneyBank(beneficiary, amounts, transferId, apiKey) {
     bankCode: beneficiary.recipient_bank_code,
     amount: amounts.target_amount,
     currency: amounts.target_currency,
+    sourceAccount: sourceAccountDetails ? `****${sourceAccountDetails.account_number.slice(-4)}` : 'unknown',
     apiKeyPrefix: apiKey.substring(0, 10) + '...',
   });
 

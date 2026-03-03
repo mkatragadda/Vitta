@@ -5,9 +5,50 @@ import CreditCardScreen from './CreditCardScreen';
 import RecommendationScreen from './RecommendationScreen';
 import AddCardFlow from './AddCardFlow';
 import BeneficiaryManagementScreen from './beneficiary/BeneficiaryManagementScreen';
+import TransferInitiation from './transfer/TransferInitiation';
+import TransferReview from './transfer/TransferReview';
+import TransferReceipt from './transfer/TransferReceipt';
 import { getUserCards, addCard, deleteCard, calculateUtilization } from '../services/cardService';
 
-const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoading, handleSendMessage, handleKeyPress, MessageContent, isDemoMode = false, onCardsChanged }) => {
+/**
+ * VittaChatInterface
+ *
+ * Main authenticated shell. Handles sidebar navigation, chat view, card management,
+ * beneficiary management, and inline transfer component rendering.
+ *
+ * Transfer-related props (all optional; only needed when a transfer flow is active):
+ * @param {string}   transferFlowStep    - Current step from TRANSFER_STEPS enum
+ * @param {Object}   transferFlowData    - { rateData, beneficiary, sourceAmount } after initiation
+ * @param {Object}   transferReceiptData - Receipt data after transfer completes
+ * @param {Function} onTransferProceed   - Called when user confirms rate in TransferInitiation
+ * @param {Function} onTransferConfirm   - Called when TransferReview executes successfully
+ * @param {Function} onTransferCancel    - Called when user cancels at any step
+ * @param {Function} onNewTransfer       - Called from TransferReceipt "New Transfer" button
+ * @param {Function} onTransferHome      - Called from TransferReceipt "Back to Home" button
+ */
+const VittaChatInterface = ({
+  user,
+  userData,
+  onLogout,
+  messages,
+  input,
+  setInput,
+  isLoading,
+  handleSendMessage,
+  handleKeyPress,
+  MessageContent,
+  isDemoMode = false,
+  onCardsChanged,
+  // Transfer flow props
+  transferFlowStep,
+  transferFlowData,
+  transferReceiptData,
+  onTransferProceed,
+  onTransferConfirm,
+  onTransferCancel,
+  onNewTransfer,
+  onTransferHome
+}) => {
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const textareaRef = useRef(null);
 
@@ -37,6 +78,129 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
   // Beneficiary state
   const [beneficiaries, setBeneficiaries] = useState([]);
   const [activeBeneficiary, setActiveBeneficiary] = useState(null);
+
+  /**
+   * Load beneficiaries from API when component mounts or user changes
+   */
+  useEffect(() => {
+    if (!user?.id) {
+      console.log('[VittaChatInterface] No user ID, skipping beneficiaries fetch');
+      return;
+    }
+
+    const loadBeneficiaries = async () => {
+      try {
+        console.log('[VittaChatInterface] Loading beneficiaries for user:', user.id);
+        const response = await fetch('/api/beneficiaries/list', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token') || 'demo-token'}`,
+            'X-User-Id': user.id
+          }
+        });
+
+        if (!response.ok) {
+          console.error('[VittaChatInterface] Failed to fetch beneficiaries:', response.status);
+          return;
+        }
+
+        const data = await response.json();
+        console.log('[VittaChatInterface] Loaded beneficiaries:', data.beneficiaries?.length || 0, data.beneficiaries);
+
+        // Transform API response to component format if needed
+        const transformedBeneficiaries = (data.beneficiaries || []).map(b => ({
+          id: b.beneficiaryId || b.id,
+          name: b.name,
+          paymentMethod: b.paymentMethod,
+          upiId: b.upiId,
+          account: b.account,
+          ifsc: b.ifsc,
+          verificationStatus: b.verificationStatus,
+          relationship: b.relationship,
+          createdAt: b.createdAt
+        }));
+
+        setBeneficiaries(transformedBeneficiaries);
+      } catch (error) {
+        console.error('[VittaChatInterface] Error loading beneficiaries:', error);
+        setBeneficiaries([]);
+      }
+    };
+
+    loadBeneficiaries();
+  }, [user?.id]);
+
+  /**
+   * Render an inline transfer component inside a chat message bubble.
+   * Called when a message has a `component` field with type 'TransferInitiation',
+   * 'TransferReview', or 'TransferReceipt'.
+   *
+   * @param {{ type: string }} componentDescriptor
+   * @returns {JSX.Element|null}
+   */
+  const renderTransferComponent = useCallback((componentDescriptor) => {
+    if (!componentDescriptor || !componentDescriptor.type) return null;
+
+    switch (componentDescriptor.type) {
+      case 'TransferInitiation':
+        return (
+          <TransferInitiation
+            beneficiaries={beneficiaries}
+            userData={user}
+            onProceed={onTransferProceed || (() => {})}
+          />
+        );
+
+      case 'TransferReview':
+        if (!transferFlowData) {
+          // Guard: if we have no flow data (e.g. after reload), show error
+          return (
+            <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">
+              Transfer data unavailable. Please start a new transfer.
+            </div>
+          );
+        }
+        return (
+          <TransferReview
+            transferData={transferFlowData}
+            userId={user?.id}
+            userData={userData}
+            onConfirm={onTransferConfirm || (() => {})}
+            onCancel={onTransferCancel || (() => {})}
+          />
+        );
+
+      case 'TransferReceipt':
+        if (!transferReceiptData) {
+          return (
+            <div className="p-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">
+              Receipt data unavailable.
+            </div>
+          );
+        }
+        return (
+          <TransferReceipt
+            transferData={transferReceiptData}
+            onNewTransfer={onNewTransfer || (() => {})}
+            onHome={onTransferHome || (() => {})}
+          />
+        );
+
+      default:
+        console.warn('[VittaChatInterface] Unknown component type:', componentDescriptor.type);
+        return null;
+    }
+  }, [
+    beneficiaries,
+    user,
+    transferFlowData,
+    transferReceiptData,
+    onTransferProceed,
+    onTransferConfirm,
+    onTransferCancel,
+    onNewTransfer,
+    onTransferHome
+  ]);
 
   const [cards, setCards] = useState([]);
   const [isLoadingCards, setIsLoadingCards] = useState(true);
@@ -311,15 +475,31 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
                 }`}>
                   {message.type === 'user' ? user?.name || 'You' : 'Agentic Wallet AI'}
                 </div>
-                <div className={`p-4 rounded-lg shadow-sm ${
-                  message.type === 'user'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
-                    : 'bg-white text-gray-900'
-                }`}>
-                  <div className="whitespace-pre-line leading-relaxed">
-                    <MessageContent content={message.content} onNavigate={handleNavigate} />
+                {/* Bot messages with an embedded component render the component below the text */}
+                {message.component && message.type === 'bot' ? (
+                  <div className="bg-white text-gray-900 rounded-lg shadow-sm overflow-hidden">
+                    {/* Brief intro text above the component (if any) */}
+                    {message.content && (
+                      <div className="px-4 pt-4 pb-2 text-sm leading-relaxed whitespace-pre-line border-b border-gray-100">
+                        <MessageContent content={message.content} onNavigate={handleNavigate} />
+                      </div>
+                    )}
+                    {/* Inline transfer component */}
+                    <div className="transfer-component-wrapper">
+                      {renderTransferComponent(message.component)}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className={`p-4 rounded-lg shadow-sm ${
+                    message.type === 'user'
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      : 'bg-white text-gray-900'
+                  }`}>
+                    <div className="whitespace-pre-line leading-relaxed">
+                      <MessageContent content={message.content} onNavigate={handleNavigate} />
+                    </div>
+                  </div>
+                )}
                 <div className={`text-xs text-gray-500 mt-1 ${
                   message.type === 'user' ? 'text-right' : 'text-left'
                 }`}>
@@ -448,7 +628,7 @@ const VittaChatInterface = ({ user, onLogout, messages, input, setInput, isLoadi
         </div>
       </div>
     </div>
-  ), [messages, isLoading, input, user, handleKeyPress, handleSendMessage, handleNavigate, sendQuickAction, setInput, beneficiaries, setCurrentView]);
+  ), [messages, isLoading, input, user, handleKeyPress, handleSendMessage, handleNavigate, sendQuickAction, setInput, beneficiaries, setCurrentView, renderTransferComponent]);
 
   // Payment Optimizer View
   const OptimizerView = useMemo(() => (

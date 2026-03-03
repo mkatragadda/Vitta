@@ -105,15 +105,103 @@ export default async function handler(req, res) {
       });
     }
 
-    // Fetch transfer account
-    const { data: transferAccount, error: transferError } = await db
-      .from('plaid_transfer_accounts')
+    // Fetch transfer account to validate it exists and is active
+    // Note: plaid_account_id is stored in transfer record for later retrieval
+    // Account details (number, routing) are fetched dynamically during execute
+    console.log('[transfers/initiate] Validating plaid account', {
+      account_id: plaid_transfer_account_id,
+      account_id_preview: `${plaid_transfer_account_id.substring(0, 15)}...`,
+      user_id: userId,
+    });
+
+    // Debug: Log the incoming request
+    console.log('[transfers/initiate] ===== REQUEST DETAILS =====');
+    console.log('[transfers/initiate] Request Body:', {
+      beneficiary_id: `${beneficiary_id.substring(0, 15)}...`,
+      plaid_transfer_account_id: `${plaid_transfer_account_id.substring(0, 15)}...`,
+      source_amount,
+      exchange_rate,
+    });
+    console.log('[transfers/initiate] User ID from header:', `${userId.substring(0, 15)}...`);
+
+    // First, check table structure - get one row to see all columns
+    console.log('[transfers/initiate] ===== TABLE STRUCTURE CHECK =====');
+    const { data: tableCheck, error: tableError } = await db
+      .from('plaid_accounts')
       .select('*')
-      .eq('id', plaid_transfer_account_id)
-      .eq('user_id', userId)
+      .limit(1);
+
+    console.log('[transfers/initiate] Table structure check:', {
+      hasData: !!tableCheck && tableCheck.length > 0,
+      error: tableError?.message,
+      columns: tableCheck && tableCheck.length > 0 ? Object.keys(tableCheck[0]) : 'N/A',
+      sampleRow: tableCheck && tableCheck.length > 0 ? tableCheck[0] : null,
+    });
+
+    // Get all accounts for current user by joining through plaid_items
+    console.log('[transfers/initiate] ===== FETCHING USER ACCOUNTS =====');
+    const { data: userAccounts, error: userAccountsError } = await db
+      .from('plaid_accounts')
+      .select('*, plaid_items(user_id)')
+      .filter('plaid_items.user_id', 'eq', userId);
+
+    console.log('[transfers/initiate] User accounts query result:', {
+      count: userAccounts?.length || 0,
+      error: userAccountsError?.message,
+      accounts: userAccounts?.map((a) => ({
+        id: a.id,
+        plaid_account_id: a.plaid_account_id,
+        plaid_item_id: a.plaid_item_id,
+        is_active: a.is_active,
+        plaid_item_user_id: a.plaid_items?.user_id,
+      })),
+    });
+
+    // First, try to fetch without .single() to see what we get
+    // NOTE: Search by plaid_account_id (the actual Plaid ID), not the database id
+    console.log('[transfers/initiate] ===== SEARCHING FOR TARGET ACCOUNT =====');
+    const { data: allAccounts, error: allAccountsError } = await db
+      .from('plaid_accounts')
+      .select('*')
+      .eq('plaid_account_id', plaid_transfer_account_id);
+
+    console.log('[transfers/initiate] Query result (without .single())', {
+      searchingFor: plaid_transfer_account_id,
+      error: allAccountsError?.message,
+      count: allAccounts?.length || 0,
+      data: allAccounts,
+    });
+
+    // Fetch target account with plaid_items to verify user ownership
+    console.log('[transfers/initiate] ===== FETCHING TARGET ACCOUNT WITH OWNERSHIP CHECK =====');
+    const { data: transferAccount, error: transferError } = await db
+      .from('plaid_accounts')
+      .select('*, plaid_items(user_id)')
+      .eq('plaid_account_id', plaid_transfer_account_id)
       .single();
 
+    console.log('[transfers/initiate] Query result (with .single())', {
+      hasData: !!transferAccount,
+      error: transferError?.message,
+      errorCode: transferError?.code,
+      account_user_id: transferAccount?.plaid_items?.user_id,
+      requesting_user_id: userId,
+      data: transferAccount,
+    });
+
+    // Verify account exists
     if (transferError || !transferAccount) {
+      console.error('[transfers/initiate] ===== PLAID ACCOUNT NOT FOUND =====', {
+        account_id: plaid_transfer_account_id,
+        error: transferError?.message,
+        errorCode: transferError?.code,
+        possibleCauses: [
+          'Account not linked yet',
+          'Account does not exist',
+          'Incorrect plaid_account_id format',
+        ],
+      });
+
       return res.status(404).json({
         success: false,
         error: 'Transfer account not found',
@@ -121,21 +209,36 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!transferAccount.can_transfer_out) {
-      return res.status(400).json({
+    // Verify user ownership (the plaid_items.user_id must match the requesting user_id)
+    if (transferAccount.plaid_items?.user_id !== userId) {
+      console.error('[transfers/initiate] ===== USER OWNERSHIP MISMATCH =====', {
+        account_id: plaid_transfer_account_id,
+        plaid_item_user_id: transferAccount.plaid_items?.user_id,
+        requesting_user_id: userId,
+      });
+
+      return res.status(403).json({
         success: false,
-        error: 'Account not enabled for transfers',
-        error_code: 'ACCOUNT_TRANSFER_DISABLED',
+        error: 'Unauthorized: account does not belong to this user',
+        error_code: 'OWNERSHIP_MISMATCH',
       });
     }
 
-    if (!transferAccount.is_verified_for_transfer) {
+    if (!transferAccount.is_active) {
+      console.warn('[transfers/initiate] Plaid account is inactive', {
+        account_id: plaid_transfer_account_id,
+      });
       return res.status(400).json({
         success: false,
-        error: 'Account transfer verification pending',
-        error_code: 'ACCOUNT_NOT_VERIFIED',
+        error: 'Transfer account is inactive',
+        error_code: 'ACCOUNT_INACTIVE',
       });
     }
+
+    console.log('[transfers/initiate] Plaid account validated successfully', {
+      account_id: `${plaid_transfer_account_id.substring(0, 15)}...`,
+      plaid_item_id: `${transferAccount.plaid_item_id.substring(0, 15)}...`,
+    });
 
     // Calculate amounts
     const amounts = transferService.calculateTransferAmounts(

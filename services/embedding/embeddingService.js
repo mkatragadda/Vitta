@@ -18,40 +18,82 @@ const embeddingCache = new EmbeddingCache({
 });
 
 /**
- * Generate embedding for text using OpenAI API via server route
+ * Generate embedding for text using OpenAI API via server route or direct API
  * @param {string} text - Text to embed
  * @returns {Promise<number[]>} - 1536-dimensional embedding vector
  */
 export async function getEmbedding(text) {
   try {
-    // Call our API route instead of OpenAI directly
-    const response = await fetch('/api/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-ada-002',
-        input: text
-      })
-    });
+    // Check if running in Node.js (for setup scripts)
+    const isNode = typeof window === 'undefined';
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('[EmbeddingService] API error details:', errorData);
-      throw new Error(`API error: ${response.status} - ${errorData.error || 'Unknown error'}`);
+    if (isNode) {
+      // Direct OpenAI API call for Node.js context
+      return await getEmbeddingFromOpenAI(text);
+    } else {
+      // Browser context: use API route
+      const response = await fetch('/api/embeddings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-ada-002',
+          input: text
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[EmbeddingService] API error details:', errorData);
+        throw new Error(`API error: ${response.status} - ${errorData.error || 'Unknown error'}`);
+      }
+
+      const data = await response.json();
+      const embedding = data.data[0].embedding;
+
+      console.log('[EmbeddingService] Generated embedding for:', text.substring(0, 50));
+      return embedding;
     }
-
-    const data = await response.json();
-    const embedding = data.data[0].embedding;
-
-    console.log('[EmbeddingService] Generated embedding for:', text.substring(0, 50));
-    return embedding;
 
   } catch (error) {
     console.error('[EmbeddingService] Error generating embedding:', error);
     throw error;
   }
+}
+
+/**
+ * Generate embedding directly from OpenAI API (for Node.js context)
+ * @param {string} text - Text to embed
+ * @returns {Promise<number[]>} - 1536-dimensional embedding vector
+ */
+async function getEmbeddingFromOpenAI(text) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY not found in environment variables');
+  }
+
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-ada-002',
+      input: text
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+  }
+
+  const data = await response.json();
+  const embedding = data.data[0].embedding;
+  console.log('[EmbeddingService] Generated embedding from OpenAI for:', text.substring(0, 50));
+  return embedding;
 }
 
 /**

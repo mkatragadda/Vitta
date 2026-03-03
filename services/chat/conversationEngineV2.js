@@ -50,7 +50,8 @@ const CRITICAL_INTENTS = new Set([
   'card_recommendation', // Preserve structured multi-strategy layout without GPT reformatting
   'remember_memory',
   'recall_memory',
-  'split_payment' // Preserve complete payment split table with ALL cards - GPT truncates long tables
+  'split_payment', // Preserve complete payment split table with ALL cards - GPT truncates long tables
+  'transfer_money_international' // Return component descriptor directly - GPT would override __transferIntent marker
   // 'payment_optimizer' - removed to allow personalized responses
   // 'debt_guidance_plan' - removed to allow conversational advice
 ]);
@@ -673,13 +674,17 @@ export const processQuery = async (query, userData = {}, context = {}) => {
 
       if (CRITICAL_INTENTS.has(selectedMatch.intent_id)) {
         console.log('[ConversationEngineV2] Critical intent detected, returning structured response without GPT');
-        const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
-        
+        // For transfer intent, preserve the object with __transferIntent marker
+        // For other critical intents, stringify if it's an object
+        const response = selectedMatch.intent_id === 'transfer_money_international'
+          ? localResponse
+          : (typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse));
+
         // Phase 6: Track query execution for analytics (async, don't block)
-        trackQueryExecution(query, selectedMatch.intent_id, entities, localResponse, userData.user_id).catch(err => {
+        trackQueryExecution(query, selectedMatch.intent_id, entities, response, userData.user_id).catch(err => {
           console.error('[ConversationEngineV2] Error tracking query:', err);
         });
-        
+
         conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
         return response;
       }
@@ -710,13 +715,17 @@ export const processQuery = async (query, userData = {}, context = {}) => {
 
       if (CRITICAL_INTENTS.has(selectedMatch.intent_id)) {
         console.log('[ConversationEngineV2] Critical intent detected (medium confidence), returning structured response without GPT');
-        const response = typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse);
-        
+        // For transfer intent, preserve the object with __transferIntent marker
+        // For other critical intents, stringify if it's an object
+        const response = selectedMatch.intent_id === 'transfer_money_international'
+          ? localResponse
+          : (typeof localResponse === 'string' ? localResponse : JSON.stringify(localResponse));
+
         // Phase 6: Track query execution for analytics (async, don't block)
-        trackQueryExecution(query, selectedMatch.intent_id, entities, localResponse, userData.user_id).catch(err => {
+        trackQueryExecution(query, selectedMatch.intent_id, entities, response, userData.user_id).catch(err => {
           console.error('[ConversationEngineV2] Error tracking query:', err);
         });
-        
+
         conversationContext.addTurn(query, selectedMatch.intent_id, entities, response);
         return response;
       }

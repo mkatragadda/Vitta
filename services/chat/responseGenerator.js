@@ -74,6 +74,13 @@ export const generateResponse = async (classification, entities, userData, conte
         entities
       });
 
+    case 'transfer_money_international':
+      // Return a special marker object that VittaApp interprets as
+      // "render the TransferInitiation component in chat".
+      // The component field is NOT a React element — it is a plain descriptor
+      // that VittaChatInterface / VittaApp will use to instantiate the component.
+      return handleTransferMoneyInternational(userData);
+
     default:
       return handleUnknown(intent, entities);
   }
@@ -446,4 +453,37 @@ const handleHelp = () => {
 
 const handleUnknown = (intent, entities) => {
   return `I'm not sure about that. Try asking:\n• "What cards do I have?"\n• "Which card for Costco?"\n• "When are payments due?"\n• "Help"\n\nWhat would you like to know?`;
+};
+
+/**
+ * Handle international money transfer intent.
+ *
+ * Returns a special component descriptor object that the chat layer
+ * (VittaApp + VittaChatInterface) recognises and renders as the
+ * TransferInitiation component inline inside the chat message list.
+ *
+ * The returned object shape:
+ * {
+ *   __transferIntent: true,   // marker for the rendering layer
+ *   text: string,             // fallback text shown above the component
+ *   component: {
+ *     type: 'TransferInitiation',
+ *     data: {}                // additional data if needed
+ *   }
+ * }
+ *
+ * @param {Object} userData - Current user data (may include beneficiaries)
+ * @returns {Object} Component descriptor
+ */
+const handleTransferMoneyInternational = (userData) => {
+  console.log('[ResponseGenerator] transfer_money_international intent detected');
+
+  return {
+    __transferIntent: true,
+    text: "I'll help you send money internationally. Let's get started with your transfer.",
+    component: {
+      type: 'TransferInitiation',
+      data: {}
+    }
+  };
 };

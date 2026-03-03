@@ -85,6 +85,8 @@ export default async function handler(req, res) {
     }
 
     // Fetch rate from Chimoney
+    // Note: Despite parameter names sourceCountry/targetCountry, the function actually expects
+    // currency codes (USD, INR) which it concatenates to form rate keys like 'USDINR'
     const chimoney = createChimoneyClient();
     const rateData = await transferService.getExchangeRate(chimoney, source, target);
 

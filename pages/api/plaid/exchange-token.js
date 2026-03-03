@@ -122,6 +122,8 @@ export default async function handler(req, res) {
       const dbItemId = insertedItem.id;
 
       // 6. Insert plaid_accounts and plaid_liabilities
+      // NOTE: plaid_accounts does NOT have user_id column
+      // User ownership is tracked via plaid_item_id -> plaid_items.user_id relationship
       for (const account of accounts) {
         const { error: accountError } = await supabase
           .from('plaid_accounts')

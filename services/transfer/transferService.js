@@ -265,7 +265,16 @@ function formatRateChangeMessage(rateDecision, finalRate, originalRate) {
   return 'Exchange rate remained the same';
 }
 
-module.exports = {
+export {
+  handleRateChange,
+  getExchangeRate,
+  calculateTransferAmounts,
+  validateTransfer,
+  createStatusLogEntry,
+  formatRateChangeMessage,
+};
+
+export default {
   handleRateChange,
   getExchangeRate,
   calculateTransferAmounts,

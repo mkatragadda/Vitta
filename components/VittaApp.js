@@ -9,6 +9,7 @@ import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
 import { warmupCache } from '../services/cache/cacheWarmup';
+import transferFlowManager, { TRANSFER_STEPS } from '../services/chat/transferFlowManager';
 
 // Component to render message content with clickable links and tables
 const MessageContent = ({ content, onNavigate }) => {
@@ -192,6 +193,12 @@ const VittaApp = () => {
   const fileInputRef = useRef(null);
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const userId = user?.id;
+
+  // Transfer flow state — tracks which step of the international transfer the user is on.
+  // When a transfer component message is active, this drives which component gets rendered.
+  const [transferFlowStep, setTransferFlowStep] = useState(TRANSFER_STEPS.IDLE);
+  const [transferFlowData, setTransferFlowData] = useState(null); // { rateData, beneficiary, sourceAmount }
+  const [transferReceiptData, setTransferReceiptData] = useState(null); // receipt from execute API
 
 
   const processGoogleProfile = useCallback(async ({ email, name, picture, sub }) => {
@@ -1116,11 +1123,29 @@ const VittaApp = () => {
       // Process query through intelligent conversation engine
       const response = await processQuery(queryText, userData, context);
 
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        content: response,
-        timestamp: new Date()
-      }]);
+      // Detect transfer intent — responseGenerator returns a descriptor object
+      // with __transferIntent: true instead of a plain string.
+      if (response && typeof response === 'object' && response.__transferIntent) {
+        console.log('[VittaApp] Transfer intent detected, starting transfer flow');
+        transferFlowManager.startFlow();
+        setTransferFlowStep(TRANSFER_STEPS.AWAITING_INITIATION);
+        setTransferFlowData(null);
+        setTransferReceiptData(null);
+
+        // Add a special component message that VittaChatInterface will render
+        setMessages(prev => [...prev, {
+          type: 'bot',
+          content: response.text,
+          timestamp: new Date(),
+          component: { type: 'TransferInitiation' }
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          type: 'bot',
+          content: response,
+          timestamp: new Date()
+        }]);
+      }
 
     } catch (error) {
       console.error('[VittaApp] Error processing query:', error);
@@ -1140,6 +1165,160 @@ const VittaApp = () => {
       handleSendMessage();
     }
   };
+
+  // ─── Transfer Flow Callbacks ─────────────────────────────────────────────────
+  // These are passed down to VittaChatInterface which passes them into the
+  // rendered transfer components (TransferInitiation, TransferReview, etc.)
+
+  /**
+   * User clicked Continue on TransferInitiation.
+   * Saves rate + beneficiary data, moves to review step.
+   * @param {{ rateData: Object, beneficiary: Object, sourceAmount: number }} data
+   */
+  const handleTransferProceed = useCallback((data) => {
+    console.log('[VittaApp] Transfer proceed → review', { beneficiary: data?.beneficiary?.name });
+    transferFlowManager.proceedToReview(data);
+    setTransferFlowStep(TRANSFER_STEPS.AWAITING_REVIEW);
+    setTransferFlowData(data);
+
+    // Replace the initiation component message with a review component message
+    setMessages(prev => {
+      const withoutLastComponent = prev.filter((m, i) => {
+        // Remove the last bot message that had the TransferInitiation component
+        if (m.type === 'bot' && m.component?.type === 'TransferInitiation' && i === prev.length - 1) {
+          return false;
+        }
+        return true;
+      });
+      return [
+        ...withoutLastComponent,
+        {
+          type: 'bot',
+          content: "Great! Please review the transfer details below.",
+          timestamp: new Date(),
+          component: { type: 'TransferReview' }
+        }
+      ];
+    });
+  }, []);
+
+  /**
+   * Transfer executed successfully. Move to receipt step.
+   * @param {Object} receiptData - Receipt from execute API
+   */
+  const handleTransferConfirm = useCallback((receiptData) => {
+    console.log('[VittaApp] Transfer complete', { id: receiptData?.transfer_id });
+    transferFlowManager.completeFlow(receiptData);
+    setTransferFlowStep(TRANSFER_STEPS.COMPLETE);
+    setTransferReceiptData(receiptData);
+
+    // Replace review component message with receipt component message
+    setMessages(prev => {
+      const withoutLastComponent = prev.filter((m, i) => {
+        if (m.type === 'bot' && m.component?.type === 'TransferReview' && i === prev.length - 1) {
+          return false;
+        }
+        return true;
+      });
+      return [
+        ...withoutLastComponent,
+        {
+          type: 'bot',
+          content: "Transfer complete!",
+          timestamp: new Date(),
+          component: { type: 'TransferReceipt' }
+        }
+      ];
+    });
+  }, []);
+
+  /**
+   * User cancelled at any transfer step. Return to idle chat.
+   */
+  const handleTransferCancel = useCallback(() => {
+    console.log('[VittaApp] Transfer cancelled');
+    transferFlowManager.cancelFlow();
+    setTransferFlowStep(TRANSFER_STEPS.IDLE);
+    setTransferFlowData(null);
+    setTransferReceiptData(null);
+
+    // Replace component message with plain text
+    setMessages(prev => {
+      const withoutLastComponent = prev.filter((m, i) => {
+        if (m.type === 'bot' && m.component && i === prev.length - 1) {
+          return false;
+        }
+        return true;
+      });
+      return [
+        ...withoutLastComponent,
+        {
+          type: 'bot',
+          content: "Transfer cancelled. Let me know if you'd like to try again or if there's anything else I can help you with.",
+          timestamp: new Date()
+        }
+      ];
+    });
+  }, []);
+
+  /**
+   * User clicked "New Transfer" from receipt screen.
+   * Reset flow and return to idle so they can start fresh.
+   */
+  const handleNewTransfer = useCallback(() => {
+    console.log('[VittaApp] Starting new transfer');
+    transferFlowManager.reset();
+    setTransferFlowStep(TRANSFER_STEPS.IDLE);
+    setTransferFlowData(null);
+    setTransferReceiptData(null);
+
+    setMessages(prev => {
+      const withoutLastComponent = prev.filter((m, i) => {
+        if (m.type === 'bot' && m.component?.type === 'TransferReceipt' && i === prev.length - 1) {
+          return false;
+        }
+        return true;
+      });
+      return [
+        ...withoutLastComponent,
+        {
+          type: 'bot',
+          content: "Ready for a new transfer! Just say \"send money to India\" or select a beneficiary to get started.",
+          timestamp: new Date()
+        }
+      ];
+    });
+  }, []);
+
+  /**
+   * User clicked "Back to Home" from receipt screen.
+   */
+  const handleTransferHome = useCallback(() => {
+    console.log('[VittaApp] Transfer home');
+    transferFlowManager.reset();
+    setTransferFlowStep(TRANSFER_STEPS.IDLE);
+    setTransferFlowData(null);
+    setTransferReceiptData(null);
+    // No message change — just reset state; the receipt component will be replaced naturally
+    setMessages(prev => {
+      const withoutLastComponent = prev.filter((m, i) => {
+        if (m.type === 'bot' && m.component?.type === 'TransferReceipt' && i === prev.length - 1) {
+          return false;
+        }
+        return true;
+      });
+      return [
+        ...withoutLastComponent,
+        {
+          type: 'bot',
+          content: "Welcome back! How else can I help you?",
+          timestamp: new Date()
+        }
+      ];
+    });
+  }, []);
+
+  // ─── End Transfer Flow Callbacks ─────────────────────────────────────────────
 
   // Navigation handler for deep links in chat
   const handleChatNavigate = (screenPath) => {
@@ -1244,9 +1423,16 @@ const VittaApp = () => {
 
   // Main interface after login - Use VittaChatInterface for all users
   if (isAuthenticated && user) {
+    // Construct userData for transfer and chat flows
+    const userData = {
+      user_id: user?.id || null,
+      cards: userCards || []
+    };
+
     return (
       <VittaChatInterface
         user={user}
+        userData={userData}
         onLogout={handleLogout}
         messages={messages}
         input={input}
@@ -1257,6 +1443,14 @@ const VittaApp = () => {
         MessageContent={MessageContent}
         isDemoMode={user.provider !== 'google'}
         onCardsChanged={refreshCards}
+        transferFlowStep={transferFlowStep}
+        transferFlowData={transferFlowData}
+        transferReceiptData={transferReceiptData}
+        onTransferProceed={handleTransferProceed}
+        onTransferConfirm={handleTransferConfirm}
+        onTransferCancel={handleTransferCancel}
+        onNewTransfer={handleNewTransfer}
+        onTransferHome={handleTransferHome}
       />
     );
   }

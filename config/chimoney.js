@@ -53,4 +53,4 @@ const getChimoneyConfig = () => {
   throw new Error(`Unknown NODE_ENV: ${env}`);
 };
 
-module.exports = getChimoneyConfig;
+export default getChimoneyConfig;

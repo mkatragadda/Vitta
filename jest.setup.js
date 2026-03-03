@@ -35,6 +35,25 @@ global.navigator = Object.create(Object.prototype, {
     configurable: true,
     enumerable: true,
   },
+  // React 18 reads navigator.userAgent in test environments;
+  // provide a minimal string so react-dom does not throw.
+  userAgent: {
+    get() {
+      return 'node.js';
+    },
+    configurable: true,
+    enumerable: true,
+  },
+  // Provide a minimal clipboard stub so clipboard.writeText tests work.
+  clipboard: {
+    get() {
+      return {
+        writeText: jest.fn().mockResolvedValue(undefined),
+      };
+    },
+    configurable: true,
+    enumerable: true,
+  },
 });
 
 // Mock IndexedDB for Node.js environment
