@@ -482,3 +482,84 @@ ON CONFLICT DO NOTHING;
 --    - For production, create ivfflat index for performance
 --
 -- ============================================================================
+
+-- ============================================================================
+-- 14. TRANSFERS TABLE (International Money Transfers)
+-- ============================================================================
+-- Stores international transfer records initiated by users
+CREATE TABLE IF NOT EXISTS transfers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+  -- SOURCE: Transfer-enabled Plaid account (where money comes FROM)
+  -- Stores the Plaid account ID string (e.g., 'zy6aB9B9gZsENRq3MAaJCy9l4weGpDF33MLkP')
+  -- Used to look up the plaid_accounts record during transfer execution
+  plaid_transfer_account_id VARCHAR(255) NOT NULL,
+
+  -- DESTINATION: Beneficiary (where money goes TO)
+  beneficiary_id UUID NOT NULL REFERENCES beneficiaries(id) ON DELETE RESTRICT,
+
+  -- Amounts & Exchange Rate
+  source_amount DECIMAL(15, 2) NOT NULL,
+  source_currency VARCHAR(3) DEFAULT 'USD',
+  target_amount DECIMAL(15, 2) NOT NULL,
+  target_currency VARCHAR(3) NOT NULL,
+  exchange_rate DECIMAL(10, 4) NOT NULL,
+  fee_amount DECIMAL(15, 2) NOT NULL,
+  fee_percentage DECIMAL(5, 3) NOT NULL,
+
+  -- Final amounts (can differ if rate changed during execution)
+  final_exchange_rate DECIMAL(10, 4),
+  final_target_amount DECIMAL(15, 2),
+
+  -- Chimoney reference
+  chimoney_transaction_id VARCHAR(255),
+  chimoney_reference VARCHAR(255),
+
+  -- Status
+  status VARCHAR(50) DEFAULT 'pending'
+    CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+
+  -- Rate change tracking (JSON)
+  rate_change_log JSONB,
+
+  -- Timestamps
+  initiated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  executed_at TIMESTAMP WITH TIME ZONE,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  cancelled_at TIMESTAMP WITH TIME ZONE,
+
+  -- Audit trail
+  ip_address INET,
+  user_agent TEXT,
+
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for transfers table
+CREATE INDEX IF NOT EXISTS idx_transfers_user_id ON transfers(user_id);
+CREATE INDEX IF NOT EXISTS idx_transfers_plaid_transfer_account ON transfers(plaid_transfer_account_id);
+CREATE INDEX IF NOT EXISTS idx_transfers_beneficiary ON transfers(beneficiary_id);
+CREATE INDEX IF NOT EXISTS idx_transfers_status ON transfers(status);
+CREATE INDEX IF NOT EXISTS idx_transfers_chimoney_id ON transfers(chimoney_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_transfers_created_at ON transfers(created_at DESC);
+
+-- ============================================================================
+-- 15. TRANSFER STATUS LOG TABLE (Audit Trail)
+-- ============================================================================
+-- Immutable audit trail of all transfer status changes
+CREATE TABLE IF NOT EXISTS transfer_status_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  transfer_id UUID NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,
+  old_status VARCHAR(50),
+  new_status VARCHAR(50) NOT NULL,
+  reason TEXT,
+  metadata JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_transfer_status_log_transfer_id ON transfer_status_log(transfer_id);
+CREATE INDEX IF NOT EXISTS idx_transfer_status_log_created_at ON transfer_status_log(created_at DESC);
+
+-- ============================================================================

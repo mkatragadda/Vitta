@@ -157,27 +157,44 @@ export default async function handler(req, res) {
       })),
     });
 
-    // First, try to fetch without .single() to see what we get
-    // NOTE: Search by plaid_account_id (the actual Plaid ID), not the database id
-    console.log('[transfers/initiate] ===== SEARCHING FOR TARGET ACCOUNT =====');
-    const { data: allAccounts, error: allAccountsError } = await db
+    // Step 1: Look up plaid_account by vitta_card_id
+    // The frontend sends the card id, we need to get the plaid_account_id from it
+    console.log('[transfers/initiate] ===== RESOLVING VITTA CARD ID TO PLAID ACCOUNT ID =====');
+    const { data: cardAccount, error: cardAccountError } = await db
       .from('plaid_accounts')
       .select('*')
-      .eq('plaid_account_id', plaid_transfer_account_id);
+      .eq('vitta_card_id', plaid_transfer_account_id)
+      .single();
 
-    console.log('[transfers/initiate] Query result (without .single())', {
+    console.log('[transfers/initiate] Card lookup result:', {
       searchingFor: plaid_transfer_account_id,
-      error: allAccountsError?.message,
-      count: allAccounts?.length || 0,
-      data: allAccounts,
+      error: cardAccountError?.message,
+      found: !!cardAccount,
+      plaid_account_id: cardAccount?.plaid_account_id,
     });
+
+    // If not found by card id, try searching by plaid_account_id as fallback
+    let actualPlaidAccountId = cardAccount?.plaid_account_id;
+    if (!cardAccount && !cardAccountError) {
+      console.log('[transfers/initiate] ===== FALLBACK: SEARCHING BY PLAID_ACCOUNT_ID =====');
+      const { data: directAccount, error: directError } = await db
+        .from('plaid_accounts')
+        .select('*')
+        .eq('plaid_account_id', plaid_transfer_account_id)
+        .single();
+
+      if (directAccount) {
+        actualPlaidAccountId = directAccount.plaid_account_id;
+        console.log('[transfers/initiate] Found by plaid_account_id directly');
+      }
+    }
 
     // Fetch target account with plaid_items to verify user ownership
     console.log('[transfers/initiate] ===== FETCHING TARGET ACCOUNT WITH OWNERSHIP CHECK =====');
     const { data: transferAccount, error: transferError } = await db
       .from('plaid_accounts')
       .select('*, plaid_items(user_id)')
-      .eq('plaid_account_id', plaid_transfer_account_id)
+      .eq('plaid_account_id', actualPlaidAccountId || plaid_transfer_account_id)
       .single();
 
     console.log('[transfers/initiate] Query result (with .single())', {
@@ -241,14 +258,22 @@ export default async function handler(req, res) {
     });
 
     // Calculate amounts
+    console.log('[transfers/initiate] ===== CALCULATING AMOUNTS =====');
     const amounts = transferService.calculateTransferAmounts(
       parsedAmount,
       parsedRate,
       0.5
     );
+    console.log('[transfers/initiate] Amounts calculated:', amounts);
 
     // Validate transfer
+    console.log('[transfers/initiate] ===== VALIDATING TRANSFER =====');
     const validation = transferService.validateTransfer(amounts, transferAccount, beneficiary);
+    console.log('[transfers/initiate] Validation result:', {
+      valid: validation.valid,
+      errors: validation.errors,
+    });
+
     if (!validation.valid) {
       return res.status(400).json({
         success: false,
@@ -258,33 +283,51 @@ export default async function handler(req, res) {
       });
     }
 
-    // Create transfer record
+    // Create transfer record with the Plaid account ID (string)
+    // Note: transfers.plaid_transfer_account_id stores the Plaid account ID for lookup during execution
+    console.log('[transfers/initiate] ===== CREATING TRANSFER RECORD =====');
+    const transferData = {
+      user_id: userId,
+      plaid_transfer_account_id: actualPlaidAccountId || plaid_transfer_account_id,
+      beneficiary_id,
+      source_amount: amounts.source_amount,
+      source_currency: amounts.source_currency,
+      target_amount: amounts.target_amount,
+      target_currency: amounts.target_currency,
+      exchange_rate: amounts.exchange_rate,
+      fee_amount: amounts.fee_amount,
+      fee_percentage: amounts.fee_percentage,
+      status: 'pending',
+      initiated_at: new Date().toISOString(),
+      ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+      user_agent: req.headers['user-agent'],
+    };
+    console.log('[transfers/initiate] Transfer record data:', transferData);
+
     const { data: transfer, error: insertError } = await db
       .from('transfers')
-      .insert({
-        user_id: userId,
-        plaid_transfer_account_id,
-        beneficiary_id,
-        source_amount: amounts.source_amount,
-        source_currency: amounts.source_currency,
-        target_amount: amounts.target_amount,
-        target_currency: amounts.target_currency,
-        exchange_rate: amounts.exchange_rate,
-        fee_amount: amounts.fee_amount,
-        fee_percentage: amounts.fee_percentage,
-        status: 'pending',
-        initiated_at: new Date().toISOString(),
-        ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
-        user_agent: req.headers['user-agent'],
-      })
+      .insert(transferData)
       .select()
       .single();
 
+    console.log('[transfers/initiate] Insert result:', {
+      hasData: !!transfer,
+      error: insertError?.message,
+      errorCode: insertError?.code,
+      errorDetails: insertError,
+      data: transfer,
+    });
+
     if (insertError || !transfer) {
+      console.error('[transfers/initiate] ===== TRANSFER CREATION FAILED =====', {
+        insertError,
+        transferData,
+      });
       return res.status(500).json({
         success: false,
         error: 'Failed to initiate transfer',
         error_code: 'TRANSFER_CREATION_FAILED',
+        details: insertError?.message,
       });
     }
 

@@ -53,25 +53,32 @@ export default async function handler(req, res) {
     }
 
     // Fetch transfer
+    console.log('[execute] ===== FETCHING TRANSFER =====');
     const { data: transfer, error: transferError } = await db
       .from('transfers')
-      .select(
-        `*,
-        beneficiaries(*),
-        plaid_accounts(*)
-      `
-      )
+      .select('*, beneficiaries(*)')
       .eq('id', transfer_id)
       .eq('user_id', userId)
       .single();
 
     if (transferError || !transfer) {
+      console.error('[execute] Transfer not found', {
+        transfer_id,
+        user_id: userId,
+        error: transferError?.message,
+      });
       return res.status(404).json({
         success: false,
         error: 'Transfer not found',
         error_code: 'TRANSFER_NOT_FOUND',
       });
     }
+
+    console.log('[execute] Transfer found:', {
+      id: transfer.id,
+      plaid_transfer_account_id: transfer.plaid_transfer_account_id,
+      status: transfer.status,
+    });
 
     if (transfer.status !== 'pending') {
       return res.status(400).json({
@@ -81,9 +88,33 @@ export default async function handler(req, res) {
       });
     }
 
+    // Create Chimoney client for rate fetching
+    const createChimoneyClient = () => {
+      return {
+        rate: {
+          get: async (options) => {
+            const url = `${chimoneyConfig.baseUrl}${chimoneyConfig.rateEndpoint}`;
+            const response = await fetch(url, {
+              headers: {
+                'X-API-KEY': chimonyApiKey,
+              },
+            });
+
+            if (!response.ok) {
+              return { success: false, error: { message: `HTTP ${response.status}` } };
+            }
+
+            const data = await response.json();
+            return { success: true, data: data.data || data };
+          },
+        },
+      };
+    };
+
     // Re-check current exchange rate
+    const chimoneyClient = createChimoneyClient();
     const currentRate = await transferService.getExchangeRate(
-      transfer.source_amount,
+      chimoneyClient,
       transfer.source_currency,
       transfer.target_currency
     );
@@ -96,35 +127,43 @@ export default async function handler(req, res) {
       });
     }
 
-    // Apply smart rate logic
+    // Implement smart rate logic: compare current rate with original rate
+    console.log('[execute] ===== SMART RATE LOGIC =====');
+    console.log('[execute] Original rate:', transfer.exchange_rate);
+    console.log('[execute] Current rate:', currentRate.rate);
+
     const rateDecision = transferService.handleRateChange(
-      transfer.exchange_rate,
-      currentRate.rate,
-      transfer.source_amount
+      transfer.exchange_rate,    // Original locked rate
+      currentRate.rate,          // Current market rate
+      transfer.source_amount     // Amount to transfer
     );
 
-    // Handle rate change decision
-    if (
-      rateDecision.action === 'ALERT_USER' &&
-      rateDecision.requires_confirmation &&
-      !rate_confirmation
-    ) {
-      // Rate worsened >1%, user confirmation needed
-      return res.status(400).json({
+    console.log('[execute] Rate decision:', rateDecision);
+
+    // If rate worsened >1%, alert user and require confirmation
+    if (rateDecision.action === 'ALERT_USER') {
+      console.log('[execute] Rate worsened >1%, returning alert for user approval');
+      return res.status(200).json({
         success: false,
-        error: 'Exchange rate changed, user confirmation required',
+        error: 'Rate changed significantly',
         error_code: 'RATE_CHANGED',
-        requires_confirmation: true,
         rate_decision: {
-          original_rate: transfer.exchange_rate,
-          current_rate: currentRate.rate,
+          action: 'alert',
+          reason: rateDecision.reason,
+          old_rate: transfer.exchange_rate,
+          new_rate: currentRate.rate,
+          old_amount: rateDecision.old_amount,
+          new_amount: rateDecision.new_amount,
+          loss: rateDecision.loss,
           change_percent: rateDecision.change_percent,
-          loss_amount: rateDecision.loss_amount,
-          action: rateDecision.action,
-          message: rateDecision.message,
+          requires_confirmation: true,
         },
       });
     }
+
+    // If rate improved or worsened <1%, proceed silently
+    // If rate worsened >1%, user already confirmed via rate_confirmation parameter
+    console.log('[execute] Rate acceptable (improved, <1% change, or user confirmed), proceeding with transfer');
 
     // Fetch beneficiary with encrypted fields
     const { data: beneficiary } = await db
@@ -145,21 +184,29 @@ export default async function handler(req, res) {
     let decryptedBeneficiary;
     try {
       if (beneficiary.payment_method === 'upi') {
+        if (!beneficiary.upi_encrypted) {
+          throw new Error('UPI data not found for beneficiary');
+        }
         decryptedBeneficiary = {
           ...beneficiary,
-          recipient_upi: encryptionService.decrypt(
-            beneficiary.recipient_upi_encrypted,
+          upi: encryptionService.decrypt(
+            beneficiary.upi_encrypted,
             encryptionKey
           ),
         };
       } else if (beneficiary.payment_method === 'bank_account') {
+        if (!beneficiary.account_encrypted) {
+          throw new Error('Account data not found for beneficiary');
+        }
         decryptedBeneficiary = {
           ...beneficiary,
-          recipient_bank_account: encryptionService.decrypt(
-            beneficiary.recipient_bank_account_encrypted,
+          account: encryptionService.decrypt(
+            beneficiary.account_encrypted,
             encryptionKey
           ),
         };
+      } else {
+        throw new Error(`Unknown payment method: ${beneficiary.payment_method}`);
       }
     } catch (decryptError) {
       console.error('[execute] Decryption error:', decryptError);
@@ -167,6 +214,7 @@ export default async function handler(req, res) {
         success: false,
         error: 'Failed to decrypt beneficiary data',
         error_code: 'DECRYPTION_ERROR',
+        details: decryptError.message,
       });
     }
 
@@ -304,7 +352,8 @@ export default async function handler(req, res) {
           finalAmounts,
           transfer.id,
           chimonyApiKey,
-          plaidAccountDetails
+          plaidAccountDetails,
+          { baseUrl: chimoneyConfig.baseUrl }
         );
       } else if (decryptedBeneficiary.payment_method === 'bank_account') {
         return await callChimoneyBank(
@@ -312,7 +361,8 @@ export default async function handler(req, res) {
           finalAmounts,
           transfer.id,
           chimonyApiKey,
-          plaidAccountDetails
+          plaidAccountDetails,
+          { baseUrl: chimoneyConfig.baseUrl }
         );
       } else {
         const error = new Error('Invalid payment method');
@@ -507,76 +557,56 @@ export default async function handler(req, res) {
 
 /**
  * Call Chimoney API for UPI payout
+ * ⚠️ NOTE: UPI payment method not yet documented in Chimoney API
+ * This function is a placeholder for future implementation
+ * Currently only bank account transfers are supported
  */
-async function callChimoneyUPI(beneficiary, amounts, transferId, apiKey, sourceAccountDetails) {
-  const url = 'https://api.chimoney.io/v0.2.4/payouts/upi';
-  const payload = {
-    receiver: [
-      {
-        phoneNumber: beneficiary.recipient_phone,
-        upiAddress: beneficiary.recipient_upi,
-        fullName: beneficiary.recipient_name,
-        amount: amounts.target_amount,
-        currency: amounts.target_currency,
-        reference: `VIT-${transferId.substring(0, 8)}`,
-        narration: 'International transfer from Vitta',
-      },
-    ],
-  };
-
-  console.log('[execute] Sending UPI payout request to Chimoney:', {
-    url,
-    transferId,
-    amount: amounts.target_amount,
-    currency: amounts.target_currency,
-    apiKeyPrefix: apiKey.substring(0, 10) + '...',
-  });
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  console.log('[execute] Chimoney UPI response received:', {
-    status: response.status,
-    statusText: response.statusText,
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    console.error('[execute] Chimoney UPI error response:', error);
-    throw new Error(`Chimoney UPI error: ${error.message || response.statusText}`);
-  }
-
-  const data = await response.json();
-  console.log('[execute] Chimoney UPI success response:', {
-    transactionId: data.data?.payouts?.[0]?.id,
-    reference: data.data?.payouts?.[0]?.reference,
-  });
-
-  return {
-    transaction_id: data.data?.payouts?.[0]?.id || data.transaction_id,
-    reference: data.data?.payouts?.[0]?.reference || `VIT-${transferId.substring(0, 8)}`,
-  };
+async function callChimoneyUPI(beneficiary, amounts, transferId, apiKey, sourceAccountDetails, chimoneyConfig) {
+  // UPI support is not yet documented in Chimoney API
+  // Throwing error to prevent unsupported payment method from being processed
+  throw new Error(
+    'UPI payment method is not yet supported. Please use bank account transfer instead. ' +
+    'UPI support will be added once Chimoney publishes the API documentation.'
+  );
 }
 
 /**
  * Call Chimoney API for Bank Account payout
+ * Payload structure: POST /v0.2.4/payouts/bank
+ * Reference: Chimoney API sample payload structure
  */
-async function callChimoneyBank(beneficiary, amounts, transferId, apiKey, sourceAccountDetails) {
-  const url = 'https://api.chimoney.io/v0.2.4/payouts/bank';
+async function callChimoneyBank(beneficiary, amounts, transferId, apiKey, sourceAccountDetails, chimoneyConfig) {
+  const baseUrl = chimoneyConfig?.baseUrl || 'https://api-v2-sandbox.chimoney.io';
+  const url = `${baseUrl}/v0.2.4/payouts/bank`;
+
+  // Validate required decrypted beneficiary fields
+  if (!beneficiary.account) {
+    throw new Error('Beneficiary account number not found (decryption may have failed)');
+  }
+  if (!beneficiary.name) {
+    throw new Error('Beneficiary name not found');
+  }
+  if (!beneficiary.ifsc) {
+    throw new Error('Beneficiary IFSC code not found');
+  }
+
+  // Build payload with CORRECT Chimoney API structure
+  // The banks field is an array where each item is a payout
   const payload = {
-    receiver: [
+    subAccount: process.env.CHIMONEY_SUB_ACCOUNT || '',
+    turnOffNotification: 'false',
+    debitCurrency: 'USD', // Source currency (user's account in USD)
+
+    // Array of bank payouts (Chimoney API expects array)
+    banks: [
       {
-        bankCode: beneficiary.recipient_bank_code,
-        accountNumber: beneficiary.recipient_bank_account,
-        fullName: beneficiary.recipient_name,
-        amount: amounts.target_amount,
-        currency: amounts.target_currency,
+        countryToSend: 'India', // Destination country
+        account_bank: beneficiary.bank_code || '', // Bank code (institution identifier)
+        account_number: beneficiary.account, // Recipient's account number (decrypted)
+        branch_code: beneficiary.ifsc, // IFSC code for Indian banks
+        fullname: beneficiary.name,
+        amount: amounts.target_amount, // Amount in target currency (INR)
+        valueInUSD: amounts.source_amount, // Original USD amount for reference
         reference: `VIT-${transferId.substring(0, 8)}`,
         narration: 'International transfer from Vitta',
       },
@@ -586,10 +616,15 @@ async function callChimoneyBank(beneficiary, amounts, transferId, apiKey, source
   console.log('[execute] Sending Bank payout request to Chimoney:', {
     url,
     transferId,
-    bankCode: beneficiary.recipient_bank_code,
-    amount: amounts.target_amount,
-    currency: amounts.target_currency,
-    sourceAccount: sourceAccountDetails ? `****${sourceAccountDetails.account_number.slice(-4)}` : 'unknown',
+    debitCurrency: 'USD',
+    bank: {
+      countryToSend: 'India',
+      account_number: beneficiary.account ? `****${beneficiary.account.slice(-4)}` : 'unknown',
+      branch_code: beneficiary.ifsc,
+      fullname: beneficiary.name,
+      amount: amounts.target_amount,
+      valueInUSD: amounts.source_amount,
+    },
     apiKeyPrefix: apiKey.substring(0, 10) + '...',
   });
 
@@ -598,6 +633,7 @@ async function callChimoneyBank(beneficiary, amounts, transferId, apiKey, source
     headers: {
       'X-API-KEY': apiKey,
       'Content-Type': 'application/json',
+      'accept': 'application/json',
     },
     body: JSON.stringify(payload),
   });
