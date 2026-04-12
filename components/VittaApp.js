@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet, Sparkles } from 'lucide-react';
+import { Upload, FileText, Send, Bot, User, MessageCircle, X, Minimize2, LogOut, CreditCard, Calculator, LayoutDashboard, Wallet, Sparkles, Plane } from 'lucide-react';
 import CreditCardScreen from './CreditCardScreen';
 import PaymentOptimizer from './PaymentOptimizer';
 import DashboardWithTabs from './DashboardWithTabs';
 import VittaChatInterface from './VittaChatInterface';
 import RecommendationScreen from './RecommendationScreen';
+import VittaTravelPayApp from './VittaTravelPayApp';
 import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
@@ -174,7 +175,7 @@ const VittaApp = () => {
   const [user, setUser] = useState(null);
   
   // Screen navigation state
-  const [currentScreen, setCurrentScreen] = useState('main'); // 'main', 'creditCards', 'paymentOptimizer', 'dashboard', 'recommendations'
+  const [currentScreen, setCurrentScreen] = useState('main'); // 'main', 'creditCards', 'paymentOptimizer', 'dashboard', 'recommendations', 'travelpay'
   
   // Existing states
   const [messages, setMessages] = useState([
@@ -222,6 +223,7 @@ const VittaApp = () => {
     });
 
     setIsAuthenticated(true);
+    setCurrentScreen('travelpay'); // Auto-launch Travel Pay after sign-in
 
     setMessages(prev => [...prev, {
       type: 'bot',
@@ -1421,6 +1423,23 @@ const VittaApp = () => {
     );
   }
 
+  // If Travel Pay screen is active, show it
+  if (currentScreen === 'travelpay') {
+    const userData = {
+      id: user?.id || null,
+      email: user?.email || '',
+      name: user?.name || '',
+      cards: userCards || []
+    };
+
+    return (
+      <VittaTravelPayApp
+        userData={userData}
+        onBackToDashboard={() => setCurrentScreen('main')}
+      />
+    );
+  }
+
   // Main interface after login - Use VittaChatInterface for all users
   if (isAuthenticated && user) {
     // Construct userData for transfer and chat flows
@@ -1493,6 +1512,13 @@ const VittaApp = () => {
               <Calculator className="w-4 h-4" />
               Smart Payments
             </button>
+            <button
+              onClick={() => setCurrentScreen('travelpay')}
+              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-lg hover:from-teal-700 hover:to-cyan-700 transition-all shadow-lg"
+            >
+              <Plane className="w-4 h-4" />
+              Travel Pay
+            </button>
             <div className="text-right">
               <p className="text-sm text-gray-600">Signed in as</p>
               <p className="font-medium text-gray-900">{user.email}</p>
@@ -1539,6 +1565,14 @@ const VittaApp = () => {
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-3">Payment Strategy</h3>
             <p className="text-gray-600">Optimize monthly payments across cards to minimize interest based on APR, balance, and your budget.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setCurrentScreen('travelpay')}>
+            <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center mb-4">
+              <Plane className="w-6 h-6 text-teal-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Travel Pay</h3>
+            <p className="text-gray-600">Pay with USD wallet and instantly convert to INR. Just-in-time conversion for UPI payments in India.</p>
           </div>
 
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setIsOpen(true)}>
