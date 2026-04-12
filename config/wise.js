@@ -46,7 +46,7 @@ const getWiseConfig = () => {
       apiKey: apiToken,
       profileId: profileId,
       environment: 'sandbox',
-      baseURL: 'https://api.sandbox.transferwise.tech',
+      baseURL: 'https://api.wise-sandbox.com',
       isSandbox: true,
       isConfigured: true,
     };
