@@ -57,8 +57,9 @@ class WiseRecipientService {
     });
 
     // Look for matching UPI ID in Wise recipients
+    // UPI recipients have type 'indian' with 'vpa' field in details
     const matchingWiseRecipient = wiseRecipients.find(
-      r => r.type === 'indian_upi' && r.details?.vpa === upiId
+      r => r.type === 'indian' && r.details?.vpa === upiId
     );
 
     if (matchingWiseRecipient) {
@@ -88,16 +89,27 @@ class WiseRecipientService {
 
     try {
       // Prepare recipient payload for UPI
+      // Based on Wise API docs: use type "indian" for all Indian recipients
+      // UPI is differentiated by using 'vpa' field in details instead of ifscCode/accountNumber
       const recipientPayload = {
         currency: 'INR',
-        type: 'indian_upi',
-        profile: this.profileId,
+        type: 'vpa', // Changed from 'indian_upi' - UPI is a variant of indian type
+        profile: parseInt(this.profileId), // Ensure profile is a number, not string
         accountHolderName: payeeName || 'Recipient',
+        ownedByCustomer: false, // Required field for recipient accounts
         details: {
+          address: {
+          city: "Gannavaram",
+          countryCode: "IN",
+          postCode: "521101",
+          firstLine: "123 Marine Drive"
+    },
           legalType: 'PRIVATE', // or 'BUSINESS'
-          vpa: upiId, // UPI ID (e.g., merchant@paytm)
+          vpa: upiId, // UPI Virtual Payment Address (e.g., merchant@paytm)
         },
       };
+
+      console.log('[WiseRecipientService] Recipient payload:', JSON.stringify(recipientPayload, null, 2));
 
       // Call Wise API
       const wiseRecipient = await this.client.post('/v1/accounts', recipientPayload);

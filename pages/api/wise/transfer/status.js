@@ -13,11 +13,17 @@ import WiseTransferService from '../../../../services/wise/wiseTransferService.j
 import WisePaymentService from '../../../../services/wise/wisePaymentService.js';
 import WiseOrchestrator from '../../../../services/wise/wiseOrchestrator.js';
 
+// Determine environment (default to sandbox for testing)
+const environment = process.env.WISE_ENVIRONMENT || 'sandbox';
+const isLive = environment === 'live' || environment === 'production';
+
 const wiseConfig = {
-  apiKey: process.env.WISE_API_KEY,
-  profileId: process.env.WISE_PROFILE_ID,
-  baseURL: process.env.WISE_BASE_URL || 'https://api.sandbox.transferwise.tech',
-  environment: process.env.WISE_ENVIRONMENT || 'sandbox',
+  apiKey: isLive ? process.env.WISE_API_TOKEN_LIVE : process.env.WISE_API_TOKEN_SANDBOX,
+  profileId: isLive ? process.env.WISE_PROFILE_ID_LIVE : process.env.WISE_PROFILE_ID_SANDBOX,
+  baseURL: isLive
+    ? 'https://api.transferwise.com'
+    : (process.env.WISE_BASE_URL || 'https://api.sandbox.transferwise.tech'),
+  environment: environment,
 };
 
 export default async function handler(req, res) {

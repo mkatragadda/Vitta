@@ -17,11 +17,17 @@ import WiseTransferService from '../../../../services/wise/wiseTransferService.j
 import WisePaymentService from '../../../../services/wise/wisePaymentService.js';
 import WiseOrchestrator from '../../../../services/wise/wiseOrchestrator.js';
 
+// Determine environment (default to sandbox for testing)
+const environment = process.env.WISE_ENVIRONMENT || 'sandbox';
+const isLive = environment === 'live' || environment === 'production';
+
 const wiseConfig = {
-  apiKey: process.env.WISE_API_KEY,
-  profileId: process.env.WISE_PROFILE_ID,
-  baseURL: process.env.WISE_BASE_URL || 'https://api.sandbox.transferwise.tech',
-  environment: process.env.WISE_ENVIRONMENT || 'sandbox',
+  apiKey: isLive ? process.env.WISE_API_TOKEN_LIVE : process.env.WISE_API_TOKEN_SANDBOX,
+  profileId: isLive ? process.env.WISE_PROFILE_ID_LIVE : process.env.WISE_PROFILE_ID_SANDBOX,
+  baseURL: isLive
+    ? 'https://api.transferwise.com'
+    : (process.env.WISE_BASE_URL || 'https://api.sandbox.transferwise.tech'),
+  environment: environment,
 };
 
 export default async function handler(req, res) {
@@ -127,6 +133,11 @@ export default async function handler(req, res) {
       supabase,
     });
 
+    // Check if auto-funding is enabled (safety control)
+    const autoFund = process.env.WISE_AUTO_FUND !== 'false';
+
+    console.log('[API /wise/transfer/execute] ⚠️  AUTO-FUND:', autoFund ? 'ENABLED (REAL MONEY)' : 'DISABLED (SAFE MODE)');
+
     // Execute complete transfer flow
     const result = await orchestrator.executeTransfer({
       userId,
@@ -137,6 +148,7 @@ export default async function handler(req, res) {
       upiId,
       payeeName,
       reference: reference || `Vitta Payment ${new Date().toISOString().split('T')[0]}`,
+      autoFund, // Pass the safety control
     });
 
     // Return complete transfer details

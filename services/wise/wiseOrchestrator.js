@@ -16,11 +16,14 @@ class WiseOrchestrator {
 
   /**
    * Execute complete transfer flow (all 4 steps)
+   * ⚠️ WARNING: This IMMEDIATELY funds the transfer with REAL MONEY!
    *
    * Step 1: Create Quote
    * Step 2: Get/Create Recipient
    * Step 3: Create Transfer
-   * Step 4: Fund Transfer
+   * Step 4: Fund Transfer (REAL MONEY MOVED)
+   *
+   * @param {boolean} autoFund - If false, stops before funding (default: controlled by env)
    */
   async executeTransfer({
     userId,
@@ -31,15 +34,14 @@ class WiseOrchestrator {
     upiId,
     payeeName,
     reference,
+    autoFund = process.env.WISE_AUTO_FUND !== 'false', // Default to env variable
   }) {
-    console.log('[WiseOrchestrator] Starting transfer execution:', {
-      userId,
-      upiScanId,
-      sourceAmount,
-      sourceCurrency,
-      targetCurrency,
-      upiId,
-    });
+    console.log('\n========== WISE ORCHESTRATOR - EXECUTE TRANSFER ==========');
+    console.log('[WiseOrchestrator] ⚠️  AUTO-FUND:', autoFund ? 'YES (REAL MONEY)' : 'NO (SAFE MODE)');
+    console.log('[WiseOrchestrator] User ID:', userId);
+    console.log('[WiseOrchestrator] Amount:', sourceAmount, sourceCurrency, '→', targetCurrency);
+    console.log('[WiseOrchestrator] Recipient:', upiId, '-', payeeName);
+    console.log('==========================================================\n');
 
     try {
       // Step 1: Create Quote
@@ -52,7 +54,7 @@ class WiseOrchestrator {
         upiScanId,
       });
 
-      console.log('[WiseOrchestrator] Quote created:', quote.id);
+      console.log('[WiseOrchestrator] ✅ Quote created:', quote.id);
 
       // Step 2: Get/Create Recipient
       console.log('[WiseOrchestrator] Step 2/4: Getting/creating recipient...');
@@ -62,7 +64,7 @@ class WiseOrchestrator {
         payeeName,
       });
 
-      console.log('[WiseOrchestrator] Recipient ready:', recipient.id);
+      console.log('[WiseOrchestrator] ✅ Recipient ready:', recipient.id);
 
       // Step 3: Create Transfer
       console.log('[WiseOrchestrator] Step 3/4: Creating transfer...');
@@ -74,16 +76,27 @@ class WiseOrchestrator {
         reference,
       });
 
-      console.log('[WiseOrchestrator] Transfer created:', transfer.id);
+      console.log('[WiseOrchestrator] ✅ Transfer created:', transfer.id);
 
-      // Step 4: Fund Transfer
-      console.log('[WiseOrchestrator] Step 4/4: Funding transfer...');
-      const payment = await this.paymentService.fundTransfer({
-        transferId: transfer.id,
-        paymentType: 'BALANCE',
-      });
+      // Step 4: Fund Transfer (OPTIONAL - controlled by autoFund parameter)
+      let payment = null;
 
-      console.log('[WiseOrchestrator] Transfer funded successfully!');
+      if (autoFund) {
+        console.log('[WiseOrchestrator] Step 4/4: 💰 FUNDING TRANSFER (REAL MONEY)...');
+        console.log('[WiseOrchestrator] ⚠️  WARNING: About to move REAL MONEY via Wise API!');
+
+        payment = await this.paymentService.fundTransfer({
+          transferId: transfer.id,
+          paymentType: 'BALANCE',
+        });
+
+        console.log('[WiseOrchestrator] ✅ Transfer funded successfully!');
+        console.log('[WiseOrchestrator] Payment ID:', payment.id);
+      } else {
+        console.log('[WiseOrchestrator] Step 4/4: ⏸️  SKIPPED (Safe Mode - No Funding)');
+        console.log('[WiseOrchestrator] Transfer created but NOT funded');
+        console.log('[WiseOrchestrator] Use fundExistingTransfer() to fund later');
+      }
 
       // Update UPI scan status if provided
       if (upiScanId) {
@@ -93,17 +106,76 @@ class WiseOrchestrator {
       // Mark quote as used
       await this.quoteService.markQuoteUsed(quote.id, transfer.id);
 
+      console.log('\n========== TRANSFER EXECUTION COMPLETE ==========');
+      console.log('[WiseOrchestrator] Transfer ID:', transfer.id);
+      console.log('[WiseOrchestrator] Funded:', autoFund ? 'YES' : 'NO');
+      console.log('[WiseOrchestrator] Status:', transfer.status);
+      console.log('=================================================\n');
+
       // Return complete transfer details
       return {
         transfer,
         payment,
         quote,
         recipient,
+        isFunded: autoFund,
       };
 
     } catch (error) {
-      console.error('[WiseOrchestrator] Transfer execution failed:', error);
+      console.log('\n========== TRANSFER EXECUTION FAILED ==========');
+      console.error('[WiseOrchestrator] ❌ Error:', error.message);
+      console.error('[WiseOrchestrator] Stack:', error.stack);
+      console.log('===============================================\n');
       throw new Error(`Transfer failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fund an existing transfer that was created without funding
+   * ⚠️ WARNING: This moves REAL MONEY!
+   *
+   * @param {string} transferId - The transfer ID to fund
+   */
+  async fundExistingTransfer(transferId) {
+    console.log('\n========== WISE ORCHESTRATOR - FUND TRANSFER ==========');
+    console.log('[WiseOrchestrator] ⚠️  WARNING: About to FUND transfer with REAL MONEY!');
+    console.log('[WiseOrchestrator] Transfer ID:', transferId);
+    console.log('=======================================================\n');
+
+    try {
+      // Get transfer details
+      const { data: transfer, error } = await this.db
+        .from('wise_transfers')
+        .select('*')
+        .eq('id', transferId)
+        .single();
+
+      if (error || !transfer) {
+        throw new Error('Transfer not found');
+      }
+
+      if (transfer.is_funded) {
+        throw new Error('Transfer already funded');
+      }
+
+      // Fund the transfer
+      console.log('[WiseOrchestrator] 💰 Funding transfer...');
+      const payment = await this.paymentService.fundTransfer({
+        transferId: transfer.id,
+        paymentType: 'BALANCE',
+      });
+
+      console.log('[WiseOrchestrator] ✅ Transfer funded successfully!');
+      console.log('[WiseOrchestrator] Payment ID:', payment.id);
+      console.log('=======================================================\n');
+
+      return payment;
+
+    } catch (error) {
+      console.log('\n========== FUNDING FAILED ==========');
+      console.error('[WiseOrchestrator] ❌ Error:', error.message);
+      console.log('====================================\n');
+      throw new Error(`Funding failed: ${error.message}`);
     }
   }
 

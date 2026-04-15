@@ -55,7 +55,7 @@ export default async function handler(req, res) {
         currency: parsed.currency,
         merchant_code: parsed.merchantCode || null,
         transaction_note: parsed.note || null,
-        qr_raw_data: qrData,
+        raw_qr_data: qrData,
         status: 'scanned',
       })
       .select()
