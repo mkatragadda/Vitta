@@ -57,9 +57,9 @@ class WiseRecipientService {
     });
 
     // Look for matching UPI ID in Wise recipients
-    // UPI recipients have type 'indian' with 'vpa' field in details
+    // UPI recipients have type 'indian_upi' with 'accountNumber' field in details
     const matchingWiseRecipient = wiseRecipients.find(
-      r => r.type === 'indian' && r.details?.vpa === upiId
+      r => r.type === 'indian_upi' && r.details?.accountNumber === upiId
     );
 
     if (matchingWiseRecipient) {
@@ -89,23 +89,23 @@ class WiseRecipientService {
 
     try {
       // Prepare recipient payload for UPI
-      // Based on Wise API docs: use type "indian" for all Indian recipients
-      // UPI is differentiated by using 'vpa' field in details instead of ifscCode/accountNumber
+      // Based on Wise API: use type "indian_upi" for UPI recipients
+      // UPI ID goes in details.accountNumber (not vpa)
       const recipientPayload = {
         currency: 'INR',
-        type: 'vpa', // Changed from 'indian_upi' - UPI is a variant of indian type
+        type: 'indian_upi', // Type for UPI recipients
         profile: parseInt(this.profileId), // Ensure profile is a number, not string
         accountHolderName: payeeName || 'Recipient',
         ownedByCustomer: false, // Required field for recipient accounts
         details: {
           address: {
-          city: "Gannavaram",
-          countryCode: "IN",
-          postCode: "521101",
-          firstLine: "123 Marine Drive"
-    },
+            city: "Gannavaram",
+            countryCode: "IN",
+            postCode: "521101",
+            firstLine: "123 Marine Drive"
+          },
           legalType: 'PRIVATE', // or 'BUSINESS'
-          vpa: upiId, // UPI Virtual Payment Address (e.g., merchant@paytm)
+          accountNumber: upiId, // UPI Virtual Payment Address (e.g., 7780664712@ybl)
         },
       };
 
@@ -142,7 +142,7 @@ class WiseRecipientService {
       currency: wiseRecipient.currency,
       type: wiseRecipient.type,
       legal_type: wiseRecipient.details?.legalType,
-      upi_id: wiseRecipient.details?.vpa,
+      upi_id: wiseRecipient.details?.accountNumber || wiseRecipient.details?.vpa, // Support both fields
       business_type: wiseRecipient.details?.businessType,
       business_name: wiseRecipient.details?.businessName,
       is_active: true,

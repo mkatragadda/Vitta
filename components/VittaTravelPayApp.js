@@ -16,18 +16,39 @@ import TransactionsScreen from './travelpay/TransactionsScreen';
 export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [usdBalance, setUsdBalance] = useState(24850.00);
-  const [exchangeRate, setExchangeRate] = useState(83.85);
+  const [exchangeRate, setExchangeRate] = useState(null); // Live rate from Wise API
   const [scanData, setScanData] = useState(null);
   const [quote, setQuote] = useState(null);
   const [transferResult, setTransferResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch exchange rate on mount
+  // Fetch live exchange rate on mount
   useEffect(() => {
-    // TODO: Fetch live exchange rate from Wise API
-    // For now using static rate
+    fetchLiveExchangeRate();
   }, []);
+
+  const fetchLiveExchangeRate = async () => {
+    try {
+      // Fetch live rate using lightweight Wise Rates API (no quote creation)
+      const response = await fetch('/api/wise/rate?source=USD&target=INR', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data.rate) {
+        setExchangeRate(result.data.rate);
+        console.log('[TravelPay] Live exchange rate loaded:', result.data.rate, 'at', result.data.timestamp);
+      } else {
+        throw new Error(result.error || 'Failed to fetch rate');
+      }
+    } catch (err) {
+      console.error('[TravelPay] Failed to fetch live rate:', err);
+      // Fallback to approximate rate if API fails
+      setExchangeRate(83.85);
+    }
+  };
 
   const handleScanSuccess = async (qrResult) => {
     setLoading(true);
@@ -52,7 +73,8 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
 
       setScanData(parseResult.data);
 
-      // Create quote
+      // Create quote using TARGET amount (exact INR from QR code)
+      // Wise API will tell us how much USD we need to send
       const quoteResponse = await fetch('/api/wise/quote', {
         method: 'POST',
         headers: {
@@ -60,7 +82,7 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
           'x-user-id': userData.id,
         },
         body: JSON.stringify({
-          sourceAmount: parseResult.data.usdEquivalent,
+          targetAmount: parseResult.data.amount, // Exact INR from QR code
           sourceCurrency: 'USD',
           targetCurrency: 'INR',
           upiScanId: parseResult.data.scanId,
@@ -71,6 +93,10 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
 
       if (quoteResult.success) {
         setQuote(quoteResult.data);
+        // Update exchange rate with live rate from this quote
+        if (quoteResult.data.exchangeRate) {
+          setExchangeRate(quoteResult.data.exchangeRate);
+        }
         setCurrentScreen('payment-confirm');
       } else {
         throw new Error(quoteResult.error || 'Failed to create quote');

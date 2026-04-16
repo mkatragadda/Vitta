@@ -43,21 +43,46 @@ export default async function handler(req, res) {
     }
 
     // Extract and validate request body
-    const { sourceAmount, sourceCurrency, targetCurrency, upiScanId } = req.body;
+    const { sourceAmount, targetAmount, sourceCurrency, targetCurrency, upiScanId } = req.body;
+
+    console.log('[API /wise/quote] Request body:', JSON.stringify(req.body, null, 2));
+    console.log('[API /wise/quote] sourceAmount:', sourceAmount, 'targetAmount:', targetAmount);
 
     // Validate required fields
-    if (!sourceAmount || !sourceCurrency || !targetCurrency) {
+    if (!sourceCurrency || !targetCurrency) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: sourceAmount, sourceCurrency, targetCurrency',
+        error: 'Missing required fields: sourceCurrency, targetCurrency',
+      });
+    }
+
+    // Validate that EITHER sourceAmount OR targetAmount is provided (never both)
+    if (!sourceAmount && !targetAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Must provide either sourceAmount or targetAmount',
+      });
+    }
+
+    if (sourceAmount && targetAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot provide both sourceAmount and targetAmount',
       });
     }
 
     // Validate types
-    if (typeof sourceAmount !== 'number') {
+    if (sourceAmount !== undefined && typeof sourceAmount !== 'number') {
       return res.status(400).json({
         success: false,
         error: 'sourceAmount must be a number',
+      });
+    }
+
+    if (targetAmount !== undefined && typeof targetAmount !== 'number') {
+      return res.status(400).json({
+        success: false,
+        error: 'targetAmount must be a number',
       });
     }
 
@@ -69,18 +94,35 @@ export default async function handler(req, res) {
     }
 
     // Validate amount range
-    if (sourceAmount < 1) {
-      return res.status(400).json({
-        success: false,
-        error: 'Minimum transfer amount is $1',
-      });
+    // Minimum: ~$1 USD or ₹100 INR based on Wise requirements
+    if (sourceAmount !== undefined && sourceAmount !== null) {
+      if (sourceAmount < 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'Minimum transfer amount is $1 USD',
+        });
+      }
+      if (sourceAmount > 10000) {
+        return res.status(400).json({
+          success: false,
+          error: 'Maximum transfer amount is $10,000',
+        });
+      }
     }
 
-    if (sourceAmount > 10000) {
-      return res.status(400).json({
-        success: false,
-        error: 'Maximum transfer amount is $10,000',
-      });
+    if (targetAmount !== undefined && targetAmount !== null) {
+      if (targetCurrency === 'INR' && targetAmount < 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Minimum transfer amount is ₹100 INR',
+        });
+      }
+      if (targetAmount > 1000000) {
+        return res.status(400).json({
+          success: false,
+          error: 'Maximum transfer amount exceeded',
+        });
+      }
     }
 
     // Initialize services
@@ -92,10 +134,11 @@ export default async function handler(req, res) {
     const wiseClient = new WiseClient(wiseConfig);
     const quoteService = new WiseQuoteService(wiseClient, supabase);
 
-    // Create quote
+    // Create quote (pass both, service will use whichever is provided)
     const quote = await quoteService.createQuote({
       userId,
       sourceAmount,
+      targetAmount,
       sourceCurrency,
       targetCurrency,
       upiScanId: upiScanId || null,

@@ -55,14 +55,18 @@ class WiseTransferService {
       const customerTransactionId = randomUUID();
 
       // Prepare transfer payload
+      // Note: UPI transfers may not support reference field
       const transferPayload = {
         targetAccount: recipient.wise_account_id, // Wise recipient ID
         quoteUuid: quote.wise_quote_id, // Wise quote ID
         customerTransactionId, // Our idempotency key
         details: {
-          reference: reference || `Vitta Payment ${new Date().toISOString().split('T')[0]}`,
+          reference: '', // Empty reference for UPI (reference field has very strict limits)
+          transferPurpose: 'Family Purpose', // Required for UPI transfers
         },
       };
+
+      console.log('[WiseTransferService] Transfer payload:', JSON.stringify(transferPayload, null, 2));
 
       // Call Wise API to create transfer
       const wiseTransfer = await this.client.post('/v1/transfers', transferPayload);
@@ -115,6 +119,9 @@ class WiseTransferService {
 
     } catch (error) {
       console.error('[WiseTransferService] Failed to create transfer:', error);
+      if (error.details) {
+        console.error('[WiseTransferService] Error details:', JSON.stringify(error.details, null, 2));
+      }
       throw new Error(`Transfer creation failed: ${error.message}`);
     }
   }

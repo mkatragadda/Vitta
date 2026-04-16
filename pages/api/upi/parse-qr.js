@@ -41,9 +41,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Calculate USD equivalent (rough estimate: INR / 83)
-    const usdEquivalent = Math.ceil(parsed.amount / 83);
-
     // Save scan to database
     const { data: scan, error: scanError } = await supabase
       .from('upi_scans')
@@ -69,17 +66,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // Return parsed QR data
+    // Note: NO USD calculation here - let Wise API provide live rates via quote
     res.status(200).json({
       success: true,
       data: {
         scanId: scan.id,
         upiId: parsed.upiId,
         payeeName: parsed.payeeName,
-        amount: parsed.amount,
-        currency: parsed.currency,
+        amount: parsed.amount, // INR amount from QR code
+        currency: parsed.currency, // 'INR'
         note: parsed.note,
         merchantCode: parsed.merchantCode,
-        usdEquivalent,
       },
     });
 

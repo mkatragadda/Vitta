@@ -57,8 +57,14 @@ export default function HomeScreen({
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Live Rate</span>
               <div className="flex items-center gap-2">
-                <span className="text-white font-semibold">₹{exchangeRate.toFixed(2)} per USD</span>
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                {exchangeRate ? (
+                  <>
+                    <span className="text-white font-semibold">₹{exchangeRate.toFixed(2)} per USD</span>
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  </>
+                ) : (
+                  <span className="text-slate-400 text-xs">Loading rate...</span>
+                )}
               </div>
             </div>
           </div>

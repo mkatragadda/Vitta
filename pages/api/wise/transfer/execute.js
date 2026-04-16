@@ -90,10 +90,11 @@ export default async function handler(req, res) {
     }
 
     // Validate amount range
+    // Minimum: $1 USD based on Wise requirements
     if (sourceAmount < 1) {
       return res.status(400).json({
         success: false,
-        error: 'Minimum transfer amount is $1',
+        error: 'Minimum transfer amount is $1 USD',
       });
     }
 
@@ -172,13 +173,13 @@ export default async function handler(req, res) {
         fundedAt: result.transfer.funded_at,
         recipient: {
           upiId: result.recipient.upi_id,
-          payeeName: result.recipient.payee_name,
+          payeeName: result.recipient.account_holder_name,
         },
-        payment: {
+        payment: result.payment ? {
           type: result.payment.payment_type,
           status: result.payment.wise_payment_status,
           completedAt: result.payment.payment_completed_at,
-        },
+        } : null, // Safe mode: payment is null
       },
     });
 

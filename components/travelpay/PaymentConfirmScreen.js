@@ -85,6 +85,10 @@ export default function PaymentConfirmScreen({
         {/* Transaction Details */}
         <div className="glass rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between text-sm">
+            <span className="text-slate-400">Amount</span>
+            <span className="text-white font-semibold">${(quote.sourceAmount - quote.feeTotal).toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
             <span className="text-slate-400">Exchange Rate</span>
             <span className="text-white font-semibold">₹{quote.exchangeRate.toFixed(2)} per USD</span>
           </div>
