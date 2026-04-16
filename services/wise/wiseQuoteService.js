@@ -52,7 +52,8 @@ class WiseQuoteService {
     const quotePayload = {
       sourceCurrency,
       targetCurrency,
-      payOut: 'BALANCE', // Request BALANCE payment option
+      payOut: 'BALANCE', // How recipient receives money
+      preferredPayIn: 'BALANCE', // How we pay Wise (from our balance)
     };
 
     // Add EITHER sourceAmount OR targetAmount

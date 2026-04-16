@@ -123,7 +123,7 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
           'x-user-id': userData.id,
         },
         body: JSON.stringify({
-          sourceAmount: quote.sourceAmount,
+          quoteId: quote.quoteId, // Reuse existing quote instead of creating new one
           sourceCurrency: 'USD',
           targetCurrency: 'INR',
           upiId: scanData.upiId,

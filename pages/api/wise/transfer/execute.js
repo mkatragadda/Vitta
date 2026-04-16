@@ -53,7 +53,9 @@ export default async function handler(req, res) {
     // Extract and validate request body
     const {
       upiScanId,
+      quoteId, // NEW: Optional existing quote ID
       sourceAmount,
+      targetAmount,
       sourceCurrency,
       targetCurrency,
       upiId,
@@ -62,19 +64,37 @@ export default async function handler(req, res) {
     } = req.body;
 
     // Validate required fields
-    if (!sourceAmount || !sourceCurrency || !targetCurrency || !upiId || !payeeName) {
+    if (!sourceCurrency || !targetCurrency || !upiId || !payeeName) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: sourceAmount, sourceCurrency, targetCurrency, upiId, payeeName',
+        error: 'Missing required fields: sourceCurrency, targetCurrency, upiId, payeeName',
       });
     }
 
-    // Validate types
-    if (typeof sourceAmount !== 'number') {
-      return res.status(400).json({
-        success: false,
-        error: 'sourceAmount must be a number',
-      });
+    // If quoteId is provided, skip amount validation (quote already validated)
+    if (!quoteId) {
+      // Validate that either sourceAmount OR targetAmount is provided
+      if (!sourceAmount && !targetAmount) {
+        return res.status(400).json({
+          success: false,
+          error: 'Must provide either sourceAmount, targetAmount, or quoteId',
+        });
+      }
+
+      // Validate types
+      if (sourceAmount !== undefined && typeof sourceAmount !== 'number') {
+        return res.status(400).json({
+          success: false,
+          error: 'sourceAmount must be a number',
+        });
+      }
+
+      if (targetAmount !== undefined && typeof targetAmount !== 'number') {
+        return res.status(400).json({
+          success: false,
+          error: 'targetAmount must be a number',
+        });
+      }
     }
 
     if (
@@ -89,20 +109,37 @@ export default async function handler(req, res) {
       });
     }
 
-    // Validate amount range
-    // Minimum: $1 USD based on Wise requirements
-    if (sourceAmount < 1) {
-      return res.status(400).json({
-        success: false,
-        error: 'Minimum transfer amount is $1 USD',
-      });
-    }
+    // Validate amount range (skip if quoteId provided)
+    if (!quoteId) {
+      if (sourceAmount !== undefined) {
+        if (sourceAmount < 1) {
+          return res.status(400).json({
+            success: false,
+            error: 'Minimum transfer amount is $1 USD',
+          });
+        }
+        if (sourceAmount > 10000) {
+          return res.status(400).json({
+            success: false,
+            error: 'Maximum transfer amount is $10,000',
+          });
+        }
+      }
 
-    if (sourceAmount > 10000) {
-      return res.status(400).json({
-        success: false,
-        error: 'Maximum transfer amount is $10,000',
-      });
+      if (targetAmount !== undefined) {
+        if (targetCurrency === 'INR' && targetAmount < 100) {
+          return res.status(400).json({
+            success: false,
+            error: 'Minimum transfer amount is ₹100 INR',
+          });
+        }
+        if (targetAmount > 1000000) {
+          return res.status(400).json({
+            success: false,
+            error: 'Maximum transfer amount exceeded',
+          });
+        }
+      }
     }
 
     // Validate UPI ID format
@@ -143,7 +180,9 @@ export default async function handler(req, res) {
     const result = await orchestrator.executeTransfer({
       userId,
       upiScanId: upiScanId || null,
+      quoteId: quoteId || null, // Pass existing quote ID if provided
       sourceAmount,
+      targetAmount,
       sourceCurrency,
       targetCurrency,
       upiId,

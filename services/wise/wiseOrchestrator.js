@@ -28,7 +28,9 @@ class WiseOrchestrator {
   async executeTransfer({
     userId,
     upiScanId,
+    quoteId, // NEW: Optional existing quote ID to reuse
     sourceAmount,
+    targetAmount,
     sourceCurrency,
     targetCurrency,
     upiId,
@@ -39,22 +41,33 @@ class WiseOrchestrator {
     console.log('\n========== WISE ORCHESTRATOR - EXECUTE TRANSFER ==========');
     console.log('[WiseOrchestrator] ⚠️  AUTO-FUND:', autoFund ? 'YES (REAL MONEY)' : 'NO (SAFE MODE)');
     console.log('[WiseOrchestrator] User ID:', userId);
-    console.log('[WiseOrchestrator] Amount:', sourceAmount, sourceCurrency, '→', targetCurrency);
+    console.log('[WiseOrchestrator] Quote ID:', quoteId || 'Will create new');
+    console.log('[WiseOrchestrator] Amount:', sourceAmount || targetAmount, sourceCurrency, '→', targetCurrency);
     console.log('[WiseOrchestrator] Recipient:', upiId, '-', payeeName);
     console.log('==========================================================\n');
 
     try {
-      // Step 1: Create Quote
-      console.log('[WiseOrchestrator] Step 1/4: Creating quote...');
-      const quote = await this.quoteService.createQuote({
-        userId,
-        sourceAmount,
-        sourceCurrency,
-        targetCurrency,
-        upiScanId,
-      });
+      // Step 1: Get or Create Quote
+      let quote;
 
-      console.log('[WiseOrchestrator] ✅ Quote created:', quote.id);
+      if (quoteId) {
+        // Reuse existing quote from UI
+        console.log('[WiseOrchestrator] Step 1/4: Fetching existing quote...');
+        quote = await this.quoteService.getQuote(quoteId);
+        console.log('[WiseOrchestrator] ✅ Using existing quote:', quote.id);
+      } else {
+        // Create new quote
+        console.log('[WiseOrchestrator] Step 1/4: Creating new quote...');
+        quote = await this.quoteService.createQuote({
+          userId,
+          sourceAmount,
+          targetAmount,
+          sourceCurrency,
+          targetCurrency,
+          upiScanId,
+        });
+        console.log('[WiseOrchestrator] ✅ Quote created:', quote.id);
+      }
 
       // Step 2: Get/Create Recipient
       console.log('[WiseOrchestrator] Step 2/4: Getting/creating recipient...');
