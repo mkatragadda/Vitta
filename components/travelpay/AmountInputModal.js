@@ -136,7 +136,7 @@ export default function AmountInputModal({
             {/* Info Note */}
             <div className="mb-6 p-3 glass rounded-xl border border-slate-700">
               <p className="text-slate-400 text-xs leading-relaxed">
-                💡 The QR code you scanned doesn't include an amount. Please enter the amount you want to pay.
+                💡 The QR code you scanned does not include an amount. Please enter the amount you want to pay.
               </p>
             </div>
 
