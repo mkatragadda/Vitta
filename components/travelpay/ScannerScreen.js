@@ -62,6 +62,7 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
   };
 
   const sampleUPI = 'upi://pay?pa=merchant@paytm&pn=Sample Merchant&am=450&cu=INR';
+  const sampleUPINoAmount = 'upi://pay?pa=testmerchant@paytm&pn=Test Shop&cu=INR';
 
   return (
     <div className="h-screen flex flex-col bg-black relative">
@@ -194,14 +195,23 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
                 </label>
               </div>
 
-              {/* Sample UPI Button */}
-              <button
-                type="button"
-                onClick={() => setManualInput(sampleUPI)}
-                className="w-full py-3 rounded-xl bg-white/10 backdrop-blur border border-teal-500/30 text-teal-300 text-sm font-semibold hover:bg-white/20 transition-all"
-              >
-                Use Sample UPI (₹450)
-              </button>
+              {/* Sample UPI Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setManualInput(sampleUPI)}
+                  className="py-3 rounded-xl bg-white/10 backdrop-blur border border-teal-500/30 text-teal-300 text-sm font-semibold hover:bg-white/20 transition-all"
+                >
+                  Sample (₹450)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManualInput(sampleUPINoAmount)}
+                  className="py-3 rounded-xl bg-white/10 backdrop-blur border border-amber-500/30 text-amber-300 text-sm font-semibold hover:bg-white/20 transition-all"
+                >
+                  Sample (No Amount)
+                </button>
+              </div>
 
               {/* Submit Button */}
               <button

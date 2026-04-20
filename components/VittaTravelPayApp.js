@@ -6,6 +6,7 @@ import PaymentConfirmScreen from './travelpay/PaymentConfirmScreen';
 import PaymentSuccessScreen from './travelpay/PaymentSuccessScreen';
 import AddFundsScreen from './travelpay/AddFundsScreen';
 import TransactionsScreen from './travelpay/TransactionsScreen';
+import AmountInputModal from './travelpay/AmountInputModal';
 
 /**
  * Vitta Travel Pay - Standalone App
@@ -22,6 +23,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   const [transferResult, setTransferResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showAmountModal, setShowAmountModal] = useState(false);
+  const [pendingScanData, setPendingScanData] = useState(null);
 
   // Fetch live exchange rate and balance on mount
   useEffect(() => {
@@ -98,7 +101,30 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
         throw new Error(parseResult.error || 'Failed to parse QR code');
       }
 
-      setScanData(parseResult.data);
+      // Check if amount is missing
+      if (!parseResult.data.amount || parseResult.data.amount === 0) {
+        console.log('[TravelPay] Amount missing from QR code, prompting user...');
+        setPendingScanData(parseResult.data);
+        setShowAmountModal(true);
+        setLoading(false);
+        return;
+      }
+
+      // Amount is present, proceed with quote creation
+      await createQuoteForScan(parseResult.data);
+
+    } catch (err) {
+      console.error('[TravelPay] Scan error:', err);
+      setError(err.message);
+      setCurrentScreen('home');
+      setLoading(false);
+    }
+  };
+
+  const createQuoteForScan = async (scanData) => {
+    setLoading(true);
+    try {
+      setScanData(scanData);
 
       // Create quote using TARGET amount (exact INR from QR code)
       // Wise API will tell us how much USD we need to send
@@ -109,10 +135,10 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
           'x-user-id': userData.id,
         },
         body: JSON.stringify({
-          targetAmount: parseResult.data.amount, // Exact INR from QR code
+          targetAmount: scanData.amount, // Exact INR from QR code (or user-entered)
           sourceCurrency: 'USD',
           targetCurrency: 'INR',
-          upiScanId: parseResult.data.scanId,
+          upiScanId: scanData.scanId,
         }),
       });
 
@@ -130,12 +156,29 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
       }
 
     } catch (err) {
-      console.error('[TravelPay] Scan error:', err);
+      console.error('[TravelPay] Quote error:', err);
       setError(err.message);
       setCurrentScreen('home');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAmountSubmit = (enteredAmount) => {
+    console.log('[TravelPay] User entered amount:', enteredAmount, 'INR');
+
+    // Update pending scan data with the entered amount
+    const updatedScanData = {
+      ...pendingScanData,
+      amount: enteredAmount,
+    };
+
+    // Close modal
+    setShowAmountModal(false);
+    setPendingScanData(null);
+
+    // Proceed with quote creation
+    createQuoteForScan(updatedScanData);
   };
 
   const handleConfirmPayment = async () => {
@@ -279,6 +322,19 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
           />
         )}
       </div>
+
+      {/* Amount Input Modal */}
+      <AmountInputModal
+        isOpen={showAmountModal}
+        onClose={() => {
+          setShowAmountModal(false);
+          setPendingScanData(null);
+          setCurrentScreen('home');
+        }}
+        onSubmit={handleAmountSubmit}
+        payeeName={pendingScanData?.payeeName}
+        upiId={pendingScanData?.upiId}
+      />
     </div>
   );
 }
