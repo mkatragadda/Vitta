@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { detectPaymentType } from '../../utils/upiTypeDetector.js';
 
 class WiseTransferService {
   constructor(wiseClient, supabase) {
@@ -63,6 +64,34 @@ class WiseTransferService {
       // Generate idempotency key (prevents duplicate transfers on retry)
       const customerTransactionId = randomUUID();
 
+      // Detect payment type (P2P vs P2M) for optimal transfer purpose
+      let transferPurpose = 'Sending money to family or friends'; // Default to P2P
+
+      if (upiScanId) {
+        // Fetch UPI scan data to get merchant code
+        const { data: upiScan } = await this.db
+          .from('upi_scans')
+          .select('merchant_code, amount, raw_qr_data')
+          .eq('id', upiScanId)
+          .single();
+
+        if (upiScan) {
+          // Detect if this is a merchant or personal payment
+          const detection = detectPaymentType({
+            merchantCode: upiScan.merchant_code,
+            amount: upiScan.amount,
+          });
+
+          transferPurpose = detection.transferPurpose;
+
+          console.log('[WiseTransferService] Payment type detected:', detection.paymentType);
+          console.log('[WiseTransferService] Transfer purpose:', transferPurpose);
+          if (detection.merchantCategory) {
+            console.log('[WiseTransferService] Merchant category:', detection.merchantCategory);
+          }
+        }
+      }
+
       // Prepare transfer payload
       // CRITICAL: We use the quoteUuid which was created with BALANCE payment option.
       // This ensures Wise uses the BALANCE payment method (low fees) from the quote.
@@ -77,7 +106,7 @@ class WiseTransferService {
           // We set this to 'balance' to indicate funds come from Wise balance.
           sourceOfFunds: 'balance',
           reference: '', // Empty reference for UPI (reference field has very strict limits)
-          transferPurpose: 'Sending money to family', // Required for UPI transfers
+          transferPurpose, // Dynamically determined based on P2P vs P2M detection
         },
       };
 
