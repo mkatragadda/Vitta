@@ -15,6 +15,11 @@ const nextConfig = {
 
   // Exclude admin pages from production builds
   webpack: (config, { isServer, dev }) => {
+    // Dev-only: use in-memory webpack cache to avoid PackFileCacheStrategy ENOENT
+    // rename errors under .next/cache (common when another process touches the cache).
+    if (dev) {
+      config.cache = { type: 'memory' };
+    }
     if (!dev && !isServer) {
       // In production client builds, exclude admin pages
       config.plugins.push(

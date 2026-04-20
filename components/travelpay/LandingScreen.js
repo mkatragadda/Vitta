@@ -19,9 +19,9 @@ export default function LandingScreen({ onGoogleSignIn }) {
         {/* Main Hero */}
         <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-teal border border-teal-500/30 text-teal-300 text-sm font-semibold mb-6">
-              <Globe className="w-4 h-4" />
-              For NRIs & India Travelers
+            <div className="inline-flex flex-wrap items-center justify-center gap-2 px-4 py-2 rounded-full glass-teal border border-teal-500/30 text-teal-300 text-sm font-semibold mb-6 max-w-full text-center">
+              <Globe className="w-4 h-4 shrink-0" />
+              Travel wallet for NRIs &amp; India Tourists
             </div>
 
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-4 leading-tight">
@@ -32,8 +32,8 @@ export default function LandingScreen({ onGoogleSignIn }) {
             </h2>
 
             <p className="text-lg sm:text-xl text-slate-300 mb-8 leading-relaxed">
-              Scan any UPI QR code and pay instantly in INR using your USD balance.
-              <span className="block mt-2 text-teal-300 font-semibold">No currency exchange hassle.</span>
+              Built for US NRIs and India travelers. Scan any UPI QR code and pay instantly in INR using your US
+              money — no cash, no card declines, no manual transfers. Pay like a local at shops and restaurants.
             </p>
 
             {/* CTA Button */}
@@ -60,7 +60,7 @@ export default function LandingScreen({ onGoogleSignIn }) {
               </div>
               <h3 className="text-white font-bold text-lg mb-2">Scan & Pay Instantly</h3>
               <p className="text-slate-400 text-sm">
-                Scan any UPI QR code at shops, restaurants, or services across India
+                Scan any UPI QR at shops and restaurants and pay in one tap — no separate remittance step.
               </p>
             </div>
 
