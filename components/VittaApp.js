@@ -6,6 +6,7 @@ import DashboardWithTabs from './DashboardWithTabs';
 import VittaChatInterface from './VittaChatInterface';
 import RecommendationScreen from './RecommendationScreen';
 import VittaTravelPayApp from './VittaTravelPayApp';
+import LandingScreen from './travelpay/LandingScreen';
 import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
@@ -1352,13 +1353,11 @@ const VittaApp = () => {
     "Navigate me to add a card"
   ];
 
-  // If not authenticated, show login screen
+  // If not authenticated, show landing screen
   if (!isAuthenticated) {
     return (
-      <LoginForm
-        gsiStatus={gsiStatus}
-        gsiButtonRef={gsiButtonRef}
-        showGooglePrompt={showGooglePrompt}
+      <LandingScreen
+        onGoogleSignIn={showGooglePrompt}
       />
     );
   }
@@ -1435,7 +1434,7 @@ const VittaApp = () => {
     return (
       <VittaTravelPayApp
         userData={userData}
-        onBackToDashboard={() => setCurrentScreen('main')}
+        onLogout={handleLogout}
       />
     );
   }

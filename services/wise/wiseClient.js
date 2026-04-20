@@ -44,6 +44,19 @@ class WiseClient {
   }
 
   /**
+   * PATCH request with retry logic
+   */
+  async patch(path, data = {}) {
+    const url = `${this.baseURL}${path}`;
+
+    return this._fetchWithRetry(url, {
+      method: 'PATCH',
+      headers: this._getHeaders(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
    * Private: Build headers
    */
   _getHeaders() {

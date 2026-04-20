@@ -52,7 +52,7 @@ class WiseQuoteService {
     const quotePayload = {
       sourceCurrency,
       targetCurrency,
-      payOut: 'BALANCE', // How recipient receives money
+      payOut: 'BANK_TRANSFER', // How recipient receives money (UPI is a bank transfer type)
       preferredPayIn: 'BALANCE', // How we pay Wise (from our balance)
     };
 
@@ -80,40 +80,64 @@ class WiseQuoteService {
       console.log('[WiseQuoteService] Wise Response Keys:', Object.keys(wiseQuote));
 
       // Wise API v3 returns paymentOptions array
-      // Select BALANCE payment option (paying from Wise balance)
+      // CRITICAL: We MUST select the BALANCE payment option to ensure low fees
       const availableOptions = wiseQuote.paymentOptions?.filter(opt => !opt.disabled) || [];
 
-      // Find BALANCE option
+      console.log('[WiseQuoteService] Available Payment Options:', availableOptions.length);
+      availableOptions.forEach(opt => {
+        console.log(`  - ${opt.payIn}: fee ${opt.fee?.total || 0} ${sourceCurrency}`);
+      });
+
+      // Find BALANCE option (REQUIRED for low-fee transfers)
       const balanceOption = availableOptions.find(opt => opt.payIn === 'BALANCE');
 
-      // Fallback to cheapest if BALANCE not available
-      const cheapestOption = availableOptions.reduce((best, current) => {
-        const currentFee = current.fee?.total || 0;
-        const bestFee = best.fee?.total || 0;
-        return currentFee < bestFee ? current : best;
-      }, availableOptions[0]);
+      // CRITICAL: Enforce BALANCE option - do NOT fall back to other payment methods
+      if (!balanceOption) {
+        console.error('[WiseQuoteService] ❌ CRITICAL ERROR: BALANCE payment option not available!');
+        console.error('[WiseQuoteService] Available options:', availableOptions.map(o => o.payIn).join(', '));
+        console.error('[WiseQuoteService] This will result in high fees. Aborting quote creation.');
+        throw new Error('BALANCE payment option not available. Cannot proceed with low-fee transfer.');
+      }
 
-      const paymentOption = balanceOption || cheapestOption || wiseQuote;
+      const paymentOption = balanceOption;
 
-      console.log('[WiseQuoteService] Available Options:', availableOptions.length);
-      console.log('[WiseQuoteService] Selected Payment Method:', paymentOption.payIn);
+      console.log('[WiseQuoteService] ✅ BALANCE payment option selected');
+      console.log('[WiseQuoteService] Payment Method:', paymentOption.payIn);
+      console.log('[WiseQuoteService] This ensures the quote will use BALANCE funding (low fees)');
 
-      // Extract both amounts from Wise response (API provides both regardless of mode)
-      const finalSourceAmount = paymentOption.sourceAmount || wiseQuote.sourceAmount;
-      const finalTargetAmount = paymentOption.targetAmount || wiseQuote.targetAmount;
-      const fee = paymentOption.fee || wiseQuote.fee || {};
+      // CRITICAL: Validate that we have the required data from the selected option
+      // DO NOT fall back to wiseQuote top-level data - it may have different fees!
+      if (!paymentOption.sourceAmount || !paymentOption.targetAmount || !paymentOption.fee) {
+        console.error('[WiseQuoteService] ⚠️  WARNING: Selected payment option missing required data!');
+        console.error('[WiseQuoteService] paymentOption:', JSON.stringify(paymentOption, null, 2));
+        throw new Error('Selected payment option is missing required fields (sourceAmount, targetAmount, or fee)');
+      }
+
+      // Extract amounts and fees ONLY from the selected payment option
+      // NEVER fall back to wiseQuote top-level data!
+      const finalSourceAmount = paymentOption.sourceAmount;
+      const finalTargetAmount = paymentOption.targetAmount;
+      const fee = paymentOption.fee;
 
       console.log('\n========== SELECTED PAYMENT OPTION DETAILS ==========');
       console.log('[WiseQuoteService] Selected Option Object:', JSON.stringify(paymentOption, null, 2));
       console.log('=====================================================');
 
       console.log('\n========== EXTRACTED VALUES ==========');
+      console.log('[WiseQuoteService] ✅ Using BALANCE option data (NOT top-level wiseQuote data!)');
       console.log('[WiseQuoteService] finalSourceAmount (paymentOption.sourceAmount):', finalSourceAmount, sourceCurrency);
       console.log('[WiseQuoteService] finalTargetAmount (paymentOption.targetAmount):', finalTargetAmount, targetCurrency);
-      console.log('[WiseQuoteService] fee.total:', fee.total || 0, sourceCurrency);
-      console.log('[WiseQuoteService] fee.transferwise:', fee.transferwise || 0, sourceCurrency);
-      console.log('[WiseQuoteService] fee.payIn:', fee.payIn || 0, sourceCurrency);
+      console.log('[WiseQuoteService] fee.total:', fee.total, sourceCurrency);
+      console.log('[WiseQuoteService] fee.transferwise:', fee.transferwise, sourceCurrency);
+      console.log('[WiseQuoteService] fee.payIn:', fee.payIn, sourceCurrency);
+      console.log('[WiseQuoteService] fee.partner:', fee.partner, sourceCurrency);
       console.log('[WiseQuoteService] Exchange Rate (wiseQuote.rate):', wiseQuote.rate);
+
+      // Verify the math: sourceAmount should equal (targetAmount / rate) + fee.total
+      const expectedSourceFromTarget = (finalTargetAmount / wiseQuote.rate) + fee.total;
+      const matchesMath = Math.abs(finalSourceAmount - expectedSourceFromTarget) < 0.01;
+      console.log('[WiseQuoteService] Math verification:', matchesMath ? '✅ PASS' : '❌ FAIL');
+      console.log('[WiseQuoteService] Expected source:', expectedSourceFromTarget.toFixed(2), 'Actual:', finalSourceAmount.toFixed(2));
       console.log('======================================');
 
       console.log('\n========== CALCULATION ==========');
@@ -125,16 +149,16 @@ class WiseQuoteService {
 
       // Build quote object for database
       const quote = {
-        wise_quote_id: wiseQuote.id,
+        wise_quote_id: wiseQuote.id, // This is the UUID string, not numeric ID
         user_id: userId,
         upi_scan_id: upiScanId || null,
         source_currency: sourceCurrency,
         target_currency: targetCurrency,
-        source_amount: finalSourceAmount, // Amount from Wise API (works in both modes)
-        target_amount: finalTargetAmount, // Amount from Wise API (works in both modes)
+        source_amount: finalSourceAmount, // Amount from BALANCE payment option
+        target_amount: finalTargetAmount, // Amount from BALANCE payment option
         exchange_rate: wiseQuote.rate,
 
-        // Fee breakdown (matches Phase 2 schema)
+        // Fee breakdown from BALANCE payment option (matches Phase 2 schema)
         fee_total: fee.total || 0,
         fee_transferwise: fee.transferwise || 0,
         fee_partner: fee.partner || 0,
@@ -143,7 +167,7 @@ class WiseQuoteService {
 
         // Quote validity
         rate_type: wiseQuote.rateType || 'FIXED',
-        payment_type: paymentOption.paymentType || 'BALANCE',
+        payment_type: 'BALANCE', // CRITICAL: Store that this quote uses BALANCE payment
         expires_at: wiseQuote.expirationTime,
         rate_expiry_time: wiseQuote.rateExpiryTime || null,
 
@@ -177,6 +201,105 @@ class WiseQuoteService {
       console.error('[WiseQuoteService] Stack:', error.stack);
       console.log('================================================\n');
       throw new Error(`Quote creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update quote with recipient (targetAccount)
+   *
+   * Wise API: PATCH /v3/profiles/{profileId}/quotes/{quoteId}
+   *
+   * IMPORTANT: Updates quote with recipient ID which may trigger fee recalculation.
+   * Wise docs show this is the primary use of PATCH for quotes.
+   */
+  async updateQuoteWithRecipient(quoteId, recipientId) {
+    console.log('\n========== WISE QUOTE SERVICE - UPDATE WITH RECIPIENT ==========');
+    console.log('[WiseQuoteService] Updating quote with recipient');
+    console.log('[WiseQuoteService] Quote ID (DB):', quoteId);
+    console.log('[WiseQuoteService] Recipient ID (DB):', recipientId);
+
+    try {
+      // Get quote from database
+      const { data: quote, error: quoteError } = await this.db
+        .from('wise_quotes')
+        .select('*')
+        .eq('id', quoteId)
+        .single();
+
+      if (quoteError || !quote) {
+        throw new Error('Quote not found');
+      }
+
+      // Get recipient from database
+      const { data: recipient, error: recipientError } = await this.db
+        .from('wise_recipients')
+        .select('*')
+        .eq('id', recipientId)
+        .single();
+
+      if (recipientError || !recipient) {
+        throw new Error('Recipient not found');
+      }
+
+      console.log('[WiseQuoteService] Wise Quote UUID:', quote.wise_quote_id);
+      console.log('[WiseQuoteService] Wise Account ID (targetAccount):', recipient.wise_account_id);
+
+      // Call Wise API to update quote with recipient
+      const endpoint = `/v3/profiles/${this.profileId}/quotes/${quote.wise_quote_id}`;
+      const payload = {
+        targetAccount: recipient.wise_account_id  // Documented parameter
+      };
+
+      console.log('[WiseQuoteService] Calling PATCH:', endpoint);
+      console.log('[WiseQuoteService] Payload:', JSON.stringify(payload, null, 2));
+
+      const updatedQuote = await this.client.patch(endpoint, payload);
+
+      console.log('[WiseQuoteService] ✅ Quote updated with recipient successfully');
+      console.log('[WiseQuoteService] Updated Quote ID:', updatedQuote.id);
+      console.log('[WiseQuoteService] Target Account:', recipient.wise_account_id);
+
+      // Check the fee in the updated quote response
+      if (updatedQuote.paymentOptions) {
+        const balanceOption = updatedQuote.paymentOptions.find(opt => opt.payIn === 'BALANCE');
+        if (balanceOption) {
+          console.log('[WiseQuoteService] 💰 BALANCE option fee after PATCH:', balanceOption.fee?.total || 'N/A');
+          if (balanceOption.fee?.total > 0.02) {
+            console.error('[WiseQuoteService] ❌ WARNING: Fee high after adding recipient!');
+            console.error('[WiseQuoteService] Fee:', balanceOption.fee?.total);
+          } else {
+            console.log('[WiseQuoteService] ✅ BALANCE fee still low ($0.01-$0.02)');
+          }
+        } else {
+          console.warn('[WiseQuoteService] ⚠️  BALANCE option not found in updated quote!');
+        }
+      }
+
+      console.log('[WiseQuoteService] Full Updated Response:', JSON.stringify(updatedQuote, null, 2));
+      console.log('================================================================\n');
+
+      // Update database with new quote data
+      await this.db
+        .from('wise_quotes')
+        .update({
+          wise_api_response: updatedQuote,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', quoteId);
+
+      return updatedQuote;
+
+    } catch (error) {
+      console.log('\n========== WISE QUOTE SERVICE - UPDATE ERROR ==========');
+      console.error('[WiseQuoteService] ❌ Failed to update quote');
+      console.error('[WiseQuoteService] Error:', error.message);
+      if (error.response) {
+        console.error('[WiseQuoteService] Response Status:', error.response.status);
+        console.error('[WiseQuoteService] Response Data:', JSON.stringify(error.response.data, null, 2));
+      }
+      console.error('[WiseQuoteService] Stack:', error.stack);
+      console.log('=======================================================\n');
+      throw new Error(`Quote update failed: ${error.message}`);
     }
   }
 

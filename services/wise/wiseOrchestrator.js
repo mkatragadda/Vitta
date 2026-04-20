@@ -15,11 +15,12 @@ class WiseOrchestrator {
   }
 
   /**
-   * Execute complete transfer flow (all 4 steps)
+   * Execute complete transfer flow (all 5 steps)
    * ⚠️ WARNING: This IMMEDIATELY funds the transfer with REAL MONEY!
    *
    * Step 1: Create Quote
    * Step 2: Get/Create Recipient
+   * Step 2.5: Update Quote with Recipient (locks in BALANCE fee)
    * Step 3: Create Transfer
    * Step 4: Fund Transfer (REAL MONEY MOVED)
    *
@@ -79,6 +80,11 @@ class WiseOrchestrator {
 
       console.log('[WiseOrchestrator] ✅ Recipient ready:', recipient.id);
 
+      // Step 2.5: Update quote with recipient (CRITICAL for fee lock-in)
+      console.log('[WiseOrchestrator] Step 2.5/4: Updating quote with recipient...');
+      await this.quoteService.updateQuoteWithRecipient(quote.id, recipient.id);
+      console.log('[WiseOrchestrator] ✅ Quote updated with recipient (fee locked in)');
+
       // Step 3: Create Transfer
       console.log('[WiseOrchestrator] Step 3/4: Creating transfer...');
       const transfer = await this.transferService.createTransfer({
@@ -95,7 +101,7 @@ class WiseOrchestrator {
       let payment = null;
 
       if (autoFund) {
-        console.log('[WiseOrchestrator] Step 4/4: 💰 FUNDING TRANSFER (REAL MONEY)...');
+        console.log('[WiseOrchestrator] Step 4/5: 💰 FUNDING TRANSFER (REAL MONEY)...');
         console.log('[WiseOrchestrator] ⚠️  WARNING: About to move REAL MONEY via Wise API!');
 
         payment = await this.paymentService.fundTransfer({
@@ -106,7 +112,7 @@ class WiseOrchestrator {
         console.log('[WiseOrchestrator] ✅ Transfer funded successfully!');
         console.log('[WiseOrchestrator] Payment ID:', payment.id);
       } else {
-        console.log('[WiseOrchestrator] Step 4/4: ⏸️  SKIPPED (Safe Mode - No Funding)');
+        console.log('[WiseOrchestrator] Step 4/5: ⏸️  SKIPPED (Safe Mode - No Funding)');
         console.log('[WiseOrchestrator] Transfer created but NOT funded');
         console.log('[WiseOrchestrator] Use fundExistingTransfer() to fund later');
       }

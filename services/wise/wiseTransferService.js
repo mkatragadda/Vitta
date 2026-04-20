@@ -40,6 +40,15 @@ class WiseTransferService {
         throw new Error('Quote not found');
       }
 
+      // CRITICAL: Validate that the quote uses BALANCE payment type
+      if (quote.payment_type !== 'BALANCE') {
+        console.error('[WiseTransferService] ❌ Quote does not use BALANCE payment!');
+        console.error('[WiseTransferService] Quote payment type:', quote.payment_type);
+        throw new Error(`Quote must use BALANCE payment type. Current: ${quote.payment_type}`);
+      }
+
+      console.log('[WiseTransferService] ✅ Quote validated: Uses BALANCE payment type');
+
       // Get recipient from database
       const { data: recipient, error: recipientError } = await this.db
         .from('wise_recipients')
@@ -55,23 +64,53 @@ class WiseTransferService {
       const customerTransactionId = randomUUID();
 
       // Prepare transfer payload
-      // Note: UPI transfers may not support reference field
+      // CRITICAL: We use the quoteUuid which was created with BALANCE payment option.
+      // This ensures Wise uses the BALANCE payment method (low fees) from the quote.
+      // DO NOT add fields that override the payment method!
       const transferPayload = {
         targetAccount: recipient.wise_account_id, // Wise recipient ID
-        quoteUuid: quote.wise_quote_id, // Wise quote ID
+        quoteUuid: quote.wise_quote_id, // Links to quote with BALANCE payment locked in
         customerTransactionId, // Our idempotency key
         details: {
+          // NOTE: sourceOfFunds is for compliance reporting only, NOT for selecting payment method.
+          // The payment method is determined by the quote (which has BALANCE baked in).
+          // We set this to 'balance' to indicate funds come from Wise balance.
+          sourceOfFunds: 'balance',
           reference: '', // Empty reference for UPI (reference field has very strict limits)
-          transferPurpose: 'Family Purpose', // Required for UPI transfers
+          transferPurpose: 'Sending money to family', // Required for UPI transfers
         },
       };
 
-      console.log('[WiseTransferService] Transfer payload:', JSON.stringify(transferPayload, null, 2));
+      console.log('\n========== WISE TRANSFER SERVICE - CREATE ==========');
+      console.log('[WiseTransferService] Creating transfer in Wise API...');
+      console.log('[WiseTransferService] Endpoint: POST /v1/transfers');
+      console.log('[WiseTransferService] Transfer Payload:', JSON.stringify(transferPayload, null, 2));
+      console.log('====================================================\n');
 
       // Call Wise API to create transfer
       const wiseTransfer = await this.client.post('/v1/transfers', transferPayload);
 
+      console.log('\n========== WISE TRANSFER API RESPONSE ==========');
       console.log('[WiseTransferService] Transfer created in Wise:', wiseTransfer.id);
+      console.log('[WiseTransferService] Wise Status:', wiseTransfer.status);
+      console.log('[WiseTransferService] ⚠️  CRITICAL: Check fees in response:');
+      console.log('[WiseTransferService] Source Amount:', wiseTransfer.sourceAmount || wiseTransfer.sourceCurrency);
+      console.log('[WiseTransferService] Target Amount:', wiseTransfer.targetAmount || wiseTransfer.targetCurrency);
+
+      // Check if transfer response contains fee information
+      if (wiseTransfer.fee) {
+        console.log('[WiseTransferService] 💰 Fee in Transfer Response:', wiseTransfer.fee);
+        if (wiseTransfer.fee > 0.02) {
+          console.error('[WiseTransferService] ❌ WARNING: High fee detected in transfer response!');
+          console.error('[WiseTransferService] Expected: $0.01, Got:', wiseTransfer.fee);
+          console.error('[WiseTransferService] This means Wise rejected the BALANCE payment option!');
+        } else {
+          console.log('[WiseTransferService] ✅ Fee looks correct ($0.01-$0.02)');
+        }
+      }
+
+      console.log('[WiseTransferService] Full Response:', JSON.stringify(wiseTransfer, null, 2));
+      console.log('=================================================\n');
 
       // Save to database
       const transferData = {

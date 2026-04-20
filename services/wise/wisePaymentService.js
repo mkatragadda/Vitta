@@ -39,16 +39,38 @@ class WisePaymentService {
         throw new Error('Transfer already funded');
       }
 
+      // CRITICAL: Validate that we're funding with BALANCE type
+      if (paymentType !== 'BALANCE') {
+        console.error('[WisePaymentService] ❌ Payment type must be BALANCE!');
+        console.error('[WisePaymentService] Requested payment type:', paymentType);
+        throw new Error(`Payment type must be BALANCE. Got: ${paymentType}`);
+      }
+
+      console.log('[WisePaymentService] ✅ Payment type validated: BALANCE');
+
       // Prepare payment payload
+      // CRITICAL: This must match the payment method from the quote (BALANCE)
       const paymentPayload = {
-        type: paymentType, // 'BALANCE', 'BANK_TRANSFER', 'CARD'
+        type: paymentType, // Must be 'BALANCE' to match the quote
       };
 
       // Call Wise API to fund transfer
       const endpoint = `/v3/profiles/${this.profileId}/transfers/${transfer.wise_transfer_id}/payments`;
+
+      console.log('\n========== WISE PAYMENT SERVICE - FUNDING ==========');
+      console.log('[WisePaymentService] Transfer ID:', transfer.wise_transfer_id);
+      console.log('[WisePaymentService] Payment Payload:', JSON.stringify(paymentPayload, null, 2));
+      console.log('[WisePaymentService] Endpoint:', endpoint);
+      console.log('[WisePaymentService] Transfer source amount:', transfer.source_amount);
+      console.log('[WisePaymentService] Transfer target amount:', transfer.target_amount);
+      console.log('====================================================\n');
+
       const wisePayment = await this.client.post(endpoint, paymentPayload);
 
-      console.log('[WisePaymentService] Payment completed:', wisePayment.status);
+      console.log('\n========== WISE PAYMENT API RESPONSE ==========');
+      console.log('[WisePaymentService] Payment Status:', wisePayment.status);
+      console.log('[WisePaymentService] Full Response:', JSON.stringify(wisePayment, null, 2));
+      console.log('===============================================\n');
 
       // Save payment record
       const paymentData = {

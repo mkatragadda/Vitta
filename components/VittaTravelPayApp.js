@@ -13,9 +13,9 @@ import TransactionsScreen from './travelpay/TransactionsScreen';
  *
  * Separate from main VittaApp dashboard
  */
-export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
+export default function VittaTravelPayApp({ userData, onLogout }) {
   const [currentScreen, setCurrentScreen] = useState('home');
-  const [usdBalance, setUsdBalance] = useState(24850.00);
+  const [usdBalance, setUsdBalance] = useState(null); // Will be loaded from Wise API
   const [exchangeRate, setExchangeRate] = useState(null); // Live rate from Wise API
   const [scanData, setScanData] = useState(null);
   const [quote, setQuote] = useState(null);
@@ -23,9 +23,10 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch live exchange rate on mount
+  // Fetch live exchange rate and balance on mount
   useEffect(() => {
     fetchLiveExchangeRate();
+    fetchUSDBalance();
   }, []);
 
   const fetchLiveExchangeRate = async () => {
@@ -47,6 +48,32 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
       console.error('[TravelPay] Failed to fetch live rate:', err);
       // Fallback to approximate rate if API fails
       setExchangeRate(83.85);
+    }
+  };
+
+  const fetchUSDBalance = async () => {
+    try {
+      // Fetch actual USD balance from Wise API
+      const response = await fetch('/api/wise/balance?currency=USD', {
+        method: 'GET',
+        headers: {
+          'x-user-id': userData?.id || '',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const balance = result.data.amount || result.data.available || 0;
+        setUsdBalance(balance);
+        console.log('[TravelPay] USD balance loaded:', balance);
+      } else {
+        throw new Error(result.error || 'Failed to fetch balance');
+      }
+    } catch (err) {
+      console.error('[TravelPay] Failed to fetch USD balance:', err);
+      // Fallback to 0 if API fails
+      setUsdBalance(0);
     }
   };
 
@@ -194,7 +221,9 @@ export default function VittaTravelPayApp({ userData, onBackToDashboard }) {
             onScanToPay={() => setCurrentScreen('scanner')}
             onAddFunds={() => setCurrentScreen('add-funds')}
             onViewTransactions={() => setCurrentScreen('transactions')}
-            onBackToDashboard={onBackToDashboard}
+            onLogout={onLogout}
+            userName={userData?.name}
+            userEmail={userData?.email}
           />
         )}
 

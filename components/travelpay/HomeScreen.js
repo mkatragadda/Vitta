@@ -1,5 +1,5 @@
-import React from 'react';
-import { Scan, DollarSign, Sparkles, TrendingUp, Plus, ArrowLeft } from 'lucide-react';
+import React, { useState } from 'react';
+import { Scan, DollarSign, Sparkles, TrendingUp, Plus, Menu, LogOut, X, User } from 'lucide-react';
 
 export default function HomeScreen({
   usdBalance,
@@ -7,23 +7,23 @@ export default function HomeScreen({
   onScanToPay,
   onAddFunds,
   onViewTransactions,
-  onBackToDashboard
+  onLogout,
+  userName,
+  userEmail
 }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   return (
     <div className="h-screen flex flex-col px-6 py-6">
       {/* Header */}
       <div className="mb-6 mt-16">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold text-white">Vitta</h1>
-          {onBackToDashboard && (
-            <button
-              onClick={onBackToDashboard}
-              className="glass px-4 py-2 rounded-xl text-slate-300 text-sm font-semibold hover:bg-white/10 transition-all flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Dashboard
-            </button>
-          )}
+          <button
+            onClick={() => setIsMenuOpen(true)}
+            className="glass p-3 rounded-xl text-slate-300 hover:bg-white/10 transition-all"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
         </div>
         <p className="text-slate-400 text-sm">Your travel wallet</p>
       </div>
@@ -36,12 +36,18 @@ export default function HomeScreen({
               <p className="text-teal-300 text-xs font-semibold uppercase mb-2">Available Balance</p>
               <div className="flex items-baseline gap-2">
                 <DollarSign className="w-7 h-7 text-white" />
-                <span className="text-5xl font-bold text-white">
-                  {Math.floor(usdBalance).toLocaleString()}
-                </span>
-                <span className="text-2xl text-slate-400">
-                  .{String(Math.round((usdBalance % 1) * 100)).padStart(2, '0')}
-                </span>
+                {usdBalance !== null ? (
+                  <>
+                    <span className="text-5xl font-bold text-white">
+                      {Math.floor(usdBalance).toLocaleString()}
+                    </span>
+                    <span className="text-2xl text-slate-400">
+                      .{String(Math.round((usdBalance % 1) * 100)).padStart(2, '0')}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-3xl text-slate-400 animate-pulse">Loading...</span>
+                )}
               </div>
             </div>
             <button
@@ -130,6 +136,67 @@ export default function HomeScreen({
           </div>
         </button>
       </div>
+
+      {/* Slide-out Menu */}
+      {isMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            onClick={() => setIsMenuOpen(false)}
+          />
+
+          {/* Menu Panel */}
+          <div className="fixed top-0 right-0 bottom-0 w-80 bg-gradient-to-b from-slate-900 to-slate-950 border-l border-teal-500/30 z-50 shadow-2xl">
+            <div className="flex flex-col h-full">
+              {/* Menu Header */}
+              <div className="flex items-center justify-between p-6 border-b border-white/10">
+                <h2 className="text-white text-xl font-bold">Menu</h2>
+                <button
+                  onClick={() => setIsMenuOpen(false)}
+                  className="glass p-2 rounded-xl text-slate-300 hover:bg-white/10 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* User Info */}
+              {userName && (
+                <div className="p-6 border-b border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center">
+                      <User className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold">{userName}</p>
+                      <p className="text-slate-400 text-sm">{userEmail}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Menu Items */}
+              <div className="flex-1 p-6">
+                {/* Add more menu items here if needed */}
+              </div>
+
+              {/* Logout Button */}
+              <div className="p-6 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    if (onLogout) onLogout();
+                  }}
+                  className="w-full glass-teal rounded-xl p-4 flex items-center gap-3 hover:bg-red-500/10 transition-all border border-red-500/30 text-red-400"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="font-semibold">Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
