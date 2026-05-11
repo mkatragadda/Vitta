@@ -13,6 +13,9 @@ import { supabase, isSupabaseConfigured } from '../config/supabase';
  * - picture: text (profile picture URL from Google)
  * - provider: text (e.g., 'google', 'demo')
  * - google_id: text (unique, Google user ID)
+ * - is_approved: boolean (default false, controls access)
+ * - waitlist_joined_at: timestamp (when user joined waitlist)
+ * - approved_at: timestamp (when admin approved user)
  * - created_at: timestamp (auto-generated)
  * - updated_at: timestamp (auto-generated)
  */
@@ -36,6 +39,7 @@ export const saveGoogleUser = async (userData) => {
       name: userData.name,
       picture: userData.picture,
       provider: 'google',
+      is_approved: true, // Demo users are auto-approved
       isDemoMode: true
     };
   }
@@ -64,7 +68,7 @@ export const saveGoogleUser = async (userData) => {
     }
 
     if (existingUser) {
-      // Update existing user
+      // Update existing user (keep their approval status)
       const { data, error } = await supabase
         .from('users')
         .update(userPayload)
@@ -78,12 +82,19 @@ export const saveGoogleUser = async (userData) => {
       }
 
       console.log('[Vitta] User updated successfully:', data.email);
+      console.log('[Vitta] User approval status:', data.is_approved ? 'approved' : 'waitlist');
       return data;
     } else {
-      // Insert new user
+      // Insert new user (with waitlist status)
+      const newUserPayload = {
+        ...userPayload,
+        is_approved: false, // New users start on waitlist
+        waitlist_joined_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('users')
-        .insert([userPayload])
+        .insert([newUserPayload])
         .select()
         .single();
 
@@ -93,6 +104,7 @@ export const saveGoogleUser = async (userData) => {
       }
 
       console.log('[Vitta] New user created successfully:', data.email);
+      console.log('[Vitta] User added to waitlist - approval required');
       return data;
     }
   } catch (error) {
@@ -104,6 +116,7 @@ export const saveGoogleUser = async (userData) => {
       name: userData.name,
       picture: userData.picture,
       provider: 'google',
+      is_approved: true, // Error fallback users are auto-approved
       isDemoMode: true,
       error: error.message
     };

@@ -7,6 +7,7 @@ import VittaChatInterface from './VittaChatInterface';
 import RecommendationScreen from './RecommendationScreen';
 import VittaTravelPayApp from './VittaTravelPayApp';
 import LandingScreen from './travelpay/LandingScreen';
+import WaitlistScreen from './WaitlistScreen';
 import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
@@ -212,6 +213,40 @@ const VittaApp = () => {
     });
 
     console.log('[Vitta] User saved to database:', savedUser);
+    console.log('[Vitta] User approval status:', savedUser.is_approved);
+
+    // Check if user is approved for access
+    if (!savedUser.is_approved && !savedUser.isDemoMode) {
+      // User is on waitlist - show waitlist screen
+      console.log('[Vitta] User not approved - showing waitlist screen');
+
+      setUser({
+        id: savedUser.id,
+        email,
+        name,
+        picture,
+        joinDate: savedUser.created_at ? new Date(savedUser.created_at) : new Date(),
+        waitlistJoinedAt: savedUser.waitlist_joined_at,
+        provider: 'google',
+        isApproved: false,
+        isDemoMode: false
+      });
+
+      setIsAuthenticated(false); // Don't authenticate waitlist users
+      setCurrentScreen('waitlist'); // Show waitlist screen
+
+      try {
+        window.google?.accounts?.id?.disableAutoSelect?.();
+        window.google?.accounts?.id?.cancel?.();
+      } catch (err) {
+        console.warn('[Vitta] Unable to disable Google auto select:', err);
+      }
+
+      return; // Stop here for waitlist users
+    }
+
+    // User is approved or in demo mode - proceed with normal login
+    console.log('[Vitta] User approved - proceeding with login');
 
     setUser({
       id: savedUser.id,
@@ -220,6 +255,7 @@ const VittaApp = () => {
       picture,
       joinDate: savedUser.created_at ? new Date(savedUser.created_at) : new Date(),
       provider: 'google',
+      isApproved: true,
       isDemoMode: savedUser.isDemoMode || false
     });
 
@@ -1352,6 +1388,16 @@ const VittaApp = () => {
     "Optimize my payments",
     "Navigate me to add a card"
   ];
+
+  // If waitlist screen is active, show it (before authentication check)
+  if (currentScreen === 'waitlist') {
+    return (
+      <WaitlistScreen
+        user={user}
+        onSignOut={handleLogout}
+      />
+    );
+  }
 
   // If not authenticated, show landing screen
   if (!isAuthenticated) {

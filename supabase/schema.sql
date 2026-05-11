@@ -27,11 +27,18 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   picture_url TEXT,
   provider TEXT DEFAULT 'google', -- 'google' or 'demo'
+
+  -- Waitlist fields (added 2025-01-09)
+  is_approved BOOLEAN DEFAULT false, -- Controls access: true = can login, false = waitlist
+  waitlist_joined_at TIMESTAMP WITH TIME ZONE, -- When user joined waitlist
+  approved_at TIMESTAMP WITH TIME ZONE, -- When admin approved user
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_is_approved ON users(is_approved);
 
 -- ============================================================================
 -- 2. CARD CATALOG TABLE
