@@ -6,6 +6,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const WiseClient = require('../wise/wiseClient').default;
 const WiseQuoteService = require('../wise/wiseQuoteService').default;
 
 const supabase = createClient(
@@ -13,7 +14,19 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const wiseQuoteService = new WiseQuoteService();
+const environment = process.env.WISE_ENVIRONMENT || 'sandbox';
+const isLive = environment === 'live' || environment === 'production';
+
+const wiseClient = new WiseClient({
+  apiKey: isLive ? process.env.WISE_API_TOKEN_LIVE : process.env.WISE_API_TOKEN_SANDBOX,
+  profileId: isLive ? process.env.WISE_PROFILE_ID_LIVE : process.env.WISE_PROFILE_ID_SANDBOX,
+  baseURL: isLive
+    ? 'https://api.transferwise.com'
+    : (process.env.WISE_BASE_URL || 'https://api.sandbox.transferwise.tech'),
+  environment,
+});
+
+const wiseQuoteService = new WiseQuoteService(wiseClient, supabase);
 
 const PENDING_TRANSFER_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
