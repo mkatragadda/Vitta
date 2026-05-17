@@ -1,301 +1,324 @@
-# SMS Integration - Quick Start Guide
+# SMS Integration - README
 
-**Complete Design Document Index**
+**Vitta x AgentPhone - SMS-Based Money Transfers**
 
-This integration enables SMS-based money transfers using AgentPhone + Vitta's existing WISE infrastructure.
-
----
-
-## 📚 Documentation Files
-
-1. **[SMS_INTEGRATION_DESIGN.md](./SMS_INTEGRATION_DESIGN.md)** - Part 1
-   - Executive Summary
-   - System Architecture
-   - User Flows
-   - Component Specifications (1-6)
-
-2. **[SMS_INTEGRATION_DESIGN_PART2.md](./SMS_INTEGRATION_DESIGN_PART2.md)** - Part 2
-   - Database Schema
-   - API Specifications
-   - Security Model
-   - Message Templates
-   - Implementation Plan
-   - Testing Strategy
-   - Hackathon Demo Plan
+**Version:** 2.0 Final
+**Date:** 2026-05-17
+**Status:** Production-Ready
 
 ---
 
-## 🚀 Quick Summary
+## 📖 Complete Documentation
+
+**👉 [SMS_INTEGRATION_COMPLETE.md](./SMS_INTEGRATION_COMPLETE.md)** - **Single Source of Truth**
+
+This is the consolidated design document containing everything you need:
+- Executive Summary
+- Quick Start Guide (5 minutes)
+- Complete System Architecture
+- User Experience Flows
+- Database Schema (6 new tables)
+- API Specifications (6 endpoints)
+- Component Implementation (7 services)
+- Security Model
+- WISE Integration (zero changes required)
+- Implementation Plan (5 phases, 8-10 hours)
+- Testing Strategy
+- Hackathon Demo Script
+- Environment Setup
+
+---
+
+## 🚀 Quick Start (30 seconds)
 
 ### What We're Building
 
-**User sends SMS** → **AI parses intent** → **Creates pending transfer** → **Sends secure link** → **User confirms on web** → **Transfer executes**
+SMS-to-web money transfer system: User texts "Send $500 to mom" → Receives secure link → Confirms on web → Money transferred via WISE
 
-### Key Features
+### Key Points
 
-- ✅ Natural language SMS ("Send $500 to mom")
-- ✅ Secure web confirmation (JWT tokens, 15-min expiry)
-- ✅ Nickname support (mom, dad, brother, etc.)
-- ✅ Real-time WISE transfers
-- ✅ No app download required
-
-### Tech Stack
-
-- **SMS Platform**: AgentPhone
-- **Backend**: Next.js API routes
-- **Database**: Supabase (6 new tables)
-- **Transfer API**: WISE (existing integration)
-- **Security**: HMAC webhooks + JWT tokens
+- ✅ **Zero changes** to existing WISE integration
+- ✅ Uses `wise_recipients` table (not `beneficiaries`)
+- ✅ SMS → Web handoff for security
+- ✅ 15-minute token expiry
+- ✅ Natural language parsing
+- ✅ Ready in ~10 hours
 
 ---
 
 ## 📋 Implementation Checklist
 
 ### Phase 1: Foundation (2-3 hours)
-- [ ] Run database migration (`003_sms_integration.sql`)
-- [ ] Create AgentPhone client service
-- [ ] Implement webhook handler with signature verification
+- [ ] Run database migration
+- [ ] Create AgentPhone client
+- [ ] Implement webhook handler
 - [ ] Test webhook receiving
 
 ### Phase 2: Intent Parsing (1-2 hours)
 - [ ] Build SMS intent parser
-- [ ] Implement entity extraction (amount, recipient)
-- [ ] Create beneficiary matcher
-- [ ] Add conversation state manager
+- [ ] Implement entity extraction
+- [ ] Create recipient matcher
+- [ ] Add conversation manager
 
 ### Phase 3: Pending Transfers (1.5 hours)
 - [ ] Implement pending transfer service
-- [ ] Build token generation & validation
-- [ ] Integrate with WISE quotes
+- [ ] Build token generation
+- [ ] Integrate with wiseQuoteService
 - [ ] Create message templates
 
 ### Phase 4: Web Confirmation (2 hours)
 - [ ] Create `/transfer/confirm/[token]` page
-- [ ] Build beautiful confirmation UI
-- [ ] Implement `/api/sms/transfer/execute` endpoint
+- [ ] Build confirmation UI
+- [ ] Implement execute API
 - [ ] Add error handling
 
-### Phase 5: Integration & Testing (1.5 hours)
-- [ ] Connect all components end-to-end
-- [ ] Test complete flow
+### Phase 5: Testing (1.5 hours)
+- [ ] Connect all components
+- [ ] Test end-to-end
 - [ ] Add comprehensive logging
-- [ ] Test with AgentPhone sandbox
 
-**Total Estimate: 8-10 hours**
+**Total: 8-10 hours**
 
 ---
 
-## 🔐 Environment Variables Required
+## 🗄️ Database Schema
+
+**New Tables:**
+1. `user_phone_numbers` - Link phones to accounts
+2. `sms_conversations` - Track conversations
+3. `pending_sms_transfers` - Store pending transfers (uses `wise_recipient_id`)
+4. `sms_transfer_tokens` - Secure tokens
+5. `wise_recipient_nicknames` - SMS shortcuts for wise_recipients
+6. `sms_messages_log` - Audit trail
+
+**Existing Tables (Reused):**
+- `wise_recipients` ✅
+- `wise_quotes` ✅
+- `wise_transfers` ✅
+- `wise_payments` ✅
+
+**Migration:** See complete SQL in main document
+
+---
+
+## 🔐 Environment Variables
 
 ```bash
+# .env.local
+
 # AgentPhone
 AGENTPHONE_API_KEY=your_api_key
 AGENTPHONE_WEBHOOK_SECRET=your_webhook_secret
 AGENTPHONE_AGENT_ID=your_agent_id
 
 # Token Security
-TRANSFER_TOKEN_SECRET=min_32_char_random_string
+TRANSFER_TOKEN_SECRET=random_32_char_string
 
 # App URL
 NEXT_PUBLIC_APP_URL=https://vitta.app
+
+# Existing (already configured)
+NEXT_PUBLIC_SUPABASE_URL=...
+WISE_API_KEY=...
 ```
 
 ---
 
-## 🗄️ Database Schema Overview
-
-**New Tables:**
-1. `user_phone_numbers` - Link phones to accounts
-2. `sms_conversations` - Track multi-turn conversations
-3. `pending_sms_transfers` - Store pre-confirmation transfers
-4. `sms_transfer_tokens` - Secure confirmation tokens
-5. `beneficiary_nicknames` - SMS shortcuts (mom, dad, etc.)
-6. `sms_messages_log` - Audit trail
-
-**Migration File:** `supabase/migrations/003_sms_integration.sql`
-
----
-
-## 📱 User Flow Example
+## 📱 User Flow
 
 ```
-USER:    "Send $500 to mom"
+USER:   "Send $500 to mom"
 
-VITTA:   "💰 Transfer Ready
-         $500 → Mom (Maria Garcia)
-         👉 vitta.app/confirm/xYz9K
-         Link expires in 15 min"
+VITTA:  "💰 Transfer Ready
+        $500 → Mom (Maria Garcia)
+        👉 vitta.app/confirm/xYz9K"
 
-[User taps link → Beautiful web confirmation screen]
-[User clicks "Confirm Transfer"]
+[User taps → Web confirmation → Confirms]
 
-VITTA:   "✅ Transfer Complete!
-         $500 sent to Maria Garcia
-         Reference: WTF123456789"
+VITTA:  "✅ Transfer Complete!"
 ```
 
 ---
 
-## 🛡️ Security Model
+## 🎯 Why This Design?
 
-1. **Webhook Authentication**: HMAC-SHA256 signature verification
-2. **User Authentication**: Phone number linked to verified account
-3. **Transfer Tokens**: JWT-based, 15-min expiry, one-time use
-4. **WISE API**: Existing secure integration (no changes)
+### Uses wise_recipients (Not beneficiaries)
 
----
+| Aspect | wise_recipients ✅ | beneficiaries ❌ |
+|--------|-------------------|------------------|
+| WISE Compatible | Yes | No (Chimoney-specific) |
+| QR Integration | Shared recipients | Separate system |
+| Code Changes | Zero | Multiple services |
+| Data Consistency | Single source | Duplicated data |
 
-## 🧪 Testing Strategy
+### SMS → Web Handoff (Not SMS-only)
 
-### Unit Tests
-```bash
-npm test -- services/sms/smsIntentParser.test.js
-npm test -- services/sms/beneficiaryMatcher.test.js
-npm test -- services/sms/transferTokenService.test.js
-```
-
-### Integration Test
-```bash
-npm test -- __tests__/integration/sms-transfer-flow.test.js
-```
-
-### Manual Testing
-1. Send SMS to AgentPhone number
-2. Verify webhook received
-3. Check SMS response with link
-4. Tap link and confirm on web
-5. Verify transfer completed
+| Benefit | Reason |
+|---------|--------|
+| Security | Web auth layer required |
+| Compliance | Explicit confirmation audit trail |
+| UX | Users see full details |
+| Debugging | Web sessions easier to log |
 
 ---
 
-## 🎯 Hackathon Demo Plan
+## ✅ Zero Changes to WISE
 
-### Setup (15 min before)
-- [ ] Vitta app running (`npm run dev`)
-- [ ] AgentPhone webhook configured (ngrok tunnel)
-- [ ] Test data in database (demo user + beneficiary)
-- [ ] Phone connected to projector
+All existing WISE services work as-is:
+- `wiseQuoteService.js` ✅
+- `wiseRecipientService.js` ✅
+- `wiseTransferService.js` ✅
+- `wiseOrchestrator.js` ✅
 
-### Demo Script (5 min)
-1. **Problem** (30s): Current transfer UX is complex
-2. **Solution** (30s): "What if you could just text?"
-3. **Live Demo** (2 min): Send SMS, tap link, confirm, success
-4. **Behind the Scenes** (1 min): Show webhook logs, DB, WISE API
-5. **Technical Highlights** (1 min): Architecture overview
-6. **Closing** (30s): "Built in 10 hours for this hackathon"
+SMS integration simply calls these existing services.
 
 ---
 
 ## 📂 File Structure
 
 ```
-Vitta/
-├── pages/api/sms/
-│   ├── webhook.js              # AgentPhone webhook
-│   ├── send.js                 # Send SMS
-│   └── transfer/
-│       ├── verify.js           # Verify token
-│       └── execute.js          # Execute transfer
-│
-├── pages/transfer/confirm/
-│   └── [token].js              # Web confirmation screen
-│
-├── services/sms/
-│   ├── smsIntentParser.js
-│   ├── pendingTransferService.js
-│   ├── transferTokenService.js
-│   ├── beneficiaryMatcher.js
-│   └── messageTemplates.js
-│
-├── services/agentphone/
-│   ├── agentphoneClient.js
-│   └── webhookVerifier.js
-│
-└── supabase/migrations/
-    └── 003_sms_integration.sql
+pages/api/sms/
+  ├── webhook.js           # AgentPhone webhook
+  ├── transfer/
+  │   ├── verify.js        # Validate token
+  │   └── execute.js       # Execute transfer
+
+pages/transfer/confirm/
+  └── [token].js           # Web confirmation screen
+
+services/sms/
+  ├── smsIntentParser.js
+  ├── recipientMatcher.js
+  ├── pendingTransferService.js
+  ├── transferTokenService.js
+  └── messageTemplates.js
+
+services/agentphone/
+  ├── agentphoneClient.js
+  └── webhookVerifier.js
+
+supabase/migrations/
+  └── 003_sms_integration.sql
 ```
 
 ---
 
-## 🐛 Debugging Tips
+## 🧪 Testing
+
+```bash
+# Unit tests
+npm test -- services/sms/
+
+# Integration test
+npm test -- __tests__/sms/e2e-flow.test.js
+
+# Manual test
+curl -X POST http://localhost:3000/api/sms/webhook \
+  -H "X-Webhook-Signature: sha256=..." \
+  -d '{"data":{"body":"Send $100 to mom"}}'
+```
+
+---
+
+## 🎬 Hackathon Demo
+
+### Setup (15 min)
+- Vitta running on localhost:3000
+- AgentPhone webhook configured (ngrok)
+- Test data in database
+- Phone projected on screen
+
+### Demo (5 min)
+1. Problem statement (30s)
+2. Live SMS transfer (2 min)
+3. Behind-the-scenes tech (1 min)
+4. Architecture highlights (1 min)
+5. Closing (30s)
+
+---
+
+## 🐛 Troubleshooting
 
 **Webhook not receiving:**
-- Check ngrok tunnel is active
-- Verify webhook URL in AgentPhone dashboard
-- Check webhook signature secret matches
+- Check ngrok tunnel active
+- Verify webhook URL in AgentPhone
+- Check signature secret matches
 
 **Intent parsing fails:**
-- Check regex patterns in `smsIntentParser.js`
-- View logs in `sms_messages_log` table
-- Test patterns in isolation with unit tests
+- Check regex patterns
+- View logs in sms_messages_log
+- Test patterns in unit tests
 
 **Token expired:**
-- Tokens valid for 15 minutes only
+- Tokens valid 15 minutes
 - Check system clock sync
-- Verify `expires_at` timestamp in DB
+- Verify expires_at in DB
 
 **Transfer fails:**
 - Check WISE API credentials
-- Verify WISE balance sufficient
-- Review logs in `wise_transfers` table
+- Verify WISE balance
+- Review wise_transfers logs
 
 ---
 
-## 📞 Support Resources
+## ❓ FAQ
 
-- **AgentPhone Docs**: https://docs.agentphone.ai
-- **WISE API Docs**: https://docs.wise.com
-- **Vitta Architecture**: See `CLAUDE.md`
-- **Transfer Flow**: See `docs/VITTA_TRAVEL_PAY_IMPLEMENTATION.md`
+**Q: Do I need to change any existing WISE code?**
+A: No! Zero changes required.
+
+**Q: Will QR code transfers still work?**
+A: Yes, no impact whatsoever.
+
+**Q: Can recipients from QR be used in SMS?**
+A: Yes, just add a nickname.
+
+**Q: What about the beneficiaries table?**
+A: That's for Chimoney. SMS uses wise_recipients for WISE.
+
+**Q: How long to implement?**
+A: ~10 hours total (perfect for hackathon).
 
 ---
 
-## 🎓 Key Learnings for Hackathon Presentation
+## 📚 Additional Resources
 
-1. **Novel UX**: SMS → Web handoff (no competitor does this)
-2. **Security**: Proper token-based auth, not SMS-only
-3. **Real Integration**: Actual WISE transfers, not mocked
-4. **Speed**: 3-second response time, 10-hour build time
-5. **Accessibility**: Works on ANY phone with SMS
+- **AgentPhone Docs:** https://docs.agentphone.ai
+- **WISE API Docs:** https://docs.wise.com
+- **Vitta Architecture:** See main CLAUDE.md
 
 ---
 
-## ✅ Success Criteria
+## 🎓 Success Criteria
 
 **Technical:**
 - [ ] < 3 sec SMS response
-- [ ] 100% webhook signature validation
-- [ ] Zero plaintext tokens in DB
+- [ ] 100% signature validation
+- [ ] Zero plaintext tokens
 - [ ] All transfers logged
 
 **Demo:**
 - [ ] 3+ live transfers
 - [ ] No manual intervention
-- [ ] Audience understands value
+- [ ] Audience wow factor
 
 ---
 
-## 🚧 Future Enhancements
+## 📞 Support
 
-Post-Hackathon:
-- Multi-currency SMS ("Send 100 EUR to John")
-- Recurring transfers ("Send $500 monthly")
-- Voice commands (AgentPhone voice API)
-- Transaction history via SMS
-- 2FA for high-value transfers
+For implementation questions, refer to:
+1. **SMS_INTEGRATION_COMPLETE.md** (main document)
+2. Section-specific details in main doc
+3. Code examples throughout
 
 ---
 
-## 📄 Full Documentation
+**Ready to build?**
 
-For complete technical specifications, see:
-- [Part 1: Architecture & Components](./SMS_INTEGRATION_DESIGN.md)
-- [Part 2: Database & Implementation](./SMS_INTEGRATION_DESIGN_PART2.md)
+Start with the [Complete Documentation](./SMS_INTEGRATION_COMPLETE.md) →
 
 ---
 
-**Questions? Start with the Implementation Checklist above.**
-
-**Ready to code? Begin with Phase 1 (Foundation).**
-
-**Need help? Check the Debugging Tips section.**
+**Version:** 2.0 Final
+**Status:** Production-Ready ✅
+**Implementation Time:** ~10 hours
+**WISE Changes:** Zero ✅
