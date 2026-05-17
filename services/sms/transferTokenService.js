@@ -20,7 +20,7 @@ const supabase = createClient(
 );
 
 const TOKEN_EXPIRY_SECONDS = 15 * 60; // 15 minutes
-const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://vitta.app';
+const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://app.getvitta.com';
 
 function getSecret() {
   const secret = process.env.TRANSFER_TOKEN_SECRET;

@@ -3,13 +3,13 @@
  * All outbound SMS strings in one place for easy editing.
  */
 
-const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://vitta.app';
+const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://app.getvitta.com';
 
 /**
  * Sent after a pending transfer is created — includes the confirmation link.
  *
  * @param {Object} transfer - pending_sms_transfers row joined with wise_recipient
- * @param {string} confirmURL - full confirmation URL (e.g. https://vitta.app/transfer/confirm/xYz9K)
+ * @param {string} confirmURL - full confirmation URL (e.g. https://app.getvitta.com/transfer/confirm/xYz9K)
  */
 function buildTransferReadyMessage(transfer, confirmURL) {
   const { source_amount, source_currency = 'USD', wise_recipient } = transfer;

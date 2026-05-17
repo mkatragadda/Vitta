@@ -55,18 +55,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('[SMS Webhook] Received webhook request');
+  console.log(`[SMS Webhook] ▶ Inbound request | method=${req.method} | ip=${req.socket?.remoteAddress}`);
 
   try {
     // Step 1: Verify webhook signature
     const isValid = webhookVerifier.verifyRequest(req);
 
     if (!isValid) {
-      console.error('[SMS Webhook] Invalid signature - rejecting webhook');
+      console.error('[SMS Webhook] ✗ Invalid signature — rejecting');
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
-    console.log('[SMS Webhook] Signature verified');
+    console.log('[SMS Webhook] ✓ Signature verified');
 
     // Step 2: Parse webhook payload
     const { event, data } = req.body;
@@ -79,19 +79,20 @@ export default async function handler(req, res) {
     // Step 3: Handle different event types
     switch (event) {
       case 'message.received':
+        console.log(`[SMS Webhook] ▶ message.received | from=${data.from} | msgId=${data.id}`);
         await handleIncomingMessage(data);
         break;
 
       case 'message.sent':
-        console.log('[SMS Webhook] Message sent confirmation:', data.id);
+        console.log(`[SMS Webhook] ✓ message.sent | msgId=${data.id}`);
         break;
 
       case 'message.failed':
-        console.error('[SMS Webhook] Message failed:', data.id, data.error);
+        console.error(`[SMS Webhook] ✗ message.failed | msgId=${data.id} | error=${data.error}`);
         break;
 
       default:
-        console.log('[SMS Webhook] Unhandled event type:', event);
+        console.log(`[SMS Webhook] ⚠ Unhandled event: ${event}`);
     }
 
     // Step 4: Log webhook to database
@@ -124,8 +125,8 @@ async function handleIncomingMessage(messageData) {
     created_at: timestamp
   } = messageData;
 
-  console.log('[SMS Webhook] Processing message from', phoneNumber);
-  console.log('[SMS Webhook] Message:', messageBody);
+  console.log(`[SMS Webhook] ▶ Processing | from=${phoneNumber} | convId=${conversationId}`);
+  console.log(`[SMS Webhook]   Message: "${messageBody}"`);
 
   // Step 1: Find user by phone number
   const { data: phoneRecord, error: phoneError } = await supabase
@@ -136,13 +137,13 @@ async function handleIncomingMessage(messageData) {
     .single();
 
   if (phoneError || !phoneRecord) {
-    console.log('[SMS Webhook] Unknown phone number:', phoneNumber);
+    console.log(`[SMS Webhook] ⚠ Unknown phone: ${phoneNumber} — sending welcome message`);
     await sendWelcomeMessage(phoneNumber, conversationId);
     return;
   }
 
   if (!phoneRecord.is_verified) {
-    console.log('[SMS Webhook] Unverified phone number:', phoneNumber);
+    console.log(`[SMS Webhook] ⚠ Unverified phone: ${phoneNumber} — sending verification reminder`);
     await sendVerificationMessage(phoneNumber, conversationId);
     return;
   }
@@ -192,7 +193,7 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
 
   const { intent, entities } = parseIntent(messageBody, conversationState);
 
-  console.log('[SMS Webhook] Intent:', intent, '| State:', conversationState.state);
+  console.log(`[SMS Webhook] ✓ Intent: ${intent} | State: ${conversationState.state}`);
 
   // --- Cancellation at any stage ---
   if (intent === 'cancellation') {
@@ -265,6 +266,8 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
  * Extracted so both direct match and disambiguation resolution share the same path.
  */
 async function createTransferAndSendLink({ phoneNumber, userId, conversationId, wiseRecipient, sourceAmount, rawMessage }) {
+  console.log(`[SMS Webhook] ▶ Creating pending transfer | user=${userId} | amount=$${sourceAmount} | recipient=${wiseRecipient.account_holder_name}`);
+
   const pendingTransfer = await createPendingTransfer({
     userId,
     phoneNumber,
@@ -273,15 +276,21 @@ async function createTransferAndSendLink({ phoneNumber, userId, conversationId, 
     rawMessage
   });
 
+  console.log(`[SMS Webhook] ✓ Pending transfer created | id=${pendingTransfer.id} | quote=${pendingTransfer.wise_quote_id} | rate=${pendingTransfer.exchange_rate}`);
+
   const tokenData = generateToken(pendingTransfer);
   await storeToken(tokenData, pendingTransfer.id, phoneNumber, userId);
 
   const confirmURL = buildConfirmationURL(tokenData.shortToken);
 
+  console.log(`[SMS Webhook] ✓ Token stored | shortToken=${tokenData.shortToken} | confirmURL=${confirmURL}`);
+
   await setConversationState(phoneNumber, userId, 'ready_for_confirmation', {
     pendingTransferId: pendingTransfer.id,
     shortToken: tokenData.shortToken
   }, conversationId);
+
+  console.log(`[SMS Webhook] ✓ Conversation → ready_for_confirmation | pendingId=${pendingTransfer.id}`);
 
   return buildTransferReadyMessage(pendingTransfer, confirmURL);
 }

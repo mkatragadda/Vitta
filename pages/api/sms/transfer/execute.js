@@ -55,19 +55,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'Token is required' });
   }
 
+  console.log(`[SMSExecute] ▶ Executing transfer for token: ${token.substring(0, 4)}****`);
+
   try {
     // Step 1: Validate token
     const validation = await validateToken(token);
 
     if (!validation.valid) {
+      console.warn('[SMSExecute] ✗ Invalid token:', validation.error);
       return res.status(400).json({ success: false, error: validation.error });
     }
 
     const { transfer, tokenRecord } = validation;
     const recipient = transfer.wise_recipient;
 
+    console.log(`[SMSExecute] ✓ Token valid | transfer=${transfer.id} | user=${transfer.user_id} | amount=$${transfer.source_amount} → ${recipient.account_holder_name}`);
+
     // Step 2: Execute WISE transfer — reuse the pre-created quote
     if (!wiseConfig.apiKey || !wiseConfig.profileId) {
+      console.error('[SMSExecute] ✗ WISE API not configured');
       return res.status(500).json({ success: false, error: 'WISE API not configured' });
     }
 
@@ -86,35 +92,41 @@ export default async function handler(req, res) {
       quoteService, recipientService, transferService, paymentService, supabase
     });
 
+    const reference = `SMS-${transfer.id.substring(0, 8).toUpperCase()}`;
+    console.log(`[SMSExecute] ▶ Calling WISE | quoteId=${transfer.wise_quote_id} | ref=${reference} | autoFund=${process.env.WISE_AUTO_FUND !== 'false'}`);
+
     const result = await orchestrator.executeTransfer({
       userId: transfer.user_id,
-      quoteId: transfer.wise_quote_id,         // reuse the pre-created quote
-      upiId: recipient.upi_id,                  // from wise_recipients row
-      payeeName: recipient.account_holder_name, // from wise_recipients row
-      reference: `SMS-${transfer.id.substring(0, 8).toUpperCase()}`,
+      quoteId: transfer.wise_quote_id,
+      upiId: recipient.upi_id,
+      payeeName: recipient.account_holder_name,
+      reference,
       autoFund: process.env.WISE_AUTO_FUND !== 'false'
     });
 
+    console.log(`[SMSExecute] ✓ WISE transfer created | wiseId=${result.transfer.id} | status=${result.transfer.status} | funded=${result.isFunded}`);
+
     // Step 3: Mark token as one-time used
-    await markTokenUsed(
-      token,
-      req.socket?.remoteAddress,
-      req.headers['user-agent']
-    );
+    await markTokenUsed(token, req.socket?.remoteAddress, req.headers['user-agent']);
+    console.log(`[SMSExecute] ✓ Token marked used`);
 
     // Step 4: Update pending transfer record
     await confirmPendingTransfer(transfer.id, result.transfer.id);
+    console.log(`[SMSExecute] ✓ Pending transfer confirmed | pendingId=${transfer.id}`);
 
-    // Step 5: Send confirmation SMS (fire-and-forget — don't fail the response)
+    // Step 5: Log completion to sms_messages_log
+    logExecutionToDb(supabase, transfer, result).catch(err =>
+      console.error('[SMSExecute] Log write failed:', err.message)
+    );
+
+    // Step 6: Send confirmation SMS (fire-and-forget)
+    const completionMsg = buildTransferCompleteMessage(transfer, result.transfer.reference);
     agentPhoneClient
-      .sendMessage(
-        transfer.phone_number,
-        buildTransferCompleteMessage(transfer, result.transfer.reference),
-        null
-      )
-      .catch(err => console.error('[SMSExecute] Confirmation SMS failed:', err.message));
+      .sendMessage(transfer.phone_number, completionMsg, null)
+      .then(() => console.log(`[SMSExecute] ✓ Completion SMS sent to ${transfer.phone_number}`))
+      .catch(err => console.error('[SMSExecute] ✗ Confirmation SMS failed:', err.message));
 
-    console.log('[SMSExecute] Transfer complete:', result.transfer.id);
+    console.log(`[SMSExecute] ✅ Complete | transferId=${result.transfer.id} | ref=${result.transfer.reference}`);
 
     return res.status(200).json({
       success: true,
@@ -125,7 +137,18 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('[SMSExecute] Error:', error.message);
+    console.error('[SMSExecute] ✗ Error:', error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
+}
+
+async function logExecutionToDb(supabase, transfer, result) {
+  await supabase.from('sms_messages_log').insert({
+    user_id: transfer.user_id,
+    phone_number: transfer.phone_number,
+    direction: 'outbound',
+    message_body: `[Transfer executed] WISE ID: ${result.transfer.id} | Ref: ${result.transfer.reference} | Status: ${result.transfer.status}`,
+    channel: 'sms',
+    status: 'executed'
+  });
 }
