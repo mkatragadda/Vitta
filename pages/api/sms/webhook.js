@@ -28,6 +28,16 @@ const {
   resetConversation,
   updateConversationContext
 } = require('../../../services/sms/conversationManager');
+const { createPendingTransfer } = require('../../../services/sms/pendingTransferService');
+const { generateToken, storeToken, buildConfirmationURL } = require('../../../services/sms/transferTokenService');
+const {
+  buildTransferReadyMessage,
+  buildCancellationMessage,
+  buildDisambiguationMessage,
+  buildRecipientNotFoundMessage,
+  buildHelpMessage,
+  buildUnknownMessage
+} = require('../../../services/sms/messageTemplates');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase client
@@ -177,7 +187,6 @@ async function handleIncomingMessage(messageData) {
  * Core intent processing — returns the SMS reply string.
  */
 async function processIntent({ messageBody, phoneNumber, userId, conversationId }) {
-  // Load any active conversation state for this phone
   const conversation = await getConversation(phoneNumber);
   const conversationState = conversation || { state: 'idle', context: {} };
 
@@ -185,10 +194,10 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
 
   console.log('[SMS Webhook] Intent:', intent, '| State:', conversationState.state);
 
-  // --- Handle cancellation at any stage ---
+  // --- Cancellation at any stage ---
   if (intent === 'cancellation') {
     await resetConversation(phoneNumber);
-    return '❌ Transfer cancelled. Let me know if you need anything else.';
+    return buildCancellationMessage();
   }
 
   // --- Disambiguation response ---
@@ -201,13 +210,12 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
     }
 
     const chosen = matches[selection - 1];
-    await setConversationState(phoneNumber, userId, 'ready_for_confirmation', {
-      recipient: chosen,
-      amount,
-      currency
-    }, conversationId);
-
-    return buildTransferReadyPrompt(chosen, amount, currency);
+    return await createTransferAndSendLink({
+      phoneNumber, userId, conversationId,
+      wiseRecipient: chosen,
+      sourceAmount: amount,
+      rawMessage: messageBody
+    });
   }
 
   // --- New transfer intent ---
@@ -221,70 +229,61 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
     const matchResult = await matchRecipient(recipient.value, userId);
 
     if (matchResult.status === 'not_found') {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vitta.app';
-      return (
-        `❌ Couldn't find "${recipient.raw}".\n\n` +
-        `Add them in the Vitta app first:\n` +
-        `👉 ${appUrl}/recipients`
-      );
+      return buildRecipientNotFoundMessage(recipient.raw);
     }
 
     if (matchResult.status === 'multiple') {
-      // Store matches and intent in conversation state for follow-up
       await setConversationState(phoneNumber, userId, 'awaiting_disambiguation', {
         matches: matchResult.matches,
         amount: amount.value,
         currency: amount.currency
       }, conversationId);
 
-      const options = matchResult.matches
-        .map((m, i) => `${i + 1}. ${m.account_holder_name}`)
-        .join('\n');
-
-      return `I found ${matchResult.matches.length} contacts named "${recipient.raw}":\n\n${options}\n\nReply with the number to select.`;
+      return buildDisambiguationMessage(matchResult.matches, recipient.raw);
     }
 
-    // Single match — ready for confirmation (Phase 3 will create the pending transfer here)
-    await setConversationState(phoneNumber, userId, 'ready_for_confirmation', {
-      recipient: matchResult.recipient,
-      amount: amount.value,
-      currency: amount.currency
-    }, conversationId);
-
-    return buildTransferReadyPrompt(matchResult.recipient, amount.value, amount.currency);
+    return await createTransferAndSendLink({
+      phoneNumber, userId, conversationId,
+      wiseRecipient: matchResult.recipient,
+      sourceAmount: amount.value,
+      rawMessage: messageBody
+    });
   }
 
   // --- Help ---
   if (intent === 'help') {
-    return (
-      '💡 Vitta SMS Commands:\n\n' +
-      '• "Send $500 to mom" — initiate a transfer\n' +
-      '• "Cancel" — cancel current transfer\n\n' +
-      'Tip: Add recipients in the Vitta app first.'
-    );
+    return buildHelpMessage();
   }
 
   // --- Unknown ---
   await resetConversation(phoneNumber);
-  return (
-    '🤔 I didn\'t understand that.\n\n' +
-    'Try: "Send $100 to mom"\n' +
-    'Or reply "help" for commands.'
-  );
+  return buildUnknownMessage();
 }
 
 /**
- * Build the "transfer ready" SMS shown before confirmation link.
- * Phase 3 will add the actual confirmation URL.
+ * Creates a pending transfer + token and returns the confirmation SMS.
+ * Extracted so both direct match and disambiguation resolution share the same path.
  */
-function buildTransferReadyPrompt(recipient, amount, currency = 'USD') {
-  return (
-    `💰 Transfer Ready\n\n` +
-    `Amount: $${Number(amount).toFixed(2)} ${currency}\n` +
-    `To: ${recipient.account_holder_name}\n\n` +
-    `⏳ Generating your secure confirmation link... (Phase 3)\n\n` +
-    `Reply "cancel" to abort.`
-  );
+async function createTransferAndSendLink({ phoneNumber, userId, conversationId, wiseRecipient, sourceAmount, rawMessage }) {
+  const pendingTransfer = await createPendingTransfer({
+    userId,
+    phoneNumber,
+    wiseRecipient,
+    sourceAmount,
+    rawMessage
+  });
+
+  const tokenData = generateToken(pendingTransfer);
+  await storeToken(tokenData, pendingTransfer.id, phoneNumber, userId);
+
+  const confirmURL = buildConfirmationURL(tokenData.shortToken);
+
+  await setConversationState(phoneNumber, userId, 'ready_for_confirmation', {
+    pendingTransferId: pendingTransfer.id,
+    shortToken: tokenData.shortToken
+  }, conversationId);
+
+  return buildTransferReadyMessage(pendingTransfer, confirmURL);
 }
 
 /**

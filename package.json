@@ -24,6 +24,7 @@
     "compromise": "^14.14.4",
     "dotenv": "^17.2.3",
     "html5-qrcode": "^2.3.8",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.263.1",
     "next": "14.0.0",
     "pdf-parse": "^1.1.1",
