@@ -26,7 +26,7 @@
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.263.1",
-    "next": "14.0.0",
+    "next": "14.2.35",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^5.4.54",
     "postcss": "^8.4.31",
