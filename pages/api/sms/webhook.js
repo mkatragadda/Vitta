@@ -20,6 +20,14 @@
 
 const webhookVerifier = require('../../../services/agentphone/webhookVerifier');
 const agentPhoneClient = require('../../../services/agentphone/agentphoneClient');
+const { parseIntent } = require('../../../services/sms/smsIntentParser');
+const { matchRecipient } = require('../../../services/sms/recipientMatcher');
+const {
+  getConversation,
+  setConversationState,
+  resetConversation,
+  updateConversationContext
+} = require('../../../services/sms/conversationManager');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase client
@@ -131,7 +139,7 @@ async function handleIncomingMessage(messageData) {
 
   const userId = phoneRecord.user_id;
 
-  // Step 2: Log message to database
+  // Step 2: Log inbound message
   await logMessage({
     conversationId,
     userId,
@@ -143,19 +151,16 @@ async function handleIncomingMessage(messageData) {
     channel: 'sms'
   });
 
-  // Step 3: Process message intent
-  // For Phase 1, just echo back a confirmation
-  const responseMessage = `✅ Message received: "${messageBody}"\n\n` +
-    `SMS integration is active! Intent parsing coming in Phase 2.\n\n` +
-    `Your user ID: ${userId.substring(0, 8)}...`;
-
-  await agentPhoneClient.sendMessage(
+  // Step 3: Parse intent and respond
+  const responseMessage = await processIntent({
+    messageBody,
     phoneNumber,
-    responseMessage,
+    userId,
     conversationId
-  );
+  });
 
-  // Log outbound message
+  await agentPhoneClient.sendMessage(phoneNumber, responseMessage, conversationId);
+
   await logMessage({
     conversationId,
     userId,
@@ -166,6 +171,120 @@ async function handleIncomingMessage(messageData) {
     channel: 'sms',
     status: 'sent'
   });
+}
+
+/**
+ * Core intent processing — returns the SMS reply string.
+ */
+async function processIntent({ messageBody, phoneNumber, userId, conversationId }) {
+  // Load any active conversation state for this phone
+  const conversation = await getConversation(phoneNumber);
+  const conversationState = conversation || { state: 'idle', context: {} };
+
+  const { intent, entities } = parseIntent(messageBody, conversationState);
+
+  console.log('[SMS Webhook] Intent:', intent, '| State:', conversationState.state);
+
+  // --- Handle cancellation at any stage ---
+  if (intent === 'cancellation') {
+    await resetConversation(phoneNumber);
+    return '❌ Transfer cancelled. Let me know if you need anything else.';
+  }
+
+  // --- Disambiguation response ---
+  if (intent === 'disambiguation_response' && conversationState.state === 'awaiting_disambiguation') {
+    const { selection } = entities;
+    const { matches, amount, currency } = conversationState.context;
+
+    if (!matches || selection < 1 || selection > matches.length) {
+      return `Please reply with a number between 1 and ${(matches || []).length}.`;
+    }
+
+    const chosen = matches[selection - 1];
+    await setConversationState(phoneNumber, userId, 'ready_for_confirmation', {
+      recipient: chosen,
+      amount,
+      currency
+    }, conversationId);
+
+    return buildTransferReadyPrompt(chosen, amount, currency);
+  }
+
+  // --- New transfer intent ---
+  if (intent === 'transfer_money') {
+    const { amount, recipient } = entities;
+
+    if (!amount || amount.value <= 0) {
+      return '❌ Invalid amount. Try: "Send $50 to mom"';
+    }
+
+    const matchResult = await matchRecipient(recipient.value, userId);
+
+    if (matchResult.status === 'not_found') {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vitta.app';
+      return (
+        `❌ Couldn't find "${recipient.raw}".\n\n` +
+        `Add them in the Vitta app first:\n` +
+        `👉 ${appUrl}/recipients`
+      );
+    }
+
+    if (matchResult.status === 'multiple') {
+      // Store matches and intent in conversation state for follow-up
+      await setConversationState(phoneNumber, userId, 'awaiting_disambiguation', {
+        matches: matchResult.matches,
+        amount: amount.value,
+        currency: amount.currency
+      }, conversationId);
+
+      const options = matchResult.matches
+        .map((m, i) => `${i + 1}. ${m.account_holder_name}`)
+        .join('\n');
+
+      return `I found ${matchResult.matches.length} contacts named "${recipient.raw}":\n\n${options}\n\nReply with the number to select.`;
+    }
+
+    // Single match — ready for confirmation (Phase 3 will create the pending transfer here)
+    await setConversationState(phoneNumber, userId, 'ready_for_confirmation', {
+      recipient: matchResult.recipient,
+      amount: amount.value,
+      currency: amount.currency
+    }, conversationId);
+
+    return buildTransferReadyPrompt(matchResult.recipient, amount.value, amount.currency);
+  }
+
+  // --- Help ---
+  if (intent === 'help') {
+    return (
+      '💡 Vitta SMS Commands:\n\n' +
+      '• "Send $500 to mom" — initiate a transfer\n' +
+      '• "Cancel" — cancel current transfer\n\n' +
+      'Tip: Add recipients in the Vitta app first.'
+    );
+  }
+
+  // --- Unknown ---
+  await resetConversation(phoneNumber);
+  return (
+    '🤔 I didn\'t understand that.\n\n' +
+    'Try: "Send $100 to mom"\n' +
+    'Or reply "help" for commands.'
+  );
+}
+
+/**
+ * Build the "transfer ready" SMS shown before confirmation link.
+ * Phase 3 will add the actual confirmation URL.
+ */
+function buildTransferReadyPrompt(recipient, amount, currency = 'USD') {
+  return (
+    `💰 Transfer Ready\n\n` +
+    `Amount: $${Number(amount).toFixed(2)} ${currency}\n` +
+    `To: ${recipient.account_holder_name}\n\n` +
+    `⏳ Generating your secure confirmation link... (Phase 3)\n\n` +
+    `Reply "cancel" to abort.`
+  );
 }
 
 /**
