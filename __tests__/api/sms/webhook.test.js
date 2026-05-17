@@ -5,7 +5,8 @@
  *  - Request validation (Phase 1 — preserved)
  *  - Event routing (Phase 1 — preserved)
  *  - Signature verification (Phase 1 — preserved)
- *  - Intent processing via Phase 2 services (new)
+ *  - Intent processing via Phase 2 services (preserved)
+ *  - Pending transfer creation + token generation (Phase 3)
  */
 
 const crypto = require('crypto');
@@ -62,10 +63,41 @@ jest.mock('../../../services/sms/conversationManager', () => ({
   updateConversationContext: jest.fn(() => Promise.resolve())
 }));
 
+// ── Phase 3 service mocks ──────────────────────────────────────────────────────
+jest.mock('../../../services/sms/pendingTransferService', () => ({
+  createPendingTransfer: jest.fn(),
+  getPendingTransfer: jest.fn(),
+  confirmPendingTransfer: jest.fn()
+}));
+
+jest.mock('../../../services/sms/transferTokenService', () => ({
+  generateToken: jest.fn(),
+  storeToken: jest.fn(),
+  validateToken: jest.fn(),
+  markTokenUsed: jest.fn(),
+  buildConfirmationURL: jest.fn()
+}));
+
+jest.mock('../../../services/sms/messageTemplates', () => ({
+  buildTransferReadyMessage: jest.fn(),
+  buildTransferCompleteMessage: jest.fn(),
+  buildDisambiguationMessage: jest.fn(),
+  buildRecipientNotFoundMessage: jest.fn(),
+  buildCancellationMessage: jest.fn(),
+  buildUnknownMessage: jest.fn(),
+  buildHelpMessage: jest.fn()
+}));
+
 const agentPhoneClient = require('../../../services/agentphone/agentphoneClient');
 const { parseIntent } = require('../../../services/sms/smsIntentParser');
 const { matchRecipient } = require('../../../services/sms/recipientMatcher');
 const { getConversation, setConversationState, resetConversation } = require('../../../services/sms/conversationManager');
+const { createPendingTransfer } = require('../../../services/sms/pendingTransferService');
+const { generateToken, storeToken, buildConfirmationURL } = require('../../../services/sms/transferTokenService');
+const {
+  buildTransferReadyMessage, buildCancellationMessage, buildDisambiguationMessage,
+  buildRecipientNotFoundMessage, buildHelpMessage, buildUnknownMessage
+} = require('../../../services/sms/messageTemplates');
 
 const handler = require('../../../pages/api/sms/webhook').default;
 
@@ -120,12 +152,31 @@ describe('SMS Webhook Handler', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Safe defaults for Phase 2 mocks
+    // Phase 2 defaults
     parseIntent.mockReturnValue({ intent: 'unknown', confidence: 0, entities: {} });
     matchRecipient.mockResolvedValue({ status: 'not_found' });
     getConversation.mockResolvedValue(null);
     setConversationState.mockResolvedValue({ id: 'conv_001', state: 'idle' });
     resetConversation.mockResolvedValue();
+    // Phase 3 defaults
+    createPendingTransfer.mockResolvedValue({
+      id: 'pt_001', user_id: 'user_123', source_amount: 500,
+      source_currency: 'USD', wise_recipient_id: 'rec_001',
+      wise_recipient: mockRecipient, status: 'pending'
+    });
+    generateToken.mockReturnValue({
+      shortToken: 'xYz9K12A', tokenHash: 'abc123hash',
+      fullToken: 'jwt.token.here',
+      expiresAt: new Date(Date.now() + 900_000)
+    });
+    storeToken.mockResolvedValue('xYz9K12A');
+    buildConfirmationURL.mockReturnValue('https://vitta.app/transfer/confirm/xYz9K12A');
+    buildTransferReadyMessage.mockReturnValue('💰 Transfer Ready\n\nhttps://vitta.app/transfer/confirm/xYz9K12A');
+    buildCancellationMessage.mockReturnValue('❌ Transfer cancelled.');
+    buildDisambiguationMessage.mockReturnValue('Found 2 contacts. Reply 1 or 2.');
+    buildRecipientNotFoundMessage.mockReturnValue('❌ Not found.');
+    buildHelpMessage.mockReturnValue('💡 Help message.');
+    buildUnknownMessage.mockReturnValue("🤔 I didn't understand that.");
   });
 
   // ── Phase 1: Request Validation (preserved) ──────────────────────────────
@@ -219,7 +270,7 @@ describe('SMS Webhook Handler', () => {
   describe('Intent Processing (Phase 2)', () => {
 
     describe('transfer_money — single recipient match', () => {
-      it('sends transfer-ready SMS and stores ready_for_confirmation state', async () => {
+      it('matches recipient, creates pending transfer, and sends confirmation link', async () => {
         parseIntent.mockReturnValue({
           intent: 'transfer_money',
           confidence: 0.95,
@@ -235,21 +286,21 @@ describe('SMS Webhook Handler', () => {
 
         expect(res.status).toHaveBeenCalledWith(200);
         expect(matchRecipient).toHaveBeenCalledWith('mom', 'user_123');
+        // Phase 3: pending transfer created
+        expect(createPendingTransfer).toHaveBeenCalled();
+        // Phase 3: state stored with token info (not raw recipient)
         expect(setConversationState).toHaveBeenCalledWith(
           '+1234567890', 'user_123', 'ready_for_confirmation',
-          expect.objectContaining({ recipient: mockRecipient, amount: 500 }),
+          { pendingTransferId: 'pt_001', shortToken: 'xYz9K12A' },
           'conv_456'
         );
-
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/Transfer Ready/i);
-        expect(sentMsg).toMatch(/Maria Garcia/);
-        expect(sentMsg).toMatch(/500\.00/);
+        // Phase 3: template used
+        expect(buildTransferReadyMessage).toHaveBeenCalled();
       });
     });
 
     describe('transfer_money — multiple recipient matches', () => {
-      it('sends disambiguation prompt and stores awaiting_disambiguation state', async () => {
+      it('stores disambiguation state and calls buildDisambiguationMessage', async () => {
         parseIntent.mockReturnValue({
           intent: 'transfer_money',
           confidence: 0.95,
@@ -275,16 +326,14 @@ describe('SMS Webhook Handler', () => {
           expect.objectContaining({ amount: 100, matches: expect.any(Array) }),
           'conv_456'
         );
-
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/found 2 contacts/i);
-        expect(sentMsg).toMatch(/Maria Garcia/);
-        expect(sentMsg).toMatch(/Maria Lopez/);
+        expect(buildDisambiguationMessage).toHaveBeenCalled();
+        // No pending transfer created at disambiguation stage
+        expect(createPendingTransfer).not.toHaveBeenCalled();
       });
     });
 
     describe('transfer_money — recipient not found', () => {
-      it('sends not-found error SMS', async () => {
+      it('calls buildRecipientNotFoundMessage with recipient name', async () => {
         parseIntent.mockReturnValue({
           intent: 'transfer_money',
           confidence: 0.95,
@@ -298,14 +347,13 @@ describe('SMS Webhook Handler', () => {
         const res = makeRes();
         await handler(makeReq(inboundPayload('Send $50 to stranger')), res);
 
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/couldn't find/i);
-        expect(sentMsg).toMatch(/stranger/i);
+        expect(buildRecipientNotFoundMessage).toHaveBeenCalledWith('stranger');
+        expect(createPendingTransfer).not.toHaveBeenCalled();
       });
     });
 
     describe('disambiguation_response', () => {
-      it('resolves to correct recipient when user replies with a number', async () => {
+      it('creates pending transfer for chosen recipient after disambiguation', async () => {
         getConversation.mockResolvedValue({
           state: 'awaiting_disambiguation',
           context: {
@@ -326,54 +374,46 @@ describe('SMS Webhook Handler', () => {
         const res = makeRes();
         await handler(makeReq(inboundPayload('1')), res);
 
-        expect(setConversationState).toHaveBeenCalledWith(
-          '+1234567890', 'user_123', 'ready_for_confirmation',
-          expect.objectContaining({ amount: 100, recipient: expect.objectContaining({ account_holder_name: 'Maria Garcia' }) }),
-          'conv_456'
-        );
-
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/Transfer Ready/i);
-        expect(sentMsg).toMatch(/Maria Garcia/);
+        expect(createPendingTransfer).toHaveBeenCalledWith(expect.objectContaining({
+          wiseRecipient: expect.objectContaining({ account_holder_name: 'Maria Garcia' }),
+          sourceAmount: 100
+        }));
+        expect(buildTransferReadyMessage).toHaveBeenCalled();
       });
     });
 
     describe('cancellation', () => {
-      it('resets conversation and sends cancellation confirmation', async () => {
+      it('resets conversation and calls buildCancellationMessage', async () => {
         parseIntent.mockReturnValue({ intent: 'cancellation', confidence: 1.0, entities: {} });
 
         const res = makeRes();
         await handler(makeReq(inboundPayload('cancel')), res);
 
         expect(resetConversation).toHaveBeenCalledWith('+1234567890');
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/cancelled/i);
+        expect(buildCancellationMessage).toHaveBeenCalled();
       });
     });
 
     describe('help', () => {
-      it('sends help message', async () => {
+      it('calls buildHelpMessage', async () => {
         parseIntent.mockReturnValue({ intent: 'help', confidence: 1.0, entities: {} });
 
         const res = makeRes();
         await handler(makeReq(inboundPayload('help')), res);
 
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/commands/i);
-        expect(sentMsg).toMatch(/Send \$500 to mom/i);
+        expect(buildHelpMessage).toHaveBeenCalled();
       });
     });
 
     describe('unknown intent', () => {
-      it('sends guidance message and resets conversation', async () => {
+      it('resets conversation and calls buildUnknownMessage', async () => {
         parseIntent.mockReturnValue({ intent: 'unknown', confidence: 0, entities: {} });
 
         const res = makeRes();
         await handler(makeReq(inboundPayload('blah blah')), res);
 
         expect(resetConversation).toHaveBeenCalled();
-        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
-        expect(sentMsg).toMatch(/didn't understand/i);
+        expect(buildUnknownMessage).toHaveBeenCalled();
       });
     });
 
@@ -385,6 +425,192 @@ describe('SMS Webhook Handler', () => {
         await handler(makeReq(inboundPayload('test')), res);
 
         expect(res.status).toHaveBeenCalledWith(200);
+      });
+    });
+  });
+
+  // ── Phase 3: Pending Transfer + Token Generation ──────────────────────────
+
+  describe('Phase 3: Pending transfer creation', () => {
+
+    describe('transfer_money — creates pending transfer and sends real link', () => {
+      it('calls createPendingTransfer with correct params', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money',
+          confidence: 0.95,
+          entities: {
+            amount: { value: 500, currency: 'USD', raw: '500' },
+            recipient: { value: 'mom', raw: 'mom' }
+          }
+        });
+        matchRecipient.mockResolvedValue({ status: 'matched', recipient: mockRecipient, matchType: 'nickname' });
+
+        await handler(makeReq(inboundPayload('Send $500 to mom')), makeRes());
+
+        expect(createPendingTransfer).toHaveBeenCalledWith(expect.objectContaining({
+          userId: 'user_123',
+          phoneNumber: '+1234567890',
+          wiseRecipient: mockRecipient,
+          sourceAmount: 500,
+          rawMessage: 'Send $500 to mom'
+        }));
+      });
+
+      it('generates and stores a JWT token', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money',
+          confidence: 0.95,
+          entities: {
+            amount: { value: 500, currency: 'USD', raw: '500' },
+            recipient: { value: 'mom', raw: 'mom' }
+          }
+        });
+        matchRecipient.mockResolvedValue({ status: 'matched', recipient: mockRecipient, matchType: 'nickname' });
+
+        await handler(makeReq(inboundPayload('Send $500 to mom')), makeRes());
+
+        expect(generateToken).toHaveBeenCalled();
+        expect(storeToken).toHaveBeenCalledWith(
+          expect.objectContaining({ shortToken: 'xYz9K12A' }),
+          'pt_001', '+1234567890', 'user_123'
+        );
+      });
+
+      it('sends SMS with confirmation URL from buildTransferReadyMessage', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money',
+          confidence: 0.95,
+          entities: {
+            amount: { value: 500, currency: 'USD', raw: '500' },
+            recipient: { value: 'mom', raw: 'mom' }
+          }
+        });
+        matchRecipient.mockResolvedValue({ status: 'matched', recipient: mockRecipient, matchType: 'nickname' });
+
+        await handler(makeReq(inboundPayload('Send $500 to mom')), makeRes());
+
+        expect(buildConfirmationURL).toHaveBeenCalledWith('xYz9K12A');
+        expect(buildTransferReadyMessage).toHaveBeenCalled();
+        const sentMsg = agentPhoneClient.sendMessage.mock.calls[0][1];
+        expect(sentMsg).toContain('https://vitta.app/transfer/confirm/xYz9K12A');
+      });
+
+      it('stores ready_for_confirmation state with pendingTransferId and shortToken', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money',
+          confidence: 0.95,
+          entities: {
+            amount: { value: 500, currency: 'USD', raw: '500' },
+            recipient: { value: 'mom', raw: 'mom' }
+          }
+        });
+        matchRecipient.mockResolvedValue({ status: 'matched', recipient: mockRecipient, matchType: 'nickname' });
+
+        await handler(makeReq(inboundPayload('Send $500 to mom')), makeRes());
+
+        expect(setConversationState).toHaveBeenCalledWith(
+          '+1234567890', 'user_123', 'ready_for_confirmation',
+          { pendingTransferId: 'pt_001', shortToken: 'xYz9K12A' },
+          'conv_456'
+        );
+      });
+    });
+
+    describe('transfer_money — pending transfer failure is handled gracefully', () => {
+      it('returns 200 even when createPendingTransfer throws', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money',
+          confidence: 0.95,
+          entities: {
+            amount: { value: 500, currency: 'USD', raw: '500' },
+            recipient: { value: 'mom', raw: 'mom' }
+          }
+        });
+        matchRecipient.mockResolvedValue({ status: 'matched', recipient: mockRecipient, matchType: 'nickname' });
+        createPendingTransfer.mockRejectedValue(new Error('WISE API down'));
+
+        const res = makeRes();
+        await handler(makeReq(inboundPayload('Send $500 to mom')), res);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+    });
+
+    describe('disambiguation → creates pending transfer after selection', () => {
+      it('calls createPendingTransfer with the chosen recipient', async () => {
+        const match1 = { ...mockRecipient, account_holder_name: 'Maria Garcia' };
+        const match2 = { ...mockRecipient, id: 'rec_002', account_holder_name: 'Maria Lopez' };
+
+        getConversation.mockResolvedValue({
+          state: 'awaiting_disambiguation',
+          context: { matches: [match1, match2], amount: 100, currency: 'USD' }
+        });
+        parseIntent.mockReturnValue({
+          intent: 'disambiguation_response',
+          confidence: 1.0,
+          entities: { selection: 2 }
+        });
+
+        await handler(makeReq(inboundPayload('2')), makeRes());
+
+        expect(createPendingTransfer).toHaveBeenCalledWith(expect.objectContaining({
+          wiseRecipient: match2,
+          sourceAmount: 100
+        }));
+      });
+    });
+
+    describe('message templates are used (not hardcoded strings)', () => {
+      it('uses buildCancellationMessage for cancel intent', async () => {
+        parseIntent.mockReturnValue({ intent: 'cancellation', confidence: 1.0, entities: {} });
+
+        await handler(makeReq(inboundPayload('cancel')), makeRes());
+
+        expect(buildCancellationMessage).toHaveBeenCalled();
+      });
+
+      it('uses buildHelpMessage for help intent', async () => {
+        parseIntent.mockReturnValue({ intent: 'help', confidence: 1.0, entities: {} });
+
+        await handler(makeReq(inboundPayload('help')), makeRes());
+
+        expect(buildHelpMessage).toHaveBeenCalled();
+      });
+
+      it('uses buildUnknownMessage for unknown intent', async () => {
+        parseIntent.mockReturnValue({ intent: 'unknown', confidence: 0, entities: {} });
+
+        await handler(makeReq(inboundPayload('gibberish')), makeRes());
+
+        expect(buildUnknownMessage).toHaveBeenCalled();
+      });
+
+      it('uses buildRecipientNotFoundMessage when no match', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money', confidence: 0.95,
+          entities: { amount: { value: 50, currency: 'USD', raw: '50' }, recipient: { value: 'ghost', raw: 'ghost' } }
+        });
+        matchRecipient.mockResolvedValue({ status: 'not_found' });
+
+        await handler(makeReq(inboundPayload('Send $50 to ghost')), makeRes());
+
+        expect(buildRecipientNotFoundMessage).toHaveBeenCalledWith('ghost');
+      });
+
+      it('uses buildDisambiguationMessage for multiple matches', async () => {
+        parseIntent.mockReturnValue({
+          intent: 'transfer_money', confidence: 0.95,
+          entities: { amount: { value: 100, currency: 'USD', raw: '100' }, recipient: { value: 'maria', raw: 'Maria' } }
+        });
+        matchRecipient.mockResolvedValue({
+          status: 'multiple',
+          matches: [mockRecipient, { ...mockRecipient, id: 'rec_002' }],
+          matchType: 'name'
+        });
+
+        await handler(makeReq(inboundPayload('Send $100 to Maria')), makeRes());
+
+        expect(buildDisambiguationMessage).toHaveBeenCalled();
       });
     });
   });
