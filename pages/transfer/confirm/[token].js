@@ -197,7 +197,7 @@ export default function TransferConfirmPage() {
               <div className="flex flex-col items-center py-8 gap-3">
                 <Spinner />
                 <p className="text-gray-700 font-medium">Processing transfer…</p>
-                <p className="text-gray-400 text-xs">Please don't close this page</p>
+                <p className="text-gray-400 text-xs">Please don&apos;t close this page</p>
               </div>
             </Card>
           )}
@@ -219,7 +219,7 @@ export default function TransferConfirmPage() {
                   </div>
                 )}
                 <p className="text-xs text-gray-400 mt-2">
-                  You'll receive an SMS confirmation shortly.
+                  You&apos;ll receive an SMS confirmation shortly.
                 </p>
               </div>
             </Card>
