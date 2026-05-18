@@ -31,7 +31,7 @@ const { validateToken, markTokenUsed } = require('../../../../services/sms/trans
 const { confirmPendingTransfer } = require('../../../../services/sms/pendingTransferService');
 const { buildTransferCompleteMessage } = require('../../../../services/sms/messageTemplates');
 const agentPhoneClient = require('../../../../services/agentphone/agentphoneClient');
-const spongeWallet = require('../../../../services/sponge/spongeWalletService');
+// const spongeWallet = require('../../../../services/sponge/spongeWalletService'); // disabled
 
 const environment = process.env.WISE_ENVIRONMENT || 'sandbox';
 const isLive = environment === 'live' || environment === 'production';
@@ -72,22 +72,9 @@ export default async function handler(req, res) {
 
     console.log(`[SMSExecute] ✓ Token valid | transfer=${transfer.id} | user=${transfer.user_id} | amount=$${transfer.source_amount} → ${recipient.account_holder_name}`);
 
-    // ── Step 2: Sponge Wallet — on-chain USDC authorization ──────────────────
-    // Transfer USD-equivalent USDC from the AI agent wallet to the founder's
-    // Coinbase address. This is the "on-chain green light" that proves agentic
-    // spending power before the Wise payout fires.
-    if (!spongeWallet.isConfigured()) {
-      console.error('[SMSExecute] ✗ Sponge Wallet not configured (SPONGE_API_KEY / SPONGE_COINBASE_DESTINATION_ADDRESS missing)');
-      return res.status(500).json({ success: false, error: 'On-chain authorization service not configured' });
-    }
-
-    console.log(`[SMSExecute] ▶ Sponge: transferring $${transfer.source_amount} USDC on Base`);
-    const spongeResult = await spongeWallet.transferUSDC({
-      amountUSD:  transfer.source_amount,
-      upiId:      recipient.upi_id,
-      transferId: transfer.id,
-    });
-    console.log(`[SMSExecute] ✓ Sponge on-chain auth | txHash=${spongeResult.txHash}`);
+    // ── Step 2: Sponge Wallet — DISABLED ─────────────────────────────────────
+    const spongeResult = { txHash: null };
+    console.log('[SMSExecute] ▶ Sponge on-chain step skipped (disabled)');
 
     // ── Step 3: Wise — INR payout to UPI ─────────────────────────────────────
     if (!wiseConfig.apiKey || !wiseConfig.profileId) {
