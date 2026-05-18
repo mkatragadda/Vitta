@@ -41,10 +41,10 @@ const {
 } = require('../../../services/sms/messageTemplates');
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client
+// Use service role key for server-side inserts — bypasses RLS
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 /**
@@ -93,9 +93,21 @@ export default async function handler(req, res) {
     // Step 5: Handle different event types
     switch (event) {
       case 'message.received':
-        console.log(`[SMS Webhook] ▶ message.received | from=${data.from} | msgId=${data.id}`);
-        await handleIncomingMessage(data);
+      case 'agent.message': {
+        // agent.message uses: content instead of body, from_number instead of from
+        const normalized = {
+          id:              data.id || data.message_id,
+          conversation_id: data.conversation_id,
+          from:            data.from || data.from_number || data.phone_number,
+          body:            data.body || data.content || data.text || data.message,
+          channel:         data.channel || 'sms',
+          created_at:      data.created_at,
+        };
+        console.log(`[SMS Webhook] ▶ ${event} | from=${normalized.from} | msgId=${normalized.id}`);
+        console.log(`[SMS Webhook]   Payload keys: ${Object.keys(data).join(', ')}`);
+        await handleIncomingMessage(normalized);
         break;
+      }
 
       case 'message.sent':
         console.log(`[SMS Webhook] ✓ message.sent | msgId=${data.id}`);
@@ -106,7 +118,7 @@ export default async function handler(req, res) {
         break;
 
       default:
-        console.log(`[SMS Webhook] ⚠ Unhandled event: ${event}`);
+        console.log(`[SMS Webhook] ⚠ Unhandled event: ${event} | keys: ${Object.keys(data).join(', ')}`);
     }
 
     // Step 6: Log webhook to database
