@@ -88,6 +88,24 @@ async function setConversationState(phoneNumber, userId, state, context = {}, ag
     .single();
 
   if (insertError) {
+    // Race condition: a concurrent request inserted between our UPDATE check and INSERT.
+    // Retry the UPDATE against the row that now exists.
+    if (insertError.code === '23505') {
+      const { data: retried, error: retryError } = await supabase
+        .from('sms_conversations')
+        .update(record)
+        .eq('phone_number', phoneNumber)
+        .neq('state', 'idle')
+        .select()
+        .maybeSingle();
+
+      if (retryError) {
+        console.error('[ConversationManager] setConversationState retry error:', retryError.message);
+        throw retryError;
+      }
+      if (retried) return retried;
+    }
+
     console.error('[ConversationManager] setConversationState insert error:', insertError.message);
     throw insertError;
   }
