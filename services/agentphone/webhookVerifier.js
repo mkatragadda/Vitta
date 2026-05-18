@@ -1,114 +1,124 @@
 /**
  * AgentPhone Webhook Signature Verifier
  *
- * AgentPhone signs webhooks using HMAC-SHA256 over the concatenation:
- *   signedString = "{timestamp}.{rawBody}"
+ * AgentPhone signs: HMAC-SHA256("{timestamp}.{rawBody}", secret)
+ * Headers: X-Webhook-Signature (sha256=<hex>), X-Webhook-Timestamp
  *
- * Headers sent by AgentPhone:
- *   X-Webhook-Signature : sha256=<hex_digest>
- *   X-Webhook-Timestamp : <unix seconds>
- *   X-Webhook-ID        : <unique delivery id>
- *   X-Webhook-Event     : <event type>
- *
- * Set SKIP_WEBHOOK_SIGNATURE=true to bypass for local development.
+ * Set SKIP_WEBHOOK_SIGNATURE=true to bypass in development.
  */
 
 const crypto = require('crypto');
 
-const REPLAY_WINDOW_SECONDS = 300; // 5 minutes
+const REPLAY_WINDOW_SECONDS = 300;
 
 class WebhookVerifier {
   constructor() {
-    const raw = process.env.AGENTPHONE_WEBHOOK_SECRET || '';
+    const raw = (process.env.AGENTPHONE_WEBHOOK_SECRET || '').trim();
     this.skip = process.env.SKIP_WEBHOOK_SIGNATURE === 'true';
 
     if (this.skip) {
-      console.warn('[WebhookVerifier] ⚠️  Signature verification DISABLED (SKIP_WEBHOOK_SIGNATURE=true)');
+      console.warn('[WebhookVerifier] ⚠️  Verification DISABLED (SKIP_WEBHOOK_SIGNATURE=true)');
     }
 
     if (!raw) {
       console.warn('[WebhookVerifier] AGENTPHONE_WEBHOOK_SECRET not set');
-      this.secret = null;
+      this.secretRaw      = null;
+      this.secretStripped = null;
+      this.secretDecoded  = null;
       return;
     }
 
-    // Use secret as-is (plain UTF-8) — no base64 decoding
-    this.secret = raw;
-    console.log('[WebhookVerifier] Initialized: secret configured, length=' + raw.length);
+    const stripped = raw.startsWith('whsec_') ? raw.slice(6) : raw;
+
+    this.secretRaw      = raw;                              // full string e.g. "whsec_XYZ"
+    this.secretStripped = stripped;                         // part after whsec_
+    try { this.secretDecoded = Buffer.from(stripped, 'base64'); } catch { this.secretDecoded = null; }
+
+    console.log(`[WebhookVerifier] Initialized | secretLen=${raw.length} | hasPrefix=${raw.startsWith('whsec_')}`);
   }
 
-  /**
-   * Verify an inbound AgentPhone webhook request.
-   * @param {Object} req           - Next.js request object
-   * @param {string} rawBodyString - Raw request body (bodyParser must be disabled)
-   * @returns {boolean}
-   */
   verifyRequest(req, rawBodyString) {
-    if (this.skip) {
-      console.warn('[WebhookVerifier] ⚠️  Skipping — returning true for demo');
-      return true;
-    }
+    if (this.skip) return true;
 
-    if (!this.secret) {
-      console.error('[WebhookVerifier] Cannot verify — AGENTPHONE_WEBHOOK_SECRET not set');
+    if (!this.secretRaw) {
+      console.error('[WebhookVerifier] Cannot verify — secret not set');
       return false;
     }
 
-    const signatureHeader = req.headers['x-webhook-signature'];
-    const timestampHeader = req.headers['x-webhook-timestamp'];
+    const sigHeader = req.headers['x-webhook-signature'];
+    const tsHeader  = req.headers['x-webhook-timestamp'];
 
-    if (!signatureHeader) {
-      console.error('[WebhookVerifier] Missing x-webhook-signature header');
+    if (!sigHeader) {
+      console.error('[WebhookVerifier] Missing x-webhook-signature');
+      console.error('[WebhookVerifier] Headers present:', Object.keys(req.headers).join(', '));
       return false;
     }
 
-    if (!timestampHeader) {
-      console.error('[WebhookVerifier] Missing x-webhook-timestamp header');
-      return false;
+    // Replay attack protection
+    if (tsHeader) {
+      const ts  = parseInt(tsHeader, 10);
+      const age = Math.floor(Date.now() / 1000) - ts;
+      if (isNaN(ts) || age > REPLAY_WINDOW_SECONDS || age < -60) {
+        console.error(`[WebhookVerifier] Timestamp rejected: age=${age}s`);
+        return false;
+      }
     }
 
-    // Reject stale webhooks (replay attack protection)
-    const timestamp = parseInt(timestampHeader, 10);
-    const now = Math.floor(Date.now() / 1000);
-    const age = now - timestamp;
+    // Extract hex digest from "sha256=<hex>" or plain "<hex>"
+    const received = sigHeader.includes('=')
+      ? sigHeader.split('=').slice(1).join('=').toLowerCase()
+      : sigHeader.toLowerCase();
 
-    if (isNaN(timestamp) || age > REPLAY_WINDOW_SECONDS || age < -60) {
-      console.error(`[WebhookVerifier] Timestamp rejected: age=${age}s (window=±${REPLAY_WINDOW_SECONDS}s)`);
-      return false;
+    // Try all 6 combinations: 2 payloads × 3 key formats
+    const payloads = {
+      'timestamp.body': tsHeader ? `${tsHeader}.${rawBodyString}` : null,
+      'body only':      rawBodyString,
+    };
+    const keys = {
+      'raw':     this.secretRaw      ? Buffer.from(this.secretRaw)      : null,
+      'stripped': this.secretStripped ? Buffer.from(this.secretStripped) : null,
+      'decoded': this.secretDecoded,
+    };
+
+    for (const [payloadLabel, payload] of Object.entries(payloads)) {
+      if (!payload) continue;
+      for (const [keyLabel, key] of Object.entries(keys)) {
+        if (!key) continue;
+        const computed = this._hmac(payload, key);
+        if (this._safeEqual(received, computed)) {
+          console.log(`[WebhookVerifier] ✓ Verified | payload="${payloadLabel}" | key="${keyLabel}"`);
+          return true;
+        }
+      }
     }
 
-    // Extract hex digest — supports "sha256=<hex>" and plain "<hex>"
-    const receivedDigest = signatureHeader.includes('=')
-      ? signatureHeader.split('=').slice(1).join('=')
-      : signatureHeader;
+    // All 6 failed — log everything needed to diagnose
+    console.error('[WebhookVerifier] ✗ Signature mismatch — all 6 combinations failed');
+    console.error('[WebhookVerifier] Received                         :', received);
+    console.error('[WebhookVerifier] Timestamp header                 :', tsHeader || 'MISSING');
+    console.error('[WebhookVerifier] Raw body length                  :', rawBodyString.length);
+    console.error('[WebhookVerifier] Raw body (first 80 chars)        :', rawBodyString.slice(0, 80));
+    for (const [payloadLabel, payload] of Object.entries(payloads)) {
+      if (!payload) continue;
+      for (const [keyLabel, key] of Object.entries(keys)) {
+        if (!key) continue;
+        console.error(`[WebhookVerifier] Computed [${payloadLabel}][${keyLabel}]:`, this._hmac(payload, key));
+      }
+    }
 
-    // Signed payload is: "{timestamp}.{rawBody}"
-    const signedString = `${timestampHeader}.${rawBodyString}`;
-    const computed = crypto
-      .createHmac('sha256', this.secret)
-      .update(signedString)
-      .digest('hex');
+    return false;
+  }
 
-    let matched = false;
+  _hmac(payload, key) {
+    return crypto.createHmac('sha256', key).update(payload).digest('hex');
+  }
+
+  _safeEqual(a, b) {
     try {
-      matched = crypto.timingSafeEqual(
-        Buffer.from(receivedDigest.toLowerCase(), 'hex'),
-        Buffer.from(computed, 'hex')
-      );
+      return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
     } catch {
-      matched = false;
+      return false;
     }
-
-    if (!matched) {
-      console.error('[WebhookVerifier] Signature mismatch');
-      console.error('[WebhookVerifier] Received :', receivedDigest);
-      console.error('[WebhookVerifier] Computed :', computed);
-      console.error('[WebhookVerifier] Timestamp:', timestampHeader);
-    } else {
-      console.log('[WebhookVerifier] ✓ Signature verified');
-    }
-
-    return matched;
   }
 }
 
