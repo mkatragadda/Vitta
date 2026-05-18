@@ -25,8 +25,9 @@ function buildTransferReadyMessage(transfer, confirmURL) {
     `Amount: $${Number(source_amount).toFixed(2)} ${source_currency}\n` +
     `To: ${recipientName}\n` +
     `Account: ${accountHint}\n\n` +
-    `Tap to review & confirm:\n` +
+    `Tap to confirm:\n` +
     `👉 ${confirmURL}\n\n` +
+    `On confirm: USDC authorized on Base → INR sent via Wise\n` +
     `Link expires in 15 minutes`
   );
 }
@@ -36,15 +37,20 @@ function buildTransferReadyMessage(transfer, confirmURL) {
  *
  * @param {Object} transfer - pending_sms_transfers row joined with wise_recipient
  * @param {string} reference - WISE transfer reference number
+ * @param {string} txHash - Sponge on-chain transaction hash
  */
-function buildTransferCompleteMessage(transfer, reference) {
-  const { source_amount, source_currency = 'USD', wise_recipient } = transfer;
+function buildTransferCompleteMessage(transfer, reference, txHash) {
+  const { source_amount, source_currency = 'USD', target_amount, target_currency = 'INR', wise_recipient } = transfer;
   const time = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const shortTx = txHash ? `${txHash.slice(0, 6)}...${txHash.slice(-4)}` : null;
 
   return (
     `✅ Transfer Complete!\n\n` +
-    `$${Number(source_amount).toFixed(2)} ${source_currency} sent to ${wise_recipient.account_holder_name}\n` +
-    `Reference: ${reference}\n` +
+    `Sent: $${Number(source_amount).toFixed(2)} ${source_currency}\n` +
+    `Recipient gets: ₹${Number(target_amount).toFixed(0)} ${target_currency}\n` +
+    `To: ${wise_recipient.account_holder_name}\n` +
+    `Wise Ref: ${reference}\n` +
+    (shortTx ? `On-chain: ${shortTx}\n` : '') +
     `Time: ${time}\n\n` +
     `View receipt: ${APP_URL()}/receipt/${transfer.id}`
   );

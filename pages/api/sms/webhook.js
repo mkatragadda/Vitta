@@ -63,7 +63,7 @@ export default async function handler(req, res) {
     const rawBody = await getRawBody(req);
     const rawBodyString = rawBody.toString('utf8');
 
-    // Step 2: Verify Svix signature (webhook-id + webhook-timestamp + body)
+    // Step 2: Verify HMAC-SHA256 signature from x-webhook-signature header
     const isValid = webhookVerifier.verifyRequest(req, rawBodyString);
 
     if (!isValid) {

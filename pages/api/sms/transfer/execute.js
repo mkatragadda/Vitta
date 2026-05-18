@@ -31,6 +31,7 @@ const { validateToken, markTokenUsed } = require('../../../../services/sms/trans
 const { confirmPendingTransfer } = require('../../../../services/sms/pendingTransferService');
 const { buildTransferCompleteMessage } = require('../../../../services/sms/messageTemplates');
 const agentPhoneClient = require('../../../../services/agentphone/agentphoneClient');
+const spongeWallet = require('../../../../services/sponge/spongeWalletService');
 
 const environment = process.env.WISE_ENVIRONMENT || 'sandbox';
 const isLive = environment === 'live' || environment === 'production';
@@ -71,7 +72,24 @@ export default async function handler(req, res) {
 
     console.log(`[SMSExecute] ✓ Token valid | transfer=${transfer.id} | user=${transfer.user_id} | amount=$${transfer.source_amount} → ${recipient.account_holder_name}`);
 
-    // Step 2: Execute WISE transfer — reuse the pre-created quote
+    // ── Step 2: Sponge Wallet — on-chain USDC authorization ──────────────────
+    // Transfer USD-equivalent USDC from the AI agent wallet to the founder's
+    // Coinbase address. This is the "on-chain green light" that proves agentic
+    // spending power before the Wise payout fires.
+    if (!spongeWallet.isConfigured()) {
+      console.error('[SMSExecute] ✗ Sponge Wallet not configured (SPONGE_API_KEY / SPONGE_COINBASE_DESTINATION_ADDRESS missing)');
+      return res.status(500).json({ success: false, error: 'On-chain authorization service not configured' });
+    }
+
+    console.log(`[SMSExecute] ▶ Sponge: transferring $${transfer.source_amount} USDC on Base`);
+    const spongeResult = await spongeWallet.transferUSDC({
+      amountUSD:  transfer.source_amount,
+      upiId:      recipient.upi_id,
+      transferId: transfer.id,
+    });
+    console.log(`[SMSExecute] ✓ Sponge on-chain auth | txHash=${spongeResult.txHash}`);
+
+    // ── Step 3: Wise — INR payout to UPI ─────────────────────────────────────
     if (!wiseConfig.apiKey || !wiseConfig.profileId) {
       console.error('[SMSExecute] ✗ WISE API not configured');
       return res.status(500).json({ success: false, error: 'WISE API not configured' });
@@ -93,47 +111,48 @@ export default async function handler(req, res) {
     });
 
     const reference = `SMS-${transfer.id.substring(0, 8).toUpperCase()}`;
-    console.log(`[SMSExecute] ▶ Calling WISE | quoteId=${transfer.wise_quote_id} | ref=${reference} | autoFund=${process.env.WISE_AUTO_FUND !== 'false'}`);
+    console.log(`[SMSExecute] ▶ Wise: INR payout | quoteId=${transfer.wise_quote_id} | ref=${reference}`);
 
     const result = await orchestrator.executeTransfer({
-      userId: transfer.user_id,
-      quoteId: transfer.wise_quote_id,
-      upiId: recipient.upi_id,
+      userId:    transfer.user_id,
+      quoteId:   transfer.wise_quote_id,
+      upiId:     recipient.upi_id,
       payeeName: recipient.account_holder_name,
       reference,
-      autoFund: process.env.WISE_AUTO_FUND !== 'false'
+      autoFund:  process.env.WISE_AUTO_FUND !== 'false',
     });
 
-    console.log(`[SMSExecute] ✓ WISE transfer created | wiseId=${result.transfer.id} | status=${result.transfer.status} | funded=${result.isFunded}`);
+    console.log(`[SMSExecute] ✓ Wise transfer created | wiseId=${result.transfer.id} | status=${result.transfer.status} | funded=${result.isFunded}`);
 
-    // Step 3: Mark token as one-time used
+    // ── Step 4: Mark token as one-time used ───────────────────────────────────
     await markTokenUsed(token, req.socket?.remoteAddress, req.headers['user-agent']);
     console.log(`[SMSExecute] ✓ Token marked used`);
 
-    // Step 4: Update pending transfer record
+    // ── Step 5: Update pending transfer record ────────────────────────────────
     await confirmPendingTransfer(transfer.id, result.transfer.id);
     console.log(`[SMSExecute] ✓ Pending transfer confirmed | pendingId=${transfer.id}`);
 
-    // Step 5: Log completion to sms_messages_log
-    logExecutionToDb(supabase, transfer, result).catch(err =>
+    // ── Step 6: Log to DB (fire-and-forget) ──────────────────────────────────
+    logExecutionToDb(supabase, transfer, result, spongeResult).catch(err =>
       console.error('[SMSExecute] Log write failed:', err.message)
     );
 
-    // Step 6: Send confirmation SMS (fire-and-forget)
-    const completionMsg = buildTransferCompleteMessage(transfer, result.transfer.reference);
+    // ── Step 7: Send confirmation SMS ────────────────────────────────────────
+    const completionMsg = buildTransferCompleteMessage(transfer, result.transfer.reference, spongeResult.txHash);
     agentPhoneClient
       .sendMessage(transfer.phone_number, completionMsg, null)
       .then(() => console.log(`[SMSExecute] ✓ Completion SMS sent to ${transfer.phone_number}`))
       .catch(err => console.error('[SMSExecute] ✗ Confirmation SMS failed:', err.message));
 
-    console.log(`[SMSExecute] ✅ Complete | transferId=${result.transfer.id} | ref=${result.transfer.reference}`);
+    console.log(`[SMSExecute] ✅ Complete | txHash=${spongeResult.txHash} | wiseRef=${result.transfer.reference}`);
 
     return res.status(200).json({
-      success: true,
+      success:    true,
+      txHash:     spongeResult.txHash,
       transferId: result.transfer.id,
-      reference: result.transfer.reference,
-      status: result.transfer.status,
-      isFunded: result.isFunded
+      reference:  result.transfer.reference,
+      status:     result.transfer.status,
+      isFunded:   result.isFunded,
     });
 
   } catch (error) {
@@ -142,13 +161,13 @@ export default async function handler(req, res) {
   }
 }
 
-async function logExecutionToDb(supabase, transfer, result) {
+async function logExecutionToDb(supabase, transfer, result, spongeResult) {
   await supabase.from('sms_messages_log').insert({
-    user_id: transfer.user_id,
+    user_id:      transfer.user_id,
     phone_number: transfer.phone_number,
-    direction: 'outbound',
-    message_body: `[Transfer executed] WISE ID: ${result.transfer.id} | Ref: ${result.transfer.reference} | Status: ${result.transfer.status}`,
-    channel: 'sms',
-    status: 'executed'
+    direction:    'outbound',
+    message_body: `[Transfer executed] Sponge txHash: ${spongeResult.txHash} | WISE ID: ${result.transfer.id} | Ref: ${result.transfer.reference} | Status: ${result.transfer.status}`,
+    channel:      'sms',
+    status:       'executed',
   });
 }
