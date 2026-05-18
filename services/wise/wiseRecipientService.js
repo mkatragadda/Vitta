@@ -153,7 +153,7 @@ class WiseRecipientService {
 
     const { data, error } = await this.db
       .from('wise_recipients')
-      .insert(recipientData)
+      .upsert(recipientData, { onConflict: 'wise_account_id', ignoreDuplicates: false })
       .select()
       .single();
 
