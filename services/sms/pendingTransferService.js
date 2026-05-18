@@ -44,18 +44,19 @@ const PENDING_TRANSFER_TTL_MS = 15 * 60 * 1000; // 15 minutes
  * @param {string} params.rawMessage - original SMS body for audit
  * @returns {Promise<Object>} pending transfer row joined with wise_recipient
  */
-async function createPendingTransfer({ userId, phoneNumber, wiseRecipient, sourceAmount, rawMessage }) {
-  console.log('[PendingTransferService] Creating pending transfer for', phoneNumber, '$', sourceAmount);
-
+async function createPendingTransfer({ userId, phoneNumber, wiseRecipient, transferAmount, rawMessage }) {
+  const { value, currency: amountCurrency } = transferAmount;
   const targetCurrency = wiseRecipient.currency || 'INR';
 
-  // Get WISE quote — locks in the exchange rate
-  const quote = await wiseQuoteService.createQuote({
-    userId,
-    sourceAmount,
-    sourceCurrency: 'USD',
-    targetCurrency
-  });
+  console.log(`[PendingTransferService] Creating pending transfer for ${phoneNumber} | ${value} ${amountCurrency} → ${targetCurrency}`);
+
+  // If user specified INR amount, use targetAmount so Wise calculates the USD needed.
+  // Otherwise treat the value as USD sourceAmount.
+  const quoteParams = amountCurrency === 'INR'
+    ? { userId, targetAmount: value, sourceCurrency: 'USD', targetCurrency }
+    : { userId, sourceAmount: value, sourceCurrency: 'USD', targetCurrency };
+
+  const quote = await wiseQuoteService.createQuote(quoteParams);
 
   const expiresAt = new Date(Date.now() + PENDING_TRANSFER_TTL_MS).toISOString();
 

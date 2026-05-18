@@ -63,13 +63,8 @@ export default async function handler(req, res) {
     const rawBody = await getRawBody(req);
     const rawBodyString = rawBody.toString('utf8');
 
-    // Step 2: Verify signature against raw bytes (what AgentPhone actually signed)
-    const signature = req.headers['x-webhook-signature'];
-    const timestamp = req.headers['x-webhook-timestamp']
-      ? parseInt(req.headers['x-webhook-timestamp'], 10)
-      : null;
-
-    const isValid = webhookVerifier.verifySignature(signature, rawBodyString, timestamp);
+    // Step 2: Verify Svix signature (webhook-id + webhook-timestamp + body)
+    const isValid = webhookVerifier.verifyRequest(req, rawBodyString);
 
     if (!isValid) {
       console.error('[SMS Webhook] ✗ Invalid signature — rejecting');
@@ -233,7 +228,7 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
     return await createTransferAndSendLink({
       phoneNumber, userId, conversationId,
       wiseRecipient: chosen,
-      sourceAmount: amount,
+      transferAmount: { value: amount, currency: currency || 'USD' },
       rawMessage: messageBody
     });
   }
@@ -265,7 +260,7 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
     return await createTransferAndSendLink({
       phoneNumber, userId, conversationId,
       wiseRecipient: matchResult.recipient,
-      sourceAmount: amount.value,
+      transferAmount: amount,
       rawMessage: messageBody
     });
   }
@@ -284,14 +279,15 @@ async function processIntent({ messageBody, phoneNumber, userId, conversationId 
  * Creates a pending transfer + token and returns the confirmation SMS.
  * Extracted so both direct match and disambiguation resolution share the same path.
  */
-async function createTransferAndSendLink({ phoneNumber, userId, conversationId, wiseRecipient, sourceAmount, rawMessage }) {
-  console.log(`[SMS Webhook] ▶ Creating pending transfer | user=${userId} | amount=$${sourceAmount} | recipient=${wiseRecipient.account_holder_name}`);
+async function createTransferAndSendLink({ phoneNumber, userId, conversationId, wiseRecipient, transferAmount, rawMessage }) {
+  const { value, currency } = transferAmount;
+  console.log(`[SMS Webhook] ▶ Creating pending transfer | user=${userId} | amount=${value} ${currency} | recipient=${wiseRecipient.account_holder_name}`);
 
   const pendingTransfer = await createPendingTransfer({
     userId,
     phoneNumber,
     wiseRecipient,
-    sourceAmount,
+    transferAmount,
     rawMessage
   });
 

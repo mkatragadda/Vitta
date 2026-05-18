@@ -3,18 +3,24 @@
  *
  * Parses natural language SMS messages into structured intents and entities.
  * Supports: transfer_money, confirmation, cancellation, disambiguation_response, unknown
+ *
+ * Amount parsing supports:
+ *   USD: "$500", "500", "500 USD"
+ *   INR: "₹500", "500INR", "500 INR", "500 inr"
  */
+
+const CURRENCY_AMOUNT = '([$₹]?)(\\d+(?:\\.\\d{1,2})?)\\s*(usd|inr|eur|gbp)?';
 
 const PATTERNS = {
   transfer_money: [
-    // "send $500 to mom" / "send 500 to mom"
-    /^send\s+\$?(\d+(?:\.\d{1,2})?)\s+to\s+(.+)$/i,
-    // "pay mom $500" / "pay mom 500"
-    /^pay\s+(.+?)\s+\$?(\d+(?:\.\d{1,2})?)$/i,
-    // "transfer $500 to mom" / "transfer $500 mom"
-    /^transfer\s+\$?(\d+(?:\.\d{1,2})?)\s+(?:to\s+)?(.+)$/i,
-    // "send mom $500"
-    /^send\s+(.+?)\s+\$?(\d+(?:\.\d{1,2})?)$/i,
+    // "send $500 to mom" / "send 100INR to mom" / "send ₹100 to mom"
+    new RegExp(`^send\\s+${CURRENCY_AMOUNT}\\s+to\\s+(.+)$`, 'i'),
+    // "pay mom $500" / "pay mom 100 INR"
+    new RegExp(`^pay\\s+(.+?)\\s+${CURRENCY_AMOUNT}$`, 'i'),
+    // "transfer $500 to mom" / "transfer 100INR to mom"
+    new RegExp(`^transfer\\s+${CURRENCY_AMOUNT}\\s+(?:to\\s+)?(.+)$`, 'i'),
+    // "send mom $500" / "send mom 100 INR"
+    new RegExp(`^send\\s+(.+?)\\s+${CURRENCY_AMOUNT}$`, 'i'),
   ],
 
   // Single digit for disambiguation (reply "1", "2", etc.)
@@ -24,10 +30,20 @@ const PATTERNS = {
 
   cancellation: /^(no|nope|cancel|stop|nevermind|never mind|abort|quit)$/i,
 
-  // "balance", "help", "list"
   help: /^(help|commands|what can you do|\?)$/i,
   balance: /^(balance|my balance|check balance|how much)$/i,
 };
+
+/**
+ * Detect currency from symbol prefix or code suffix.
+ * Priority: ₹ → INR, suffix code → use it, $ → USD, default → USD
+ */
+function detectCurrency(prefix, suffix) {
+  if (prefix === '₹') return 'INR';
+  if (suffix) return suffix.toUpperCase();
+  if (prefix === '$') return 'USD';
+  return 'USD';
+}
 
 /**
  * Parse an SMS message into a structured intent object.
@@ -39,33 +55,36 @@ const PATTERNS = {
 function parseIntent(message, conversationState = {}) {
   const msg = message.trim();
 
-  // --- Transfer money ---
   const [sendAmountTo, payRecipientAmount, transferAmountTo, sendRecipientAmount] = PATTERNS.transfer_money;
 
   let match;
 
-  // "send $500 to mom"
+  // "send [$|₹]500[INR] to mom"
+  // Groups: [1]=prefix, [2]=amount, [3]=suffix, [4]=recipient
   match = msg.match(sendAmountTo);
   if (match) {
-    return buildTransferIntent(match[1], match[2]);
+    return buildTransferIntent(match[2], match[4], match[1], match[3]);
   }
 
-  // "pay mom $500"
+  // "pay mom [$|₹]500[INR]"
+  // Groups: [1]=recipient, [2]=prefix, [3]=amount, [4]=suffix
   match = msg.match(payRecipientAmount);
   if (match) {
-    return buildTransferIntent(match[2], match[1]);
+    return buildTransferIntent(match[3], match[1], match[2], match[4]);
   }
 
-  // "transfer $500 to mom"
+  // "transfer [$|₹]500[INR] [to] mom"
+  // Groups: [1]=prefix, [2]=amount, [3]=suffix, [4]=recipient
   match = msg.match(transferAmountTo);
   if (match) {
-    return buildTransferIntent(match[1], match[2]);
+    return buildTransferIntent(match[2], match[4], match[1], match[3]);
   }
 
-  // "send mom $500"
+  // "send mom [$|₹]500[INR]"
+  // Groups: [1]=recipient, [2]=prefix, [3]=amount, [4]=suffix
   match = msg.match(sendRecipientAmount);
   if (match) {
-    return buildTransferIntent(match[2], match[1]);
+    return buildTransferIntent(match[3], match[1], match[2], match[4]);
   }
 
   // --- Disambiguation response (only valid when awaiting) ---
@@ -101,11 +120,12 @@ function parseIntent(message, conversationState = {}) {
   return { intent: 'unknown', confidence: 0.0, entities: {} };
 }
 
-function buildTransferIntent(rawAmount, rawRecipient) {
-  const amount = parseFloat(rawAmount);
+function buildTransferIntent(rawAmount, rawRecipient, currencyPrefix = '', currencySuffix = '') {
+  const value = parseFloat(rawAmount);
   const recipient = rawRecipient.trim().toLowerCase();
+  const currency = detectCurrency(currencyPrefix || '', currencySuffix || '');
 
-  if (isNaN(amount) || amount <= 0) {
+  if (isNaN(value) || value <= 0) {
     return { intent: 'unknown', confidence: 0.0, entities: {} };
   }
 
@@ -113,7 +133,7 @@ function buildTransferIntent(rawAmount, rawRecipient) {
     intent: 'transfer_money',
     confidence: 0.95,
     entities: {
-      amount: { value: amount, currency: 'USD', raw: rawAmount },
+      amount: { value, currency, raw: rawAmount },
       recipient: { value: recipient, raw: rawRecipient.trim() }
     }
   };
