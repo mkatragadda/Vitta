@@ -44,17 +44,13 @@ class AgentPhoneClient {
     try {
       console.log('[AgentPhoneClient] Sending message to', phoneNumber);
 
+      // API schema: agent_id + to_number + body only
+      // channel and conversation_id are not valid fields
       const payload = {
         agent_id: this.agentId,
-        to: phoneNumber,
+        to_number: phoneNumber,
         body: message,
-        channel: 'sms'
       };
-
-      // Include conversation ID if provided (for threaded conversations)
-      if (conversationId) {
-        payload.conversation_id = conversationId;
-      }
 
       const response = await fetch(`${AGENTPHONE_API_BASE}/messages`, {
         method: 'POST',
