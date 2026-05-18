@@ -9,15 +9,13 @@ const AGENTPHONE_API_BASE = 'https://api.agentphone.ai/v1';
 
 class AgentPhoneClient {
   constructor() {
-    this.apiKey = process.env.AGENTPHONE_API_KEY;
-    this.agentId = process.env.AGENTPHONE_AGENT_ID;
+    this.apiKey   = process.env.AGENTPHONE_API_KEY;
+    this.agentId  = process.env.AGENTPHONE_AGENT_ID;
+    this.numberId = process.env.AGENTPHONE_NUMBER_ID || null;
 
-    if (!this.apiKey) {
-      console.warn('[AgentPhoneClient] AGENTPHONE_API_KEY not configured');
-    }
-    if (!this.agentId) {
-      console.warn('[AgentPhoneClient] AGENTPHONE_AGENT_ID not configured');
-    }
+    if (!this.apiKey)  console.warn('[AgentPhoneClient] AGENTPHONE_API_KEY not configured');
+    if (!this.agentId) console.warn('[AgentPhoneClient] AGENTPHONE_AGENT_ID not configured');
+    if (!this.numberId) console.warn('[AgentPhoneClient] AGENTPHONE_NUMBER_ID not set — agent must have a default number attached');
   }
 
   /**
@@ -47,6 +45,8 @@ class AgentPhoneClient {
         agent_id: this.agentId,
         to_number: phoneNumber,
         body: message,
+        // Explicitly set the sending number if configured
+        ...(this.numberId && { number_id: this.numberId }),
       };
 
       console.log(`[AgentPhoneClient] POST ${url}`);
