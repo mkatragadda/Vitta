@@ -62,22 +62,25 @@ async function setConversationState(phoneNumber, userId, state, context = {}, ag
     updated_at: now
   };
 
-  // Try UPDATE first (avoids ON CONFLICT on partial index)
+  // Update only the active (non-idle, non-expired) conversation for this phone number.
+  // Using maybeSingle() so 0 matching rows returns null instead of an error.
   const { data: updated, error: updateError } = await supabase
     .from('sms_conversations')
     .update(record)
     .eq('phone_number', phoneNumber)
+    .neq('state', 'idle')
+    .gt('expires_at', now)
     .select()
-    .single();
+    .maybeSingle();
 
-  if (updateError && updateError.code !== 'PGRST116') {
+  if (updateError) {
     console.error('[ConversationManager] setConversationState update error:', updateError.message);
     throw updateError;
   }
 
   if (updated) return updated;
 
-  // No existing row — INSERT
+  // No active conversation found — INSERT a new one
   const { data: inserted, error: insertError } = await supabase
     .from('sms_conversations')
     .insert(record)
