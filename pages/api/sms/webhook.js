@@ -20,6 +20,7 @@
 
 const webhookVerifier = require('../../../services/agentphone/webhookVerifier');
 const agentPhoneClient = require('../../../services/agentphone/agentphoneClient');
+const { getRawBody } = require('../../../utils/rawBody');
 const { parseIntent } = require('../../../services/sms/smsIntentParser');
 const { matchRecipient } = require('../../../services/sms/recipientMatcher');
 const {
@@ -58,8 +59,17 @@ export default async function handler(req, res) {
   console.log(`[SMS Webhook] ▶ Inbound request | method=${req.method} | ip=${req.socket?.remoteAddress}`);
 
   try {
-    // Step 1: Verify webhook signature
-    const isValid = webhookVerifier.verifyRequest(req);
+    // Step 1: Read raw body (must happen before any parsing)
+    const rawBody = await getRawBody(req);
+    const rawBodyString = rawBody.toString('utf8');
+
+    // Step 2: Verify signature against raw bytes (what AgentPhone actually signed)
+    const signature = req.headers['x-webhook-signature'];
+    const timestamp = req.headers['x-webhook-timestamp']
+      ? parseInt(req.headers['x-webhook-timestamp'], 10)
+      : null;
+
+    const isValid = webhookVerifier.verifySignature(signature, rawBodyString, timestamp);
 
     if (!isValid) {
       console.error('[SMS Webhook] ✗ Invalid signature — rejecting');
@@ -68,15 +78,24 @@ export default async function handler(req, res) {
 
     console.log('[SMS Webhook] ✓ Signature verified');
 
-    // Step 2: Parse webhook payload
-    const { event, data } = req.body;
+    // Step 3: Parse JSON from raw body
+    let parsedBody;
+    try {
+      parsedBody = JSON.parse(rawBodyString);
+    } catch (parseError) {
+      console.error('[SMS Webhook] Invalid JSON body:', parseError.message);
+      return res.status(400).json({ error: 'Invalid JSON' });
+    }
+
+    // Step 4: Parse webhook payload
+    const { event, data } = parsedBody;
 
     if (!event || !data) {
       console.error('[SMS Webhook] Invalid payload structure');
       return res.status(400).json({ error: 'Invalid payload' });
     }
 
-    // Step 3: Handle different event types
+    // Step 5: Handle different event types
     switch (event) {
       case 'message.received':
         console.log(`[SMS Webhook] ▶ message.received | from=${data.from} | msgId=${data.id}`);
@@ -95,7 +114,7 @@ export default async function handler(req, res) {
         console.log(`[SMS Webhook] ⚠ Unhandled event: ${event}`);
     }
 
-    // Step 4: Log webhook to database
+    // Step 6: Log webhook to database
     await logWebhook(event, data, req.headers);
 
     // Always return 200 to acknowledge receipt
@@ -404,12 +423,9 @@ async function logWebhook(event, data, headers) {
   }
 }
 
-/**
- * Custom body parser configuration for Next.js
- * We need the raw body for signature verification
- */
+// Disable Next.js body parsing — we read the raw body manually for signature verification
 export const config = {
   api: {
-    bodyParser: true // Next.js will parse JSON, but we can still verify signature
-  }
+    bodyParser: false,
+  },
 };
