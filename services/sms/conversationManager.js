@@ -50,30 +50,46 @@ async function getConversation(phoneNumber) {
 async function setConversationState(phoneNumber, userId, state, context = {}, agentphoneConversationId = null) {
   const expiresAt = new Date(Date.now() + CONVERSATION_TTL_MINUTES * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
+  const now = new Date().toISOString();
+  const record = {
+    phone_number: phoneNumber,
+    user_id: userId,
+    state,
+    context,
+    agentphone_conversation_id: agentphoneConversationId,
+    last_message_at: now,
+    expires_at: expiresAt,
+    updated_at: now
+  };
+
+  // Try UPDATE first (avoids ON CONFLICT on partial index)
+  const { data: updated, error: updateError } = await supabase
     .from('sms_conversations')
-    .upsert(
-      {
-        phone_number: phoneNumber,
-        user_id: userId,
-        state,
-        context,
-        agentphone_conversation_id: agentphoneConversationId,
-        last_message_at: new Date().toISOString(),
-        expires_at: expiresAt,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: 'phone_number' }
-    )
+    .update(record)
+    .eq('phone_number', phoneNumber)
     .select()
     .single();
 
-  if (error) {
-    console.error('[ConversationManager] setConversationState error:', error.message);
-    throw error;
+  if (updateError && updateError.code !== 'PGRST116') {
+    console.error('[ConversationManager] setConversationState update error:', updateError.message);
+    throw updateError;
   }
 
-  return data;
+  if (updated) return updated;
+
+  // No existing row — INSERT
+  const { data: inserted, error: insertError } = await supabase
+    .from('sms_conversations')
+    .insert(record)
+    .select()
+    .single();
+
+  if (insertError) {
+    console.error('[ConversationManager] setConversationState insert error:', insertError.message);
+    throw insertError;
+  }
+
+  return inserted;
 }
 
 /**
