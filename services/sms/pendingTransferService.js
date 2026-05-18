@@ -66,7 +66,7 @@ async function createPendingTransfer({ userId, phoneNumber, wiseRecipient, trans
       user_id: userId,
       phone_number: phoneNumber,
       wise_recipient_id: wiseRecipient.id,
-      source_amount: sourceAmount,
+      source_amount: quote.source_amount,
       source_currency: 'USD',
       target_amount: quote.target_amount,
       target_currency: quote.target_currency,
