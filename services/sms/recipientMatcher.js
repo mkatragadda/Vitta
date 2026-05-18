@@ -34,10 +34,11 @@ async function matchRecipient(recipientStr, userId) {
     .select(`
       wise_recipient_id,
       nickname,
-      wise_recipients (*)
+      wise_recipients!inner (*)
     `)
     .eq('user_id', userId)
     .ilike('nickname', normalized)
+    .eq('wise_recipients.is_active', true)
     .maybeSingle();
 
   if (nicknameError) {
