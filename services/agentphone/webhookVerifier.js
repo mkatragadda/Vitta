@@ -26,14 +26,19 @@ class WebhookVerifier {
       console.warn('[WebhookVerifier] AGENTPHONE_WEBHOOK_SECRET not set');
       this.secretRaw    = null;
       this.secretBytes  = null;
+      this.secretStripped = null;
       return;
     }
 
-    // Raw secret key = full env var string (e.g. "whsec_XOzx...")
+    // Variant 1: full raw secret as UTF-8 (e.g. "whsec_XOzx..." used as-is)
     this.secretRaw = raw;
 
-    // Decoded key = base64-decode the part after "whsec_" prefix
     const b64 = raw.startsWith('whsec_') ? raw.slice(6) : raw;
+
+    // Variant 2: part after "whsec_" prefix as plain UTF-8 (not decoded)
+    this.secretStripped = Buffer.from(b64);
+
+    // Variant 3: base64-decode the part after "whsec_" prefix
     try {
       this.secretBytes = Buffer.from(b64, 'base64');
     } catch {
@@ -69,15 +74,18 @@ class WebhookVerifier {
       receivedDigest = signatureHeader;
     }
 
-    // Try both key formats and return true if either matches
-    const matched = this._tryVerify(receivedDigest, rawBodyString, this.secretBytes)
-                 || this._tryVerify(receivedDigest, rawBodyString, this.secretRaw ? Buffer.from(this.secretRaw) : null);
+    // Try all 3 key variants: raw UTF-8, stripped UTF-8 (no whsec_ prefix), base64-decoded
+    const rawKey = this.secretRaw ? Buffer.from(this.secretRaw) : null;
+    const matched = this._tryVerify(receivedDigest, rawBodyString, rawKey)
+                 || this._tryVerify(receivedDigest, rawBodyString, this.secretStripped)
+                 || this._tryVerify(receivedDigest, rawBodyString, this.secretBytes);
 
     if (!matched) {
-      const computedDecoded = this.secretBytes ? this._hmac(rawBodyString, this.secretBytes) : 'N/A (no key)';
       console.error('[WebhookVerifier] Signature mismatch');
-      console.error('[WebhookVerifier] Received :', receivedDigest);
-      console.error('[WebhookVerifier] Computed (decoded key):', computedDecoded);
+      console.error('[WebhookVerifier] Received               :', receivedDigest);
+      console.error('[WebhookVerifier] Computed (raw key)     :', rawKey ? this._hmac(rawBodyString, rawKey) : 'N/A');
+      console.error('[WebhookVerifier] Computed (stripped key):', this.secretStripped ? this._hmac(rawBodyString, this.secretStripped) : 'N/A');
+      console.error('[WebhookVerifier] Computed (decoded key) :', this.secretBytes ? this._hmac(rawBodyString, this.secretBytes) : 'N/A');
     } else {
       console.log('[WebhookVerifier] ✓ Signature verified');
     }
