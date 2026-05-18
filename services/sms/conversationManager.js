@@ -50,30 +50,49 @@ async function getConversation(phoneNumber) {
 async function setConversationState(phoneNumber, userId, state, context = {}, agentphoneConversationId = null) {
   const expiresAt = new Date(Date.now() + CONVERSATION_TTL_MINUTES * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
+  const now = new Date().toISOString();
+  const record = {
+    phone_number: phoneNumber,
+    user_id: userId,
+    state,
+    context,
+    agentphone_conversation_id: agentphoneConversationId,
+    last_message_at: now,
+    expires_at: expiresAt,
+    updated_at: now
+  };
+
+  // Update only the active (non-idle, non-expired) conversation for this phone number.
+  // Using maybeSingle() so 0 matching rows returns null instead of an error.
+  const { data: updated, error: updateError } = await supabase
     .from('sms_conversations')
-    .upsert(
-      {
-        phone_number: phoneNumber,
-        user_id: userId,
-        state,
-        context,
-        agentphone_conversation_id: agentphoneConversationId,
-        last_message_at: new Date().toISOString(),
-        expires_at: expiresAt,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: 'phone_number' }
-    )
+    .update(record)
+    .eq('phone_number', phoneNumber)
+    .neq('state', 'idle')
+    .gt('expires_at', now)
+    .select()
+    .maybeSingle();
+
+  if (updateError) {
+    console.error('[ConversationManager] setConversationState update error:', updateError.message);
+    throw updateError;
+  }
+
+  if (updated) return updated;
+
+  // No active conversation found — INSERT a new one
+  const { data: inserted, error: insertError } = await supabase
+    .from('sms_conversations')
+    .insert(record)
     .select()
     .single();
 
-  if (error) {
-    console.error('[ConversationManager] setConversationState error:', error.message);
-    throw error;
+  if (insertError) {
+    console.error('[ConversationManager] setConversationState insert error:', insertError.message);
+    throw insertError;
   }
 
-  return data;
+  return inserted;
 }
 
 /**
