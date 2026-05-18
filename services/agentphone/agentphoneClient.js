@@ -42,17 +42,17 @@ class AgentPhoneClient {
     }
 
     try {
-      console.log('[AgentPhoneClient] Sending message to', phoneNumber);
-
-      // API schema: agent_id + to_number + body only
-      // channel and conversation_id are not valid fields
+      const url = `${AGENTPHONE_API_BASE}/messages`;
       const payload = {
         agent_id: this.agentId,
         to_number: phoneNumber,
         body: message,
       };
 
-      const response = await fetch(`${AGENTPHONE_API_BASE}/messages`, {
+      console.log(`[AgentPhoneClient] POST ${url}`);
+      console.log(`[AgentPhoneClient] Payload:`, JSON.stringify(payload));
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
@@ -62,9 +62,10 @@ class AgentPhoneClient {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorText = await response.text().catch(() => '');
+        console.error(`[AgentPhoneClient] ${response.status} response body:`, errorText);
         throw new Error(
-          `AgentPhone API error: ${response.status} - ${errorData.message || response.statusText}`
+          `AgentPhone API error: ${response.status} - ${errorText || response.statusText}`
         );
       }
 
