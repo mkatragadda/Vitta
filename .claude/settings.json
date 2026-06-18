@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta remote -v)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta log origin/main --oneline -5)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta log main --oneline -5)",
+      "Bash(git -C /Users/marxkatragadda/Documents/YCHackthonProject push --force origin main)",
+      "Bash(git -C /Users/marxkatragadda/Documents/YCHackthonProject log --format=\"%h %ad %s\" --date=format:\"%Y-%m-%d %H:%M\")",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta add services/agentphone/webhookVerifier.js)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta commit -m ' *)",
+      "Bash(git -C /Users/marxkatragadda/Documents/YCHackthonProject add services/agentphone/webhookVerifier.js)",
+      "Bash(git -C /Users/marxkatragadda/Documents/YCHackthonProject commit -m ' *)",
+      "Bash(git -C /Users/marxkatragadda/Documents/YCHackthonProject push origin main)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta log --oneline --graph --all --decorate -20)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta log --oneline origin/YCHackathon..HEAD)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta commit -m \"fix: webhook verifier — try all 6 payload×key combos with full diagnostics\")",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta push origin YCHackathon)",
+      "Bash(git -C /Users/marxkatragadda/Documents/VittaChat/Vitta add pages/api/sms/webhook.js)"
+    ]
+  }
+}

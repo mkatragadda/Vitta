@@ -1,0 +1,175 @@
+/**
+ * Conversation Manager
+ *
+ * Manages conversation state in the sms_conversations table.
+ * State machine: idle → awaiting_disambiguation → ready_for_confirmation → idle
+ */
+
+const { createClient } = require('@supabase/supabase-js');
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+const CONVERSATION_TTL_MINUTES = 10;
+
+/**
+ * Get the active conversation for a phone number, or null if none/expired.
+ *
+ * @param {string} phoneNumber - E.164 phone number
+ * @returns {Promise<Object|null>}
+ */
+async function getConversation(phoneNumber) {
+  const { data, error } = await supabase
+    .from('sms_conversations')
+    .select('*')
+    .eq('phone_number', phoneNumber)
+    .neq('state', 'idle')
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+
+  if (error) {
+    console.error('[ConversationManager] getConversation error:', error.message);
+    return null;
+  }
+
+  return data || null;
+}
+
+/**
+ * Create or update a conversation to a new state.
+ *
+ * @param {string} phoneNumber
+ * @param {string} userId
+ * @param {string} state - One of the valid sms_conversations states
+ * @param {Object} context - JSONB context to store (partial update merged in JS)
+ * @param {string|null} agentphoneConversationId
+ * @returns {Promise<Object>} The upserted conversation record
+ */
+async function setConversationState(phoneNumber, userId, state, context = {}, agentphoneConversationId = null) {
+  const expiresAt = new Date(Date.now() + CONVERSATION_TTL_MINUTES * 60 * 1000).toISOString();
+
+  const now = new Date().toISOString();
+  const record = {
+    phone_number: phoneNumber,
+    user_id: userId,
+    state,
+    context,
+    agentphone_conversation_id: agentphoneConversationId,
+    last_message_at: now,
+    expires_at: expiresAt,
+    updated_at: now
+  };
+
+  // Update only the active (non-idle, non-expired) conversation for this phone number.
+  // Using maybeSingle() so 0 matching rows returns null instead of an error.
+  const { data: updated, error: updateError } = await supabase
+    .from('sms_conversations')
+    .update(record)
+    .eq('phone_number', phoneNumber)
+    .neq('state', 'idle')
+    .gt('expires_at', now)
+    .select()
+    .maybeSingle();
+
+  if (updateError) {
+    console.error('[ConversationManager] setConversationState update error:', updateError.message);
+    throw updateError;
+  }
+
+  if (updated) return updated;
+
+  // No active conversation found — INSERT a new one
+  const { data: inserted, error: insertError } = await supabase
+    .from('sms_conversations')
+    .insert(record)
+    .select()
+    .single();
+
+  if (insertError) {
+    // Race condition: a concurrent request inserted between our UPDATE check and INSERT.
+    // Retry the UPDATE against the row that now exists.
+    if (insertError.code === '23505') {
+      const { data: retried, error: retryError } = await supabase
+        .from('sms_conversations')
+        .update(record)
+        .eq('phone_number', phoneNumber)
+        .neq('state', 'idle')
+        .select()
+        .maybeSingle();
+
+      if (retryError) {
+        console.error('[ConversationManager] setConversationState retry error:', retryError.message);
+        throw retryError;
+      }
+      if (retried) return retried;
+    }
+
+    console.error('[ConversationManager] setConversationState insert error:', insertError.message);
+    throw insertError;
+  }
+
+  return inserted;
+}
+
+/**
+ * Reset a conversation back to idle (clears context).
+ *
+ * @param {string} phoneNumber
+ */
+async function resetConversation(phoneNumber) {
+  const { error } = await supabase
+    .from('sms_conversations')
+    .update({
+      state: 'idle',
+      context: {},
+      updated_at: new Date().toISOString()
+    })
+    .eq('phone_number', phoneNumber);
+
+  if (error) {
+    console.error('[ConversationManager] resetConversation error:', error.message);
+  }
+}
+
+/**
+ * Merge additional data into an existing conversation's context.
+ *
+ * @param {string} phoneNumber
+ * @param {Object} contextPatch - Fields to merge into existing context
+ */
+async function updateConversationContext(phoneNumber, contextPatch) {
+  // Fetch current context first, then merge
+  const { data: current, error: fetchError } = await supabase
+    .from('sms_conversations')
+    .select('context')
+    .eq('phone_number', phoneNumber)
+    .maybeSingle();
+
+  if (fetchError || !current) {
+    console.error('[ConversationManager] updateConversationContext: could not fetch current', fetchError?.message);
+    return;
+  }
+
+  const mergedContext = { ...(current.context || {}), ...contextPatch };
+
+  const { error } = await supabase
+    .from('sms_conversations')
+    .update({
+      context: mergedContext,
+      updated_at: new Date().toISOString()
+    })
+    .eq('phone_number', phoneNumber);
+
+  if (error) {
+    console.error('[ConversationManager] updateConversationContext update error:', error.message);
+  }
+}
+
+module.exports = {
+  getConversation,
+  setConversationState,
+  resetConversation,
+  updateConversationContext
+};
