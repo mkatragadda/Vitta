@@ -228,6 +228,44 @@ class BeneficiaryService {
   }
 
   /**
+   * Find a saved beneficiary whose UPI ID matches the given value.
+   *
+   * Used before a payment to answer: "Has the user already saved this contact?"
+   * Decrypts all UPI beneficiaries for the user and compares case-insensitively.
+   * O(n) — acceptable because a user's contact list is typically small.
+   *
+   * @param {string} userId - User ID
+   * @param {string} upiId  - UPI VPA to search for (e.g. "amit@okicici")
+   * @returns {Promise<{ found: boolean, beneficiary: object|null }>}
+   */
+  async findByUpiId(userId, upiId) {
+    if (!userId || !upiId) return { found: false, beneficiary: null };
+
+    console.log('[BeneficiaryService] Checking contact for UPI:', upiId.split('@')[0] + '@***');
+
+    try {
+      const rows = await this.db.beneficiaries.findAll({
+        where: { user_id: userId, payment_method: 'upi', is_active: true },
+        order: [['created_at', 'DESC']],
+      });
+
+      const needle = upiId.toLowerCase().trim();
+
+      for (const row of rows) {
+        const decrypted = this._decryptField(row.upi_encrypted);
+        if (decrypted && decrypted.toLowerCase() === needle) {
+          return { found: true, beneficiary: this._decryptBeneficiary(row) };
+        }
+      }
+
+      return { found: false, beneficiary: null };
+    } catch (error) {
+      console.error('[BeneficiaryService] findByUpiId error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Delete a beneficiary (soft delete)
    *
    * @param {string} userId - User ID (for authorization)

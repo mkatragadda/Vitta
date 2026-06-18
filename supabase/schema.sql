@@ -570,3 +570,54 @@ CREATE INDEX IF NOT EXISTS idx_transfer_status_log_transfer_id ON transfer_statu
 CREATE INDEX IF NOT EXISTS idx_transfer_status_log_created_at ON transfer_status_log(created_at DESC);
 
 -- ============================================================================
+-- 16. PAYMENT LAUNCHES TABLE
+-- ============================================================================
+-- Tracks every time Vitta opens a payment app on behalf of the user.
+-- Vitta does not move money; this is purely an intent log used to build the
+-- recipient graph and track which rail each person was paid through.
+CREATE TABLE IF NOT EXISTS payment_launches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_upi_id TEXT NOT NULL,           -- lowercase UPI VPA (payment address)
+  recipient_name TEXT,                      -- name from QR code or user override
+  amount_inr NUMERIC(12, 2) NOT NULL,       -- target INR amount
+  usd_equivalent NUMERIC(10, 2),            -- approximate USD at time of launch
+  exchange_rate NUMERIC(10, 4),             -- USD/INR rate used for display
+  rail TEXT NOT NULL DEFAULT 'wise'         -- 'wise' | 'gpay' | 'phonepe' | 'paytm' | 'bank'
+    CHECK (rail IN ('wise', 'gpay', 'phonepe', 'paytm', 'bank')),
+  status TEXT NOT NULL DEFAULT 'launched'
+    CHECK (status IN ('launched', 'completed', 'cancelled', 'failed')),
+  saved_recipient_id UUID REFERENCES beneficiaries(id) ON DELETE SET NULL,
+  note TEXT,
+  launched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  status_updated_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_launches_user_id ON payment_launches(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_launches_user_recipient ON payment_launches(user_id, recipient_upi_id);
+CREATE INDEX IF NOT EXISTS idx_payment_launches_user_status ON payment_launches(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_payment_launches_launched_at ON payment_launches(user_id, launched_at DESC);
+
+-- ============================================================================
+
+-- ============================================================================
+-- UPI Scans (Phase 1 — scan history, best-effort)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS upi_scans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  upi_id TEXT NOT NULL,
+  payee_name TEXT,
+  amount NUMERIC(12, 2),
+  currency TEXT NOT NULL DEFAULT 'INR',
+  merchant_code TEXT,
+  transaction_note TEXT,
+  raw_qr_data TEXT,
+  status TEXT NOT NULL DEFAULT 'scanned'
+    CHECK (status IN ('scanned', 'launched', 'completed', 'cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_upi_scans_user_id ON upi_scans(user_id);
+CREATE INDEX IF NOT EXISTS idx_upi_scans_user_created ON upi_scans(user_id, created_at DESC);

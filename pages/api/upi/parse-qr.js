@@ -41,41 +41,41 @@ export default async function handler(req, res) {
       });
     }
 
-    // Save scan to database
-    const { data: scan, error: scanError } = await supabase
-      .from('upi_scans')
-      .insert({
-        user_id: userId,
-        upi_id: parsed.upiId,
-        payee_name: parsed.payeeName || 'Unknown Merchant',
-        amount: parsed.amount,
-        currency: parsed.currency,
-        merchant_code: parsed.merchantCode || null,
-        transaction_note: parsed.note || null,
-        raw_qr_data: qrData,
-        status: 'scanned',
-      })
-      .select()
-      .single();
-
-    if (scanError) {
-      console.error('[API/upi/parse-qr] Database error:', scanError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to save scan',
-      });
+    // Save scan to database (best-effort — don't block the flow if table is missing)
+    let scanId = null;
+    try {
+      const { data: scan, error: scanError } = await supabase
+        .from('upi_scans')
+        .insert({
+          user_id: userId,
+          upi_id: parsed.upiId,
+          payee_name: parsed.payeeName || 'Unknown Merchant',
+          amount: parsed.amount,
+          currency: parsed.currency,
+          merchant_code: parsed.merchantCode || null,
+          transaction_note: parsed.note || null,
+          raw_qr_data: qrData,
+          status: 'scanned',
+        })
+        .select()
+        .single();
+      if (scanError) {
+        console.warn('[API/upi/parse-qr] Scan not saved (table may not exist yet):', scanError.message);
+      } else {
+        scanId = scan?.id ?? null;
+      }
+    } catch (dbErr) {
+      console.warn('[API/upi/parse-qr] Scan save skipped:', dbErr.message);
     }
 
-    // Return parsed QR data
-    // Note: NO USD calculation here - let Wise API provide live rates via quote
     res.status(200).json({
       success: true,
       data: {
-        scanId: scan.id,
+        scanId,
         upiId: parsed.upiId,
         payeeName: parsed.payeeName,
-        amount: parsed.amount, // INR amount from QR code
-        currency: parsed.currency, // 'INR'
+        amount: parsed.amount,
+        currency: parsed.currency,
         note: parsed.note,
         merchantCode: parsed.merchantCode,
       },

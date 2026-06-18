@@ -667,4 +667,137 @@ describe('BeneficiaryService', () => {
       );
     });
   });
+
+  // ===========================================================================
+  // findByUpiId
+  // ===========================================================================
+  describe('findByUpiId', () => {
+    const buildEncryptedRow = (upiId) => {
+      // Encrypt via the service instance so the ciphertext is consistent with the key
+      const encrypted = beneficiaryService._encryptField(upiId);
+      return {
+        id: 'ben-001',
+        name: 'Amit Kumar',
+        phone: '9876543210',
+        email: null,
+        payment_method: 'upi',
+        upi_encrypted: encrypted,
+        account_encrypted: null,
+        ifsc: null,
+        bank_name: null,
+        relationship: 'family',
+        verification_status: 'verified',
+        verified_at: new Date(),
+        created_at: new Date(),
+        is_active: true,
+      };
+    };
+
+    test('returns found=true with beneficiary when UPI matches', async () => {
+      const row = buildEncryptedRow('amit@okicici');
+      mockDb.beneficiaries.findAll.mockResolvedValue([row]);
+
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, 'amit@okicici');
+
+      expect(result.found).toBe(true);
+      expect(result.beneficiary).not.toBeNull();
+      expect(result.beneficiary.id).toBe('ben-001');
+      expect(result.beneficiary.name).toBe('Amit Kumar');
+      expect(result.beneficiary.upi).toBe('amit@okicici');
+    });
+
+    test('is case-insensitive — uppercase UPI matches lowercase stored value', async () => {
+      const row = buildEncryptedRow('amit@okicici');
+      mockDb.beneficiaries.findAll.mockResolvedValue([row]);
+
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, 'AMIT@OKICICI');
+
+      expect(result.found).toBe(true);
+    });
+
+    test('is case-insensitive — stored uppercase matched by lowercase query', async () => {
+      const row = buildEncryptedRow('AMIT@OKICICI');
+      mockDb.beneficiaries.findAll.mockResolvedValue([row]);
+
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, 'amit@okicici');
+
+      expect(result.found).toBe(true);
+    });
+
+    test('returns found=false when no UPI contacts exist', async () => {
+      mockDb.beneficiaries.findAll.mockResolvedValue([]);
+
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, 'nobody@bank');
+
+      expect(result.found).toBe(false);
+      expect(result.beneficiary).toBeNull();
+    });
+
+    test('returns found=false when UPI does not match any contact', async () => {
+      const row = buildEncryptedRow('someone.else@okaxis');
+      mockDb.beneficiaries.findAll.mockResolvedValue([row]);
+
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, 'amit@okicici');
+
+      expect(result.found).toBe(false);
+      expect(result.beneficiary).toBeNull();
+    });
+
+    test('returns found=false when userId is missing', async () => {
+      const result = await beneficiaryService.findByUpiId(null, 'amit@okicici');
+
+      expect(result.found).toBe(false);
+      expect(mockDb.beneficiaries.findAll).not.toHaveBeenCalled();
+    });
+
+    test('returns found=false when upiId is missing', async () => {
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, null);
+
+      expect(result.found).toBe(false);
+      expect(mockDb.beneficiaries.findAll).not.toHaveBeenCalled();
+    });
+
+    test('queries only UPI payment_method beneficiaries', async () => {
+      mockDb.beneficiaries.findAll.mockResolvedValue([]);
+
+      await beneficiaryService.findByUpiId(TEST_USER_ID, 'x@bank');
+
+      expect(mockDb.beneficiaries.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ payment_method: 'upi' }),
+        })
+      );
+    });
+
+    test('queries only active beneficiaries', async () => {
+      mockDb.beneficiaries.findAll.mockResolvedValue([]);
+
+      await beneficiaryService.findByUpiId(TEST_USER_ID, 'x@bank');
+
+      expect(mockDb.beneficiaries.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ is_active: true }),
+        })
+      );
+    });
+
+    test('re-throws DB errors', async () => {
+      mockDb.beneficiaries.findAll.mockRejectedValue(new Error('DB timeout'));
+
+      await expect(
+        beneficiaryService.findByUpiId(TEST_USER_ID, 'amit@okicici')
+      ).rejects.toThrow('DB timeout');
+    });
+
+    test('matches the first entry when multiple contacts have the same UPI (dedup edge case)', async () => {
+      const row1 = { ...buildEncryptedRow('shared@ybl'), id: 'ben-A', name: 'Alice' };
+      const row2 = { ...buildEncryptedRow('shared@ybl'), id: 'ben-B', name: 'Bob' };
+      mockDb.beneficiaries.findAll.mockResolvedValue([row1, row2]);
+
+      const result = await beneficiaryService.findByUpiId(TEST_USER_ID, 'shared@ybl');
+
+      expect(result.found).toBe(true);
+      expect(result.beneficiary.id).toBe('ben-A');
+    });
+  });
 });
