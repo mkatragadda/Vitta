@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { Scan, DollarSign, Sparkles, TrendingUp, Plus, Menu, LogOut, X, User } from 'lucide-react';
+import { Scan, DollarSign, Sparkles, TrendingUp, Menu, LogOut, X, User } from 'lucide-react';
 
 export default function HomeScreen({
-  usdBalance,
   exchangeRate,
+  weeklyStats,
   onScanToPay,
-  onAddFunds,
   onViewTransactions,
   onLogout,
   userName,
@@ -28,51 +27,19 @@ export default function HomeScreen({
         <p className="text-slate-400 text-sm">Your travel wallet</p>
       </div>
 
-      {/* USD Balance Card */}
+      {/* Live Rate strip */}
       <div className="mb-6">
-        <div className="glass-teal rounded-3xl p-6 border border-teal-500/30">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-teal-300 text-xs font-semibold uppercase mb-2">Available Balance</p>
-              <div className="flex items-baseline gap-2">
-                <DollarSign className="w-7 h-7 text-white" />
-                {usdBalance !== null ? (
-                  <>
-                    <span className="text-5xl font-bold text-white">
-                      {Math.floor(usdBalance).toLocaleString()}
-                    </span>
-                    <span className="text-2xl text-slate-400">
-                      .{String(Math.round((usdBalance % 1) * 100)).padStart(2, '0')}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-3xl text-slate-400 animate-pulse">Loading...</span>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={onAddFunds}
-              className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm font-semibold hover:bg-emerald-500/30 transition-all flex items-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              Add
-            </button>
-          </div>
-
-          <div className="pt-4 border-t border-white/10">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">Live Rate</span>
-              <div className="flex items-center gap-2">
-                {exchangeRate ? (
-                  <>
-                    <span className="text-white font-semibold">₹{exchangeRate.toFixed(2)} per USD</span>
-                    <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  </>
-                ) : (
-                  <span className="text-slate-400 text-xs">Loading rate...</span>
-                )}
-              </div>
-            </div>
+        <div className="glass rounded-2xl px-5 py-3 border border-white/10 flex items-center justify-between">
+          <span className="text-slate-400 text-sm">Live Rate</span>
+          <div className="flex items-center gap-2">
+            {exchangeRate ? (
+              <>
+                <span className="text-white font-semibold text-sm">₹{exchangeRate.toFixed(2)} per USD</span>
+                <TrendingUp className="w-4 h-4 text-emerald-400" />
+              </>
+            ) : (
+              <span className="text-slate-500 text-xs animate-pulse">Fetching…</span>
+            )}
           </div>
         </div>
       </div>
@@ -109,16 +76,26 @@ export default function HomeScreen({
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Scan className="w-4 h-4 text-teal-400" />
-                <span className="text-slate-400 text-xs">Scanned</span>
+                <span className="text-slate-400 text-xs">Payments</span>
               </div>
-              <p className="text-white text-xl font-bold">5 times</p>
+              <p className="text-white text-xl font-bold">
+                {weeklyStats
+                  ? `${weeklyStats.paymentsThisWeek} time${weeklyStats.paymentsThisWeek !== 1 ? 's' : ''}`
+                  : <span className="text-slate-500 text-sm animate-pulse">—</span>}
+              </p>
             </div>
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="w-4 h-4 text-emerald-400" />
-                <span className="text-slate-400 text-xs">Spent</span>
+                <span className="text-slate-400 text-xs">Sent</span>
               </div>
-              <p className="text-white text-xl font-bold">$42.50</p>
+              <p className="text-white text-xl font-bold">
+                {weeklyStats
+                  ? weeklyStats.totalUsd > 0
+                    ? `$${weeklyStats.totalUsd.toFixed(2)}`
+                    : `₹${weeklyStats.totalInr.toFixed(0)}`
+                  : <span className="text-slate-500 text-sm animate-pulse">—</span>}
+              </p>
             </div>
           </div>
         </div>

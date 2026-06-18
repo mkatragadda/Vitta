@@ -15,6 +15,18 @@
 const WISE_WEB_URL = 'https://wise.com/send';
 
 /**
+ * Build the Wise launch URL for the given context.
+ * Wise does not expose a public deep-link API for pre-filling transfer
+ * details on web or mobile, so this always returns the plain send URL.
+ * Pre-filling would require Wise Business OAuth — out of scope for Phase 1.
+ *
+ * @returns {string}
+ */
+function buildWiseWebUrl() {
+  return WISE_WEB_URL;
+}
+
+/**
  * Wise custom URL scheme.
  * Opens the Wise app directly on iOS and Android when installed.
  * The OS falls back to doing nothing if the app is absent, so callers
@@ -82,6 +94,7 @@ function buildPaymentSummary({ upiId, payeeName, amountInr, usdEquivalent, excha
 module.exports = {
   detectPlatform,
   buildWiseLaunchUrl,
+  buildWiseWebUrl,
   buildPaymentSummary,
   WISE_WEB_URL,
   WISE_APP_SCHEME,

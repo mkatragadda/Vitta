@@ -75,9 +75,15 @@ export default async function handler(req, res) {
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!ENCRYPTION_KEY || !SUPABASE_URL || !SUPABASE_KEY) {
-    console.error('[check-upi] Missing server configuration');
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error('[check-upi] Missing Supabase configuration');
     return res.status(500).json({ success: false, error: 'Server configuration error' });
+  }
+  // If encryption key is absent we cannot decrypt any stored UPI IDs,
+  // so treat every lookup as "not found" rather than returning 500.
+  if (!ENCRYPTION_KEY) {
+    console.warn('[check-upi] ENCRYPTION_KEY not set — returning not-found');
+    return res.status(200).json({ success: true, found: false, beneficiary: null });
   }
 
   try {

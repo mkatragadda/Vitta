@@ -6,13 +6,7 @@
  * - qrData: string (required, raw QR code data)
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { parseUPIQR } from '../../../utils/upiParser';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -41,37 +35,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // Save scan to database (best-effort — don't block the flow if table is missing)
-    let scanId = null;
-    try {
-      const { data: scan, error: scanError } = await supabase
-        .from('upi_scans')
-        .insert({
-          user_id: userId,
-          upi_id: parsed.upiId,
-          payee_name: parsed.payeeName || 'Unknown Merchant',
-          amount: parsed.amount,
-          currency: parsed.currency,
-          merchant_code: parsed.merchantCode || null,
-          transaction_note: parsed.note || null,
-          raw_qr_data: qrData,
-          status: 'scanned',
-        })
-        .select()
-        .single();
-      if (scanError) {
-        console.warn('[API/upi/parse-qr] Scan not saved (table may not exist yet):', scanError.message);
-      } else {
-        scanId = scan?.id ?? null;
-      }
-    } catch (dbErr) {
-      console.warn('[API/upi/parse-qr] Scan save skipped:', dbErr.message);
-    }
-
     res.status(200).json({
       success: true,
       data: {
-        scanId,
         upiId: parsed.upiId,
         payeeName: parsed.payeeName,
         amount: parsed.amount,

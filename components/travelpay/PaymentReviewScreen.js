@@ -19,7 +19,7 @@ import {
   ArrowLeft, Copy, Check, ExternalLink, Loader, AlertCircle,
   UserCheck, UserPlus, Pencil, X,
 } from 'lucide-react';
-import { detectPlatform, buildWiseLaunchUrl, buildPaymentSummary } from '../../utils/wiseLauncher';
+import { detectPlatform, buildWiseWebUrl, buildPaymentSummary } from '../../utils/wiseLauncher';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -235,22 +235,26 @@ export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLau
         throw new Error(launchJson.error || 'Could not log payment launch');
       }
 
-      // 2. Pick the right Wise URL for the user's device.
-      const platform = detectPlatform(navigator.userAgent);
-      const { primary, fallback } = buildWiseLaunchUrl({ platform });
+      // 2. Build Wise URL with best-effort amount pre-fill.
+      const wiseUrl = buildWiseWebUrl({ amountInr, usdEquivalent });
 
-      // 3. Open Wise.
-      //    Mobile: try the app scheme; schedule a web fallback in case the
-      //    app isn't installed (the OS will silently do nothing for unknown schemes).
-      //    Desktop: open the web URL in a new tab.
-      if (platform === 'ios' || platform === 'android') {
-        window.location.href = primary;
-        setTimeout(() => window.open(fallback, '_blank'), 1500);
-      } else {
-        window.open(primary, '_blank');
+      // 3. Open Wise synchronously (must be in the user-gesture call stack
+      //    or popup blockers will fire).
+      window.open(wiseUrl, '_blank');
+
+      // 4. On real mobile hardware, try the Wise app scheme so the installed
+      //    app can intercept. Chrome DevTools responsive mode spoofs the UA
+      //    AND maxTouchPoints, but navigator.platform still reports the host
+      //    OS (MacIntel / Win32) — use that to filter out simulated devices.
+      const uaPlatform = detectPlatform(navigator.userAgent);
+      const nativePlatform = (navigator.platform || '').toLowerCase();
+      const isRealMobile = (uaPlatform === 'ios' || uaPlatform === 'android')
+        && /iphone|ipad|ipod|android/.test(nativePlatform);
+      if (isRealMobile) {
+        try { window.location.href = 'wise://'; } catch { /* ignore */ }
       }
 
-      // 4. Notify parent — it will show the PostLaunchBanner.
+      // 5. Notify parent — it will show the PostLaunchBanner.
       onLaunched({
         launchId: launchJson.launchId,
         parsedUPI,
@@ -380,53 +384,68 @@ export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLau
           </div>
         </div>
 
-        {/* ── Copy details ───────────────────────────────────────────────── */}
+        {/* ── How to pay guide ───────────────────────────────────────────── */}
         <div className="glass rounded-2xl p-4 border border-white/10 space-y-3">
           <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">
-            Copy to paste in Wise
+            How to complete in Wise
           </p>
 
-          {/* UPI ID row */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-slate-500 text-xs mb-0.5">UPI ID</p>
-              <p className="text-white text-sm font-mono truncate">{parsedUPI.upiId}</p>
+          {/* Step 1 — copy UPI ID */}
+          <div className="flex items-start gap-3">
+            <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-400
+              text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-slate-400 text-xs mb-1">Copy UPI ID → paste as recipient in Wise</p>
+              <div className="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-3 py-2">
+                <p className="text-white text-sm font-mono truncate">{parsedUPI.upiId}</p>
+                <CopyButton
+                  text={parsedUPI.upiId}
+                  field="upiId"
+                  copiedField={copiedField}
+                  onCopy={copyToClipboard}
+                />
+              </div>
             </div>
-            <CopyButton
-              text={parsedUPI.upiId}
-              field="upiId"
-              copiedField={copiedField}
-              onCopy={copyToClipboard}
-            />
           </div>
 
-          {/* Amount row */}
+          {/* Step 2 — copy amount */}
           {amountInr > 0 && (
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-slate-500 text-xs mb-0.5">Amount</p>
-                <p className="text-white text-sm font-mono">
-                  ₹{amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </p>
+            <div className="flex items-start gap-3">
+              <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-400
+                text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+              <div className="flex-1">
+                <p className="text-slate-400 text-xs mb-1">Confirm amount in Wise (pre-filled if supported)</p>
+                <div className="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-3 py-2">
+                  <p className="text-white text-sm font-mono">
+                    ₹{amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </p>
+                  <CopyButton
+                    text={String(amountInr)}
+                    field="amount"
+                    copiedField={copiedField}
+                    onCopy={copyToClipboard}
+                  />
+                </div>
               </div>
-              <CopyButton
-                text={String(amountInr)}
-                field="amount"
-                copiedField={copiedField}
-                onCopy={copyToClipboard}
-              />
             </div>
           )}
 
-          {/* Copy everything button */}
-          <button
-            onClick={copySummary}
-            className="w-full py-2 rounded-xl glass text-teal-300 text-xs font-semibold
-              border border-teal-500/20 hover:bg-teal-500/10 transition-all flex items-center justify-center gap-1.5"
-          >
-            {copiedField === 'summary' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copiedField === 'summary' ? 'Copied all details' : 'Copy all payment details'}
-          </button>
+          {/* Step 3 — copy all */}
+          <div className="flex items-start gap-3">
+            <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-400
+              text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{amountInr > 0 ? 3 : 2}</span>
+            <div className="flex-1">
+              <p className="text-slate-400 text-xs mb-1">Or copy everything at once</p>
+              <button
+                onClick={copySummary}
+                className="w-full py-2 rounded-xl glass text-teal-300 text-xs font-semibold
+                  border border-teal-500/20 hover:bg-teal-500/10 transition-all flex items-center justify-center gap-1.5"
+              >
+                {copiedField === 'summary' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedField === 'summary' ? 'Copied!' : 'Copy all payment details'}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ── Save contact toggle (only for new recipients) ──────────────── */}

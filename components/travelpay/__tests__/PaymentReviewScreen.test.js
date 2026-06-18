@@ -17,7 +17,7 @@ import PaymentReviewScreen from '../PaymentReviewScreen';
 // wiseLauncher — keep pure-logic module; mock only side effects if needed
 jest.mock('../../../utils/wiseLauncher', () => ({
   detectPlatform: jest.fn(() => 'desktop'),
-  buildWiseLaunchUrl: jest.fn(() => ({ primary: 'https://wise.com/send', fallback: 'https://wise.com/send' })),
+  buildWiseWebUrl: jest.fn(() => 'https://wise.com/send?targetCurrency=INR&sourceAmount=59.80&sourceCurrency=USD'),
   buildPaymentSummary: jest.fn(() => 'UPI ID: test@bank\nAmount: ₹5000.00 INR'),
 }));
 
@@ -156,8 +156,8 @@ describe('PaymentReviewScreen — FX rate', () => {
   test('shows USD equivalent when rate loads successfully', async () => {
     setupFetch({ rate: { success: true, data: { rate: 83.62 } } });
     await act(async () => { render(<PaymentReviewScreen {...defaultProps} />); });
-    // 5000 / 83.62 ≈ 59.79
-    await waitFor(() => expect(screen.getByText(/\$59\.\d+ USD/)).toBeInTheDocument());
+    // 5000 / 83.62 ≈ 59.79 — may appear in the amount card and/or copy guide
+    await waitFor(() => expect(screen.getAllByText(/\$59\.\d+ USD/).length).toBeGreaterThan(0));
   });
 
   test('shows rate unavailable message when API fails', async () => {

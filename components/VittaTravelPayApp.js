@@ -24,6 +24,7 @@ import AmountInputModal from './travelpay/AmountInputModal';
 export default function VittaTravelPayApp({ userData, onLogout }) {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [exchangeRate, setExchangeRate] = useState(null);
+  const [weeklyStats, setWeeklyStats] = useState(null);
 
   // Scan data — set after a successful QR parse
   const [scanData, setScanData] = useState(null);
@@ -36,21 +37,32 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   const [launchContext, setLaunchContext] = useState(null);
 
   // ---------------------------------------------------------------------------
-  // Bootstrap: fetch live FX rate for home screen display
+  // Bootstrap
   // ---------------------------------------------------------------------------
   useEffect(() => {
     fetchLiveRate();
+    fetchWeeklyStats();
   }, []);
 
   const fetchLiveRate = async () => {
     try {
       const res = await fetch('/api/wise/rate?source=USD&target=INR');
       const json = await res.json();
-      if (json.success && json.data?.rate) {
-        setExchangeRate(json.data.rate);
-      }
+      if (json.success && json.data?.rate) setExchangeRate(json.data.rate);
     } catch {
-      setExchangeRate(83.85); // safe display fallback
+      setExchangeRate(83.85);
+    }
+  };
+
+  const fetchWeeklyStats = async () => {
+    try {
+      const res = await fetch('/api/payments/stats', {
+        headers: { 'x-user-id': userData.id },
+      });
+      const json = await res.json();
+      if (json.success) setWeeklyStats(json.data);
+    } catch {
+      // stats are non-critical — leave as null
     }
   };
 
@@ -97,19 +109,34 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
     setLaunchContext({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact });
   };
 
-  const handleConfirmed = ({ saveContact }) => {
+  const handleConfirmed = async ({ saveContact }) => {
+    const ctx = launchContext;
     setLaunchContext(null);
     setScanData(null);
-    // If the user wants to save the contact, navigate to the add-beneficiary
-    // flow pre-populated.  For Phase 1 we simply return home; the contacts
-    // screen (and pre-fill) is a Phase 2 addition.
     setCurrentScreen('home');
+    fetchWeeklyStats(); // refresh count after a completed payment
+
+    if (saveContact && ctx?.parsedUPI?.upiId) {
+      try {
+        await fetch('/api/beneficiaries/save-from-scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-user-id': userData.id },
+          body: JSON.stringify({
+            upiId: ctx.parsedUPI.upiId,
+            name: ctx.parsedUPI.payeeName || ctx.parsedUPI.upiId,
+          }),
+        });
+      } catch (err) {
+        console.error('[TravelPayApp] Save contact failed:', err.message);
+      }
+    }
   };
 
   const handleDismissed = () => {
     setLaunchContext(null);
     setScanData(null);
     setCurrentScreen('home');
+    fetchWeeklyStats();
   };
 
   // ---------------------------------------------------------------------------
@@ -153,9 +180,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
         {currentScreen === 'home' && (
           <HomeScreen
             exchangeRate={exchangeRate}
-            usdBalance={null}          // no Wise wallet in Phase 1
+            weeklyStats={weeklyStats}
             onScanToPay={() => setCurrentScreen('scanner')}
-            onAddFunds={() => setCurrentScreen('add-funds')}
             onViewTransactions={() => setCurrentScreen('transactions')}
             onLogout={onLogout}
             userName={userData?.name}

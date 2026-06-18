@@ -23,20 +23,15 @@ export default async function handler(req, res) {
       ? 'https://api.sandbox.transferwise.tech'
       : 'https://api.transferwise.com';
 
-    // Use unauthenticated quote endpoint
-    // This endpoint doesn't require auth and is perfect for displaying rates
     const url = `${baseURL}/v3/quotes`;
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // No Authorization header needed for unauthenticated quotes
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sourceCurrency: source,
         targetCurrency: target,
-        sourceAmount: 1, // Get rate for 1 unit
+        sourceAmount: 1,
       }),
     });
 

@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS beneficiaries (
 
   -- Basic Info
   name VARCHAR(255) NOT NULL,
-  phone VARCHAR(20) NOT NULL,
+  phone VARCHAR(20),                          -- optional when saved from QR scan
   email VARCHAR(255),
 
   -- Payment Method: 'upi' or 'bank_account'
@@ -601,23 +601,6 @@ CREATE INDEX IF NOT EXISTS idx_payment_launches_launched_at ON payment_launches(
 
 -- ============================================================================
 
--- ============================================================================
--- UPI Scans (Phase 1 — scan history, best-effort)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS upi_scans (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  upi_id TEXT NOT NULL,
-  payee_name TEXT,
-  amount NUMERIC(12, 2),
-  currency TEXT NOT NULL DEFAULT 'INR',
-  merchant_code TEXT,
-  transaction_note TEXT,
-  raw_qr_data TEXT,
-  status TEXT NOT NULL DEFAULT 'scanned'
-    CHECK (status IN ('scanned', 'launched', 'completed', 'cancelled')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_upi_scans_user_id ON upi_scans(user_id);
-CREATE INDEX IF NOT EXISTS idx_upi_scans_user_created ON upi_scans(user_id, created_at DESC);
+-- Existing DB migration: make phone optional in beneficiaries
+-- (safe to run multiple times)
+ALTER TABLE beneficiaries ALTER COLUMN phone DROP NOT NULL;
