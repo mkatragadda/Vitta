@@ -14,47 +14,36 @@ export default function TransactionsScreen({ userId, onClose }) {
   }, [userId]);
 
   const fetchTransactions = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      // TODO: Fetch real transactions from API
-      // Mock data for now
-      const mockTransactions = [
-        {
-          id: 1,
-          payeeName: 'Café Coffee Day',
-          usdAmount: 5.37,
-          inrAmount: 450,
-          timestamp: new Date().toISOString(),
-          category: 'today'
-        },
-        {
-          id: 2,
-          payeeName: 'Auto Rickshaw',
-          usdAmount: 2.15,
-          inrAmount: 180,
-          timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // 4 hours ago
-          category: 'today'
-        },
-        {
-          id: 3,
-          payeeName: 'Street Food',
-          usdAmount: 1.20,
-          inrAmount: 100,
-          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
-          category: 'yesterday'
-        }
-      ];
+      const res = await fetch('/api/payments/transactions', {
+        headers: { 'x-user-id': userId },
+      });
+      const json = await res.json();
 
-      setTransactions(mockTransactions);
+      if (!json.success) throw new Error(json.error || 'Failed to load');
 
-      // Calculate monthly stats
-      const totalUsd = mockTransactions.reduce((sum, tx) => sum + tx.usdAmount, 0);
+      const normalized = (json.data || []).map((row) => ({
+        id: row.id,
+        payeeName: row.recipient_name || row.recipient_upi_id || 'Unknown',
+        usdAmount: Number(row.usd_equivalent) || 0,
+        inrAmount: Number(row.amount_inr) || 0,
+        timestamp: row.launched_at,
+        rail: row.rail,
+      }));
+
+      setTransactions(normalized);
+
+      const ms = json.monthStats || {};
       setMonthlyStats({
-        totalUsd,
-        count: mockTransactions.length
+        totalUsd: ms.totalUsd || 0,
+        count: ms.count || 0,
       });
     } catch (error) {
       console.error('[TransactionsScreen] Error fetching transactions:', error);
+      setTransactions([]);
+      setMonthlyStats({ totalUsd: 0, count: 0 });
     } finally {
       setLoading(false);
     }
@@ -65,15 +54,23 @@ export default function TransactionsScreen({ userId, onClose }) {
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
   };
 
+  const getDateCategory = (timestamp) => {
+    const txDate = new Date(timestamp);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+    if (txDate >= todayStart) return 'today';
+    if (txDate >= yesterdayStart) return 'yesterday';
+    return txDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   const groupedTransactions = transactions.reduce((groups, tx) => {
-    const category = tx.category || 'today';
-    if (!groups[category]) {
-      groups[category] = [];
-    }
+    const category = getDateCategory(tx.timestamp);
+    if (!groups[category]) groups[category] = [];
     groups[category].push(tx);
     return groups;
   }, {});
@@ -130,7 +127,7 @@ export default function TransactionsScreen({ userId, onClose }) {
             Object.entries(groupedTransactions).map(([category, txs]) => (
               <div key={category}>
                 <p className="text-slate-400 text-xs font-semibold uppercase mb-2">
-                  {category === 'today' ? 'Today' : category === 'yesterday' ? 'Yesterday' : category}
+                  {category === 'today' ? 'Today' : category === 'yesterday' ? 'Yesterday' : category.toUpperCase()}
                 </p>
                 <div className="space-y-2">
                   {txs.map((tx) => (

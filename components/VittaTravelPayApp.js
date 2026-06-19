@@ -25,6 +25,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [exchangeRate, setExchangeRate] = useState(null);
   const [weeklyStats, setWeeklyStats] = useState(null);
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [txScreenKey, setTxScreenKey] = useState(0); // incremented to force remount
 
   // Scan data — set after a successful QR parse
   const [scanData, setScanData] = useState(null);
@@ -42,6 +44,7 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   useEffect(() => {
     fetchLiveRate();
     fetchWeeklyStats();
+    fetchRecentTransactions();
   }, []);
 
   const fetchLiveRate = async () => {
@@ -63,6 +66,28 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
       if (json.success) setWeeklyStats(json.data);
     } catch {
       // stats are non-critical — leave as null
+    }
+  };
+
+  const fetchRecentTransactions = async () => {
+    try {
+      const res = await fetch('/api/payments/transactions?limit=5', {
+        headers: { 'x-user-id': userData.id },
+      });
+      const json = await res.json();
+      if (json.success) {
+        setRecentTransactions(
+          (json.data || []).map((row) => ({
+            id: row.id,
+            payeeName: row.recipient_name || row.recipient_upi_id || 'Unknown',
+            usdAmount: Number(row.usd_equivalent) || 0,
+            inrAmount: Number(row.amount_inr) || 0,
+            timestamp: row.launched_at,
+          }))
+        );
+      }
+    } catch {
+      // non-critical
     }
   };
 
@@ -114,7 +139,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
     setLaunchContext(null);
     setScanData(null);
     setCurrentScreen('home');
-    fetchWeeklyStats(); // refresh count after a completed payment
+    fetchWeeklyStats();
+    fetchRecentTransactions();
 
     if (saveContact && ctx?.parsedUPI?.upiId) {
       try {
@@ -181,8 +207,12 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
           <HomeScreen
             exchangeRate={exchangeRate}
             weeklyStats={weeklyStats}
+            recentTransactions={recentTransactions}
             onScanToPay={() => setCurrentScreen('scanner')}
-            onViewTransactions={() => setCurrentScreen('transactions')}
+            onViewTransactions={() => {
+              setTxScreenKey((k) => k + 1);
+              setCurrentScreen('transactions');
+            }}
             onLogout={onLogout}
             userName={userData?.name}
             userEmail={userData?.email}
@@ -214,6 +244,7 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
 
         {currentScreen === 'transactions' && (
           <TransactionsScreen
+            key={txScreenKey}
             userId={userData.id}
             onClose={() => setCurrentScreen('home')}
           />

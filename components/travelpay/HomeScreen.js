@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Scan, DollarSign, Sparkles, TrendingUp, Menu, LogOut, X, User } from 'lucide-react';
+import { Scan, DollarSign, Sparkles, TrendingUp, Menu, LogOut, X, User, Clock } from 'lucide-react';
 
 export default function HomeScreen({
   exchangeRate,
   weeklyStats,
+  recentTransactions = [],
   onScanToPay,
   onViewTransactions,
   onLogout,
@@ -11,6 +12,16 @@ export default function HomeScreen({
   userEmail
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const formatTime = (ts) =>
+    new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  const isToday = (ts) => {
+    const d = new Date(ts);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  };
+
   return (
     <div className="h-screen flex flex-col px-6 py-6">
       {/* Header */}
@@ -60,10 +71,10 @@ export default function HomeScreen({
         </button>
       </div>
 
-      {/* Activity Summary */}
-      <div className="mb-auto">
+      {/* Activity Summary + Recent Transactions */}
+      <div className="mb-auto overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white font-semibold text-sm">This Week</h3>
+          <h3 className="text-white font-semibold text-sm">Recent Activity</h3>
           <button
             onClick={onViewTransactions}
             className="text-teal-400 text-sm font-semibold hover:text-teal-300"
@@ -71,12 +82,14 @@ export default function HomeScreen({
             View All →
           </button>
         </div>
-        <div className="glass rounded-2xl p-4">
+
+        {/* Weekly stats strip */}
+        <div className="glass rounded-2xl p-4 mb-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1">
                 <Scan className="w-4 h-4 text-teal-400" />
-                <span className="text-slate-400 text-xs">Payments</span>
+                <span className="text-slate-400 text-xs">This Week</span>
               </div>
               <p className="text-white text-xl font-bold">
                 {weeklyStats
@@ -85,7 +98,7 @@ export default function HomeScreen({
               </p>
             </div>
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="w-4 h-4 text-emerald-400" />
                 <span className="text-slate-400 text-xs">Sent</span>
               </div>
@@ -99,6 +112,37 @@ export default function HomeScreen({
             </div>
           </div>
         </div>
+
+        {/* Recent transaction rows */}
+        {recentTransactions.length === 0 ? (
+          <div className="glass rounded-2xl p-5 text-center">
+            <Clock className="w-6 h-6 text-slate-600 mx-auto mb-2" />
+            <p className="text-slate-500 text-xs">No confirmed payments yet</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recentTransactions.map((tx) => (
+              <div
+                key={tx.id}
+                className="glass rounded-xl px-4 py-3 flex items-center gap-3"
+              >
+                <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center shrink-0">
+                  <Scan className="w-4 h-4 text-teal-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">{tx.payeeName}</p>
+                  <p className="text-slate-500 text-xs">
+                    {isToday(tx.timestamp) ? formatTime(tx.timestamp) : new Date(tx.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-white text-sm font-bold">${tx.usdAmount.toFixed(2)}</p>
+                  <p className="text-slate-500 text-xs">₹{tx.inrAmount.toFixed(0)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* AI Helper */}
