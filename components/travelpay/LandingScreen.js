@@ -1,7 +1,7 @@
 import React from 'react';
 
-const GoogleIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+const GoogleIcon = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
@@ -13,400 +13,339 @@ const SignInButton = ({ onClick, label = 'Sign in with Google', large = false })
   <button
     onClick={onClick}
     style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: large ? 10 : 8,
-      background: '#4ecf9a',
-      color: '#071412',
-      fontWeight: 700,
-      fontSize: large ? 14 : 13,
-      padding: large ? '13px 26px' : '8px 18px',
-      borderRadius: large ? 12 : 22,
-      border: 'none',
-      cursor: 'pointer',
-      letterSpacing: '-0.1px',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      gap: large ? 10 : 7,
+      background: '#4ecf9a', color: '#071412',
+      fontWeight: 700, fontSize: large ? 15 : 13,
+      padding: large ? '14px 28px' : '8px 16px',
+      borderRadius: large ? 14 : 999,
+      border: 'none', cursor: 'pointer',
+      width: large ? '100%' : 'auto',
+      maxWidth: large ? 300 : 'none',
       transition: 'opacity 0.15s',
     }}
     onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
     onMouseLeave={e => e.currentTarget.style.opacity = '1'}
   >
     <span style={{
-      width: large ? 22 : 18,
-      height: large ? 22 : 18,
-      background: '#fff',
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
+      width: large ? 20 : 16, height: large ? 20 : 16,
+      background: '#fff', borderRadius: '50%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     }}>
-      <GoogleIcon />
+      <GoogleIcon size={large ? 12 : 10} />
     </span>
     {label}
   </button>
 );
 
+// ── Rail (P2P / P2M card) ─────────────────────────────────────────────────────
+const Rail = ({ type, badge, badgeBg, badgeColor, borderColor, name, sub, desc, amountLine, amountUsd, optPrimary, optPrimaryHint, optSecondary }) => (
+  <div style={{
+    flex: 1,
+    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid ${borderColor}`,
+    borderRadius: 14, padding: '16px 14px',
+  }}>
+    <span style={{
+      display: 'inline-block', fontSize: 10, fontWeight: 700,
+      padding: '3px 9px', borderRadius: 6, marginBottom: 9,
+      letterSpacing: '0.4px', background: badgeBg, color: badgeColor,
+    }}>{badge}</span>
+    <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{name}</div>
+    <div style={{ color: 'rgba(255,255,255,0.28)', fontSize: 11, marginBottom: 9 }}>{sub}</div>
+    <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, lineHeight: 1.55, marginBottom: 11 }}>{desc}</p>
+    {/* amount box */}
+    <div style={{
+      background: 'rgba(0,0,0,0.2)',
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 9, padding: '9px 11px', marginBottom: 11,
+    }}>
+      <div style={{ color: 'rgba(255,255,255,0.28)', fontSize: 10, marginBottom: 3 }}>Amount scanned</div>
+      <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: 600 }}>{amountLine}</div>
+      <div style={{ color: '#4ecf9a', fontSize: 11, marginTop: 2 }}>≈ {amountUsd} at live rate</div>
+    </div>
+    {/* options */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 10px', borderRadius: 8,
+        background: 'rgba(78,207,154,0.07)', border: '1px solid rgba(78,207,154,0.2)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a' }} />
+          <span style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>{optPrimary}</span>
+        </div>
+        <span style={{ color: '#4ecf9a', fontSize: 10, fontWeight: 600 }}>{optPrimaryHint}</span>
+      </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 10px', borderRadius: 8,
+        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.18)' }} />
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>{optSecondary}</span>
+        </div>
+        <span style={{ color: 'rgba(255,255,255,0.28)', fontSize: 10 }}>Compare</span>
+      </div>
+    </div>
+  </div>
+);
+
+// ── V divider ─────────────────────────────────────────────────────────────────
+const VDividerMobile = () => (
+  <div className="vitta-v-mobile" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+    <div style={{
+      width: 34, height: 34, borderRadius: '50%',
+      background: '#4ecf9a', color: '#071412',
+      fontSize: 12, fontWeight: 800,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>V</div>
+    <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+  </div>
+);
+
+const VDividerDesktop = () => (
+  <div className="vitta-v-desktop" style={{
+    display: 'none', flexDirection: 'column', alignItems: 'center',
+    justifyContent: 'center', gap: 6, width: 64, flexShrink: 0,
+  }}>
+    <div style={{ width: 1, height: 24, background: 'rgba(78,207,154,0.18)' }} />
+    <div style={{
+      width: 34, height: 34, borderRadius: '50%',
+      background: '#4ecf9a', color: '#071412',
+      fontSize: 12, fontWeight: 800,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>V</div>
+    <div style={{ color: 'rgba(255,255,255,0.18)', fontSize: 9, fontWeight: 700, letterSpacing: '0.5px' }}>ROUTES</div>
+    <div style={{ width: 1, height: 24, background: 'rgba(78,207,154,0.18)' }} />
+  </div>
+);
+
+// ── Step (How it works) ───────────────────────────────────────────────────────
+const Step = ({ num, title, desc, children, last }) => (
+  <li className="vitta-step" style={{ display: 'flex', gap: 16 }}>
+    {/* left: number + connector line */}
+    <div className="vitta-step-left" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{
+        width: 30, height: 30, borderRadius: '50%',
+        background: '#4ecf9a', color: '#071412',
+        fontSize: 13, fontWeight: 800,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>{num}</div>
+      {!last && (
+        <div className="vitta-step-line" style={{ width: 1, flex: 1, minHeight: 20, background: 'rgba(78,207,154,0.18)', margin: '5px 0' }} />
+      )}
+    </div>
+    {/* right: content */}
+    <div className="vitta-step-right" style={{ paddingBottom: last ? 0 : 24, paddingTop: 3, flex: 1 }}>
+      <div style={{ color: '#fff', fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{title}</div>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, lineHeight: 1.65 }}>{desc}</p>
+      {children}
+    </div>
+  </li>
+);
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function LandingScreen({ onGoogleSignIn }) {
   return (
-    <div style={{ background: '#071412', minHeight: '100vh', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif", color: '#fff', scrollBehavior: 'smooth' }}>
+    <div style={{ background: '#071412', minHeight: '100vh', color: '#fff', fontFamily: "Inter, -apple-system, BlinkMacSystemFont, sans-serif" }}>
 
       {/* ── NAV ── */}
       <nav style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '14px 32px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        position: 'sticky',
-        top: 0,
-        background: 'rgba(7,20,18,0.92)',
-        backdropFilter: 'blur(16px)',
-        zIndex: 50,
+        position: 'sticky', top: 0, zIndex: 100,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '14px 20px',
+        background: 'rgba(7,20,18,0.94)',
+        backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
         <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px' }}>Vitta</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Nav links — hidden on narrow screens via Tailwind wrapper */}
-          <div className="hidden sm:flex" style={{ alignItems: 'center', gap: 4, marginRight: 8 }}>
-            {[
-              { label: 'How it works', target: 'how-it-works' },
-              { label: 'P2P transfers', target: 'intelligence' },
-              { label: 'Merchant pay', target: 'intelligence' },
-            ].map(({ label, target }) => (
-              <button
-                key={label}
-                onClick={() => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' })}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'rgba(255,255,255,0.42)',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  transition: 'color 0.15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.82)'}
-                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.42)'}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <SignInButton onClick={onGoogleSignIn} label="Sign in" />
-        </div>
+        <SignInButton onClick={onGoogleSignIn} label="Sign in" />
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{ textAlign: 'center', padding: '60px 24px 52px', maxWidth: 640, margin: '0 auto' }}>
-        {/* Pill badge */}
+      <section style={{ padding: '44px 20px 40px', textAlign: 'center', maxWidth: 640, margin: '0 auto' }}>
+        {/* pill */}
         <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 7,
-          background: 'rgba(78,207,154,0.09)',
-          border: '1px solid rgba(78,207,154,0.22)',
-          borderRadius: 20,
-          padding: '5px 14px',
-          marginBottom: 22,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'rgba(78,207,154,0.1)', border: '1px solid rgba(78,207,154,0.2)',
+          borderRadius: 999, padding: '5px 13px', marginBottom: 22,
         }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a', flexShrink: 0 }} />
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a' }} />
           <span style={{ color: '#4ecf9a', fontSize: 12, fontWeight: 600 }}>Smart India payments for NRIs &amp; travelers</span>
         </div>
 
         {/* H1 */}
-        <h1 style={{ fontSize: 'clamp(34px, 6vw, 48px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-1.5px', marginBottom: 16 }}>
+        <h1 style={{ fontSize: 'clamp(30px, 9vw, 52px)', fontWeight: 900, lineHeight: 1.06, letterSpacing: '-1.5px', marginBottom: 16 }}>
           Every India payment.<br />
           <em style={{ color: '#4ecf9a', fontStyle: 'normal' }}>Finally in USD.</em>
         </h1>
 
-        {/* Subtitle */}
-        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 15, lineHeight: 1.7, marginBottom: 6, maxWidth: 480, margin: '0 auto 6px' }}>
-          Scan any UPI QR, see the amount in <strong style={{ color: 'rgba(255,255,255,0.84)' }}>USD</strong>, and pay with
-          confidence — whether you&apos;re paying a <strong style={{ color: 'rgba(255,255,255,0.84)' }}>person</strong>, a{' '}
-          <strong style={{ color: 'rgba(255,255,255,0.84)' }}>merchant</strong>, or someone you pay often.
+        {/* subtitles */}
+        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, lineHeight: 1.65, maxWidth: 480, margin: '0 auto 8px' }}>
+          Scan any UPI QR, see the amount in <strong style={{ color: '#fff', fontWeight: 600 }}>USD</strong>, and pay
+          with confidence — whether you&apos;re paying a <strong style={{ color: '#fff', fontWeight: 600 }}>person</strong>,
+          a <strong style={{ color: '#fff', fontWeight: 600 }}>merchant</strong>, or someone you pay often.
         </p>
-        <p style={{ color: 'rgba(255,255,255,0.24)', fontSize: 13, lineHeight: 1.65, maxWidth: 420, margin: '0 auto 30px' }}>
+        <p style={{ color: 'rgba(255,255,255,0.28)', fontSize: 12, lineHeight: 1.6, maxWidth: 360, margin: '0 auto 28px' }}>
           Vitta brings clarity to India payments today, and over time, more of the payment happens directly inside Vitta.
         </p>
 
         {/* CTA */}
-        <div style={{ marginBottom: 24 }}>
-          <SignInButton onClick={onGoogleSignIn} label="Sign in with Google" large />
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+          <div className="vitta-cta" style={{ width: '100%', maxWidth: 300 }}>
+            <SignInButton onClick={onGoogleSignIn} label="Sign in with Google" large />
+          </div>
         </div>
 
-        {/* Trust lines */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+        {/* trust lines */}
+        <ul className="vitta-trust" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', listStyle: 'none' }}>
           {[
             'Your money stays in your existing accounts',
             'Works with Wise, Remitly, GPay, PhonePe & banks',
             'Works on any UPI QR',
           ].map(line => (
-            <div key={line} style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'rgba(255,255,255,0.28)', fontSize: 12 }}>
-              <span style={{ color: '#4ecf9a', fontWeight: 700, fontSize: 11 }}>✓</span>
+            <li key={line} style={{ color: 'rgba(255,255,255,0.28)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ color: '#4ecf9a', fontSize: 11, fontWeight: 700 }}>✓</span>
               {line}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
 
-      {/* ── INTELLIGENCE CARD ── */}
-      <section id="intelligence" style={{ padding: '0 20px 52px', maxWidth: 860, margin: '0 auto' }}>
+      {/* ── INTELLIGENCE / ROUTER CARD ── */}
+      <div id="intelligence" className="vitta-section-wrap" style={{ padding: '0 16px 44px', maxWidth: 900, margin: '0 auto' }}>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 20,
-          padding: '28px 24px 24px',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 20, padding: '24px 18px 20px',
         }}>
-          {/* Card header */}
-          <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <div style={{ color: '#4ecf9a', fontSize: 10, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 8 }}>
+          {/* header */}
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <p style={{ color: '#4ecf9a', fontSize: 11, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 7 }}>
               Vitta intelligence
-            </div>
-            <div style={{ color: '#fff', fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 6 }}>
+            </p>
+            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.3px', marginBottom: 5 }}>
               Every payment starts with clarity.
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.34)', fontSize: 13, lineHeight: 1.6, maxWidth: 480, margin: '0 auto' }}>
-              Vitta understands who you&apos;re paying, shows what it costs in USD, and helps you choose the best way to pay —
-              while remembering the people and merchants you pay in India.
-            </div>
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, lineHeight: 1.6, maxWidth: 480, margin: '0 auto' }}>
+              Vitta classifies the QR and suggests the best way to pay — you confirm in your existing app.
+            </p>
           </div>
 
-          {/* P2P / Center / P2M grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 1fr', gap: 0, alignItems: 'center' }}>
+          {/* rails grid */}
+          <div className="vitta-router-grid" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Rail
+              badge="P2P — Person-to-person"
+              badgeBg="rgba(139,107,255,0.12)" badgeColor="#9b7dff"
+              borderColor="rgba(139,107,255,0.22)"
+              name="Sending money to someone"
+              sub="Personal contact detected"
+              desc="Pay family, friends, and personal contacts with more context and less repeated setup."
+              amountLine="₹5,000 to rahul@upi"
+              amountUsd="$59.82 USD"
+              optPrimary="Best remittance route"
+              optPrimaryHint="Best rate"
+              optSecondary="Other available options"
+            />
 
-            {/* P2P */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(139,107,255,0.2)',
-              borderRadius: 14,
-              padding: '16px 14px',
-            }}>
-              <div style={{
-                display: 'inline-block',
-                background: 'rgba(139,107,255,0.11)',
-                color: '#9b7dff',
-                fontSize: 9,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 5,
-                marginBottom: 9,
-                letterSpacing: '0.4px',
-              }}>
-                P2P — Person-to-person
-              </div>
-              <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginBottom: 2 }}>Sending money to someone</div>
-              <div style={{ color: 'rgba(255,255,255,0.26)', fontSize: 10, marginBottom: 10 }}>Personal contact detected</div>
-              <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: 11, lineHeight: 1.5, marginBottom: 11 }}>
-                Pay family, friends, helpers, and personal contacts in India with more context and less repeated setup.
-              </div>
-              {/* Amount box */}
-              <div style={{
-                background: 'rgba(0,0,0,0.22)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 9,
-                padding: '8px 10px',
-                marginBottom: 11,
-              }}>
-                <div style={{ color: 'rgba(255,255,255,0.24)', fontSize: 9, marginBottom: 3 }}>Amount scanned</div>
-                <div style={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: 600 }}>₹5,000 to rahul@upi</div>
-                <div style={{ color: '#4ecf9a', fontSize: 10, marginTop: 2 }}>≈ $59.82 USD at live rate</div>
-              </div>
-              {/* Options */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '7px 9px', borderRadius: 8,
-                  background: 'rgba(78,207,154,0.07)', border: '1px solid rgba(78,207,154,0.18)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a' }} />
-                    <span style={{ color: '#fff', fontSize: 11, fontWeight: 600 }}>Best remittance route</span>
-                  </div>
-                  <span style={{ color: '#4ecf9a', fontSize: 9, fontWeight: 700 }}>Best rate</span>
-                </div>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '7px 9px', borderRadius: 8,
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.18)' }} />
-                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Other options</span>
-                  </div>
-                  <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 700 }}>Compare</span>
-                </div>
-              </div>
-            </div>
+            <VDividerMobile />
+            <VDividerDesktop />
 
-            {/* Center orb */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 1, height: 20, background: 'rgba(78,207,154,0.18)' }} />
-              <div style={{
-                width: 40, height: 40, borderRadius: '50%', background: '#4ecf9a',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 800, color: '#071412',
-              }}>V</div>
-              <div style={{ color: 'rgba(255,255,255,0.18)', fontSize: 8, fontWeight: 700, letterSpacing: '0.6px' }}>ROUTES</div>
-              <div style={{ width: 1, height: 20, background: 'rgba(78,207,154,0.18)' }} />
-            </div>
-
-            {/* P2M */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,140,80,0.2)',
-              borderRadius: 14,
-              padding: '16px 14px',
-            }}>
-              <div style={{
-                display: 'inline-block',
-                background: 'rgba(255,140,80,0.11)',
-                color: '#ff9055',
-                fontSize: 9,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 5,
-                marginBottom: 9,
-                letterSpacing: '0.4px',
-              }}>
-                P2M — Merchant
-              </div>
-              <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginBottom: 2 }}>Paying a shop</div>
-              <div style={{ color: 'rgba(255,255,255,0.26)', fontSize: 10, marginBottom: 10 }}>Merchant detected</div>
-              <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: 11, lineHeight: 1.5, marginBottom: 11 }}>
-                Pay everyday merchants with a clearer view of the cost before you confirm — same simple scan.
-              </div>
-              {/* Amount box */}
-              <div style={{
-                background: 'rgba(0,0,0,0.22)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 9,
-                padding: '8px 10px',
-                marginBottom: 11,
-              }}>
-                <div style={{ color: 'rgba(255,255,255,0.24)', fontSize: 9, marginBottom: 3 }}>Amount scanned</div>
-                <div style={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: 600 }}>₹850 at Chai Point</div>
-                <div style={{ color: '#4ecf9a', fontSize: 10, marginTop: 2 }}>≈ $10.16 USD at live rate</div>
-              </div>
-              {/* Options */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '7px 9px', borderRadius: 8,
-                  background: 'rgba(78,207,154,0.07)', border: '1px solid rgba(78,207,154,0.18)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a' }} />
-                    <span style={{ color: '#fff', fontSize: 11, fontWeight: 600 }}>Available payment app</span>
-                  </div>
-                  <span style={{ color: '#4ecf9a', fontSize: 9, fontWeight: 700 }}>Launch UPI</span>
-                </div>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '7px 9px', borderRadius: 8,
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.18)' }} />
-                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Other options</span>
-                  </div>
-                  <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 700 }}>Choose</span>
-                </div>
-              </div>
-            </div>
+            <Rail
+              badge="P2M — Merchant payment"
+              badgeBg="rgba(255,140,80,0.12)" badgeColor="#ff9055"
+              borderColor="rgba(255,140,80,0.22)"
+              name="Paying a shop or service"
+              sub="Merchant detected"
+              desc="Pay everyday merchants with a clearer view of the cost before you confirm."
+              amountLine="₹850 at Chai Point"
+              amountUsd="$10.16 USD"
+              optPrimary="Available payment app"
+              optPrimaryHint="Launch UPI"
+              optSecondary="Other available options"
+            />
           </div>
         </div>
-      </section>
+      </div>
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" style={{ padding: '0 20px 52px', maxWidth: 860, margin: '0 auto' }}>
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ color: '#4ecf9a', fontSize: 10, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 8 }}>
-            How it works
-          </div>
-          <div style={{ color: '#fff', fontSize: 20, fontWeight: 700, letterSpacing: '-0.3px' }}>
-            Scan, understand, pay.
-          </div>
-        </div>
+      <section id="how-it-works" className="vitta-section-wrap" style={{ padding: '0 16px 44px', maxWidth: 900, margin: '0 auto' }}>
+        <p style={{ color: '#4ecf9a', fontSize: 11, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 7 }}>
+          How it works
+        </p>
+        <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.4px', marginBottom: 24 }}>
+          Scan, understand, pay.
+        </h2>
 
-        {/* 3-step strip */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 1,
-          background: 'rgba(255,255,255,0.07)',
-          borderRadius: 14,
-          overflow: 'hidden',
-        }}>
-          {/* Step 01 */}
-          <div style={{ background: '#071412', padding: '20px 16px' }}>
-            <div style={{ color: '#4ecf9a', fontSize: 10, fontWeight: 800, letterSpacing: '0.5px', marginBottom: 8 }}>01</div>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>Scan any UPI QR</div>
-            <div style={{ color: 'rgba(255,255,255,0.34)', fontSize: 12, lineHeight: 1.55 }}>
-              Use Vitta to scan a QR from a person, shop, or service in India.
-            </div>
-          </div>
-
-          {/* Step 02 */}
-          <div style={{ background: '#071412', padding: '20px 16px' }}>
-            <div style={{ color: '#4ecf9a', fontSize: 10, fontWeight: 800, letterSpacing: '0.5px', marginBottom: 8 }}>02</div>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>See who you&apos;re paying and what it costs</div>
-            <div style={{ color: 'rgba(255,255,255,0.34)', fontSize: 12, lineHeight: 1.55, marginBottom: 9 }}>
-              Vitta identifies the type, shows INR in USD, and compares available paths.
-            </div>
+        <ol className="vitta-steps" style={{ display: 'flex', flexDirection: 'column', gap: 0, listStyle: 'none' }}>
+          <Step num={1} title="Scan any UPI QR"
+            desc="Open Vitta and point your camera at any UPI QR — shop, restaurant, or friend's link."
+          />
+          <Step num={2} title="See who you're paying and what it costs"
+            desc="Vitta identifies the type, shows the INR amount in USD at the live rate, and compares available paths."
+          >
             <div style={{
               background: 'rgba(78,207,154,0.05)',
               border: '1px solid rgba(78,207,154,0.14)',
-              borderRadius: 8,
-              padding: '7px 10px',
-              display: 'flex',
-              gap: 7,
+              borderRadius: 10, padding: '10px 12px',
+              display: 'flex', gap: 8, marginTop: 10,
             }}>
-              <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: 10, lineHeight: 1.5 }}>
-                <strong style={{ color: '#4ecf9a', fontWeight: 600 }}>VPA memory:</strong> If you&apos;ve paid this contact before, Vitta remembers the name and history.
-              </div>
+              <span style={{ color: '#4ecf9a', fontSize: 13, flexShrink: 0, marginTop: 1 }}>✦</span>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, lineHeight: 1.55, margin: 0 }}>
+                <strong style={{ color: '#4ecf9a', fontWeight: 600 }}>VPA memory:</strong> If you&apos;ve paid this
+                contact before, Vitta remembers the name, past amounts, and history.
+              </p>
             </div>
-          </div>
-
-          {/* Step 03 */}
-          <div style={{ background: '#071412', padding: '20px 16px' }}>
-            <div style={{ color: '#4ecf9a', fontSize: 10, fontWeight: 800, letterSpacing: '0.5px', marginBottom: 8 }}>03</div>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>Pay with confidence</div>
-            <div style={{ color: 'rgba(255,255,255,0.34)', fontSize: 12, lineHeight: 1.55, marginBottom: 9 }}>
-              Vitta helps you continue with the right payment path, keeping India payments organised.
-            </div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          </Step>
+          <Step num={3} last title="Pay with confidence"
+            desc="Vitta helps you continue with the right payment path, keeping your India payments organised and easy to repeat."
+          >
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
               {[
-                { label: 'Personal', bg: 'rgba(139,107,255,0.1)', color: '#9b7dff' },
-                { label: 'Merchant', bg: 'rgba(255,140,80,0.1)', color: '#ff9055' },
-                { label: 'Repeat', bg: 'rgba(78,207,154,0.1)', color: '#4ecf9a' },
+                { label: 'Personal',      bg: 'rgba(139,107,255,0.1)', color: '#9b7dff' },
+                { label: 'Merchant',      bg: 'rgba(255,140,80,0.1)',  color: '#ff9055' },
+                { label: 'Repeat payees', bg: 'rgba(78,207,154,0.1)', color: '#4ecf9a' },
               ].map(({ label, bg, color }) => (
-                <span key={label} style={{
-                  background: bg, color,
-                  fontSize: 9, fontWeight: 700,
-                  padding: '2px 8px', borderRadius: 4,
-                }}>{label}</span>
+                <span key={label} style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, background: bg, color }}>
+                  {label}
+                </span>
               ))}
             </div>
-          </div>
-        </div>
+          </Step>
+        </ol>
       </section>
 
-      {/* ── FOOTER CTA ── */}
+      {/* ── FOOTER ── */}
       <footer style={{
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        padding: '48px 24px',
+        background: 'rgba(78,207,154,0.04)',
+        borderTop: '1px solid rgba(78,207,154,0.1)',
+        padding: '48px 20px',
         textAlign: 'center',
       }}>
-        <h2 style={{ fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.2, marginBottom: 10 }}>
-          The easiest way to stay on top<br />
-          of <em style={{ color: '#4ecf9a', fontStyle: 'normal' }}>India payments.</em>
+        <h2 style={{ fontSize: 'clamp(22px, 6vw, 30px)', fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15, marginBottom: 10 }}>
+          The easiest way to stay on top of <em style={{ color: '#4ecf9a', fontStyle: 'normal' }}>India payments.</em>
         </h2>
-        <p style={{ color: 'rgba(255,255,255,0.32)', fontSize: 14, lineHeight: 1.65, maxWidth: 380, margin: '0 auto 24px' }}>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, lineHeight: 1.65, maxWidth: 400, margin: '0 auto 24px' }}>
           One place to understand, compare, and manage how you pay in India — simpler today, more built-in over time.
         </p>
-        <SignInButton onClick={onGoogleSignIn} label="Get started — it's free" large />
-      </footer>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 300 }}>
+            <SignInButton onClick={onGoogleSignIn} label="Get started — it's free" large />
+          </div>
+        </div>
 
+        <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 32, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          {['Privacy', 'Terms', 'Help'].map(link => (
+            <a key={link} href="#" style={{ color: 'rgba(255,255,255,0.28)', fontSize: 12, textDecoration: 'none' }}>{link}</a>
+          ))}
+        </div>
+        <p style={{ color: 'rgba(255,255,255,0.28)', fontSize: 12, marginTop: 10 }}>
+          &copy; 2025 Vitta &middot; getvitta.com
+        </p>
+      </footer>
     </div>
   );
 }
