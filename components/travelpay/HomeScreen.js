@@ -1,223 +1,249 @@
-import React, { useState } from 'react';
-import { Scan, DollarSign, Sparkles, TrendingUp, Menu, LogOut, X, User, Clock } from 'lucide-react';
+import React from 'react';
+import { Scan, ArrowRight, Users } from 'lucide-react';
+
+const ACCENT  = '#4ecf9a';
+const P2P_CLR = '#9b7dff';
+const P2M_CLR = '#ff9055';
+
+const twoInitials = (name) =>
+  (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+const formatDate = (ts) => {
+  const d   = new Date(ts);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yestStart  = new Date(todayStart - 86400000);
+  if (d >= todayStart) return 'Today';
+  if (d >= yestStart)  return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const PayeeRow = ({ payee, showDivider }) => {
+  const isP2P = payee.upiType === 'p2p';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '11px 12px', background: 'rgba(255,255,255,0.06)', cursor: 'pointer',
+      borderBottom: showDivider ? '1px solid rgba(255,255,255,0.05)' : 'none',
+    }}>
+      <div style={{
+        width: 32, height: 32,
+        borderRadius: isP2P ? '50%' : '8px',
+        background: isP2P ? 'rgba(139,107,255,0.24)' : 'rgba(255,140,80,0.2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 11, fontWeight: 700,
+        color: isP2P ? P2P_CLR : P2M_CLR,
+        flexShrink: 0,
+      }}>
+        {twoInitials(payee.name)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: '#fff', fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {payee.name}
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 1 }}>
+          {formatDate(payee.lastPaidAt)}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 600 }}>
+          ₹{payee.amountInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.28)', fontSize: 10 }}>
+          ${payee.amountUsd.toFixed(2)}
+        </div>
+        <span style={{
+          display: 'inline-block', marginTop: 2,
+          background: isP2P ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)',
+          color: isP2P ? P2P_CLR : P2M_CLR,
+          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+        }}>
+          {isP2P ? 'P2P' : 'P2M'}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 export default function HomeScreen({
   exchangeRate,
-  weeklyStats,
-  recentTransactions = [],
-  onScanToPay,
-  onViewTransactions,
-  onLogout,
+  recentPayees = [],
   userName,
-  userEmail
+  onScanToPay,
+  onViewActivity,
 }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  const formatTime = (ts) =>
-    new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-  const isToday = (ts) => {
-    const d = new Date(ts);
-    const now = new Date();
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  };
+  const isEmpty  = recentPayees.length === 0;
+  const isSparse = recentPayees.length > 0 && recentPayees.length < 3;
+  const isFull   = recentPayees.length >= 3;
 
   return (
-    <div className="h-screen flex flex-col px-6 py-6">
-      {/* Header */}
-      <div className="mb-6 mt-16">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl font-bold text-white">Vitta</h1>
-          <button
-            onClick={() => setIsMenuOpen(true)}
-            className="glass p-3 rounded-xl text-slate-300 hover:bg-white/10 transition-all"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-        </div>
-        <p className="text-slate-400 text-sm">Your travel wallet</p>
-      </div>
+    // fill full screen height minus bottom nav (64px)
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 64px)' }}>
 
-      {/* Live Rate strip */}
-      <div className="mb-6">
-        <div className="glass rounded-2xl px-5 py-3 border border-white/10 flex items-center justify-between">
-          <span className="text-slate-400 text-sm">Live Rate</span>
-          <div className="flex items-center gap-2">
-            {exchangeRate ? (
-              <>
-                <span className="text-white font-semibold text-sm">₹{exchangeRate.toFixed(2)} per USD</span>
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-              </>
-            ) : (
-              <span className="text-slate-500 text-xs animate-pulse">Fetching…</span>
-            )}
-          </div>
+      {/* ── TOP BAR ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 10px' }}>
+        <span style={{ color: '#fff', fontSize: 16, fontWeight: 700, letterSpacing: '-0.4px' }}>Vitta</span>
+        <div style={{
+          width: 30, height: 30, borderRadius: '50%',
+          background: 'rgba(78,207,154,0.12)',
+          border: '1px solid rgba(78,207,154,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 700, color: ACCENT,
+        }}>
+          {twoInitials(userName)}
         </div>
       </div>
 
-      {/* Main Action - Scan & Pay */}
-      <div className="mb-6">
+      {/* ── TITLE ── */}
+      <div style={{ padding: '2px 20px 12px' }}>
+        <div style={{ color: '#fff', fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', marginBottom: 3 }}>Pay in India</div>
+        <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Scan a QR or pay someone again</div>
+      </div>
+
+      {/* ── LIVE RATE PILL ── */}
+      <div style={{ padding: '0 20px 14px' }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'rgba(78,207,154,0.08)',
+          border: '1px solid rgba(78,207,154,0.18)',
+          borderRadius: 20, padding: '5px 12px',
+        }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: ACCENT }} />
+          {exchangeRate ? (
+            <span style={{ color: ACCENT, fontSize: 11, fontWeight: 600 }}>
+              Live rate · ₹{exchangeRate.toFixed(2)} / USD
+            </span>
+          ) : (
+            <span style={{ color: 'rgba(78,207,154,0.5)', fontSize: 11 }}>Fetching…</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── SCAN & PAY ── */}
+      <div style={{ margin: '0 16px 18px' }}>
         <button
           onClick={onScanToPay}
-          className="w-full glass-teal rounded-3xl p-8 hover:bg-teal-500/10 transition-all border-2 border-teal-500/40 pulse-glow"
+          style={{
+            width: '100%',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 18, padding: '26px 14px',
+            cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
+          }}
         >
-          <div className="flex flex-col items-center">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center mb-4 shadow-2xl shadow-teal-500/40">
-              <Scan className="w-12 h-12 text-white" />
-            </div>
-            <h2 className="text-white text-2xl font-bold mb-2">Scan & Pay</h2>
-            <p className="text-slate-400 text-sm">Pay with UPI in India</p>
+          <div style={{
+            width: 58, height: 58, borderRadius: '50%',
+            background: ACCENT,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: 12,
+          }}>
+            <Scan size={26} color="#071412" strokeWidth={2.5} />
           </div>
+          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700, marginBottom: 3 }}>Scan &amp; Pay</div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Scan any UPI QR in India</div>
         </button>
       </div>
 
-      {/* Activity Summary + Recent Transactions */}
-      <div className="mb-auto overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white font-semibold text-sm">Recent Activity</h3>
-          <button
-            onClick={onViewTransactions}
-            className="text-teal-400 text-sm font-semibold hover:text-teal-300"
-          >
-            View All →
-          </button>
+      {/* ── PAYEES SECTION — fills all remaining height ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: 16 }}>
+
+        {/* section header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
+          <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>Recent payees</span>
+          {isFull && (
+            <button
+              onClick={onViewActivity}
+              style={{ background: 'none', border: 'none', color: ACCENT, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+            >
+              View all →
+            </button>
+          )}
         </div>
 
-        {/* Weekly stats strip */}
-        <div className="glass rounded-2xl p-4 mb-3">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Scan className="w-4 h-4 text-teal-400" />
-                <span className="text-slate-400 text-xs">This Week</span>
-              </div>
-              <p className="text-white text-xl font-bold">
-                {weeklyStats
-                  ? `${weeklyStats.paymentsThisWeek} time${weeklyStats.paymentsThisWeek !== 1 ? 's' : ''}`
-                  : <span className="text-slate-500 text-sm animate-pulse">—</span>}
-              </p>
+        {/* ── EMPTY: fills remaining space ── */}
+        {isEmpty && (
+          <div style={{
+            flex: 1, margin: '0 16px',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px dashed rgba(255,255,255,0.1)',
+            borderRadius: 13,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: '28px 16px', textAlign: 'center',
+          }}>
+            <div style={{
+              width: 42, height: 42, borderRadius: '50%',
+              background: 'rgba(78,207,154,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 11,
+            }}>
+              <Users size={20} color={ACCENT} />
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <DollarSign className="w-4 h-4 text-emerald-400" />
-                <span className="text-slate-400 text-xs">Sent</span>
-              </div>
-              <p className="text-white text-xl font-bold">
-                {weeklyStats
-                  ? weeklyStats.totalUsd > 0
-                    ? `$${weeklyStats.totalUsd.toFixed(2)}`
-                    : `₹${weeklyStats.totalInr.toFixed(0)}`
-                  : <span className="text-slate-500 text-sm animate-pulse">—</span>}
-              </p>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: 700, marginBottom: 5 }}>
+              No recent payees yet
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, lineHeight: 1.6 }}>
+              Scan a UPI QR to make your first payment.<br />It&apos;ll show up here.
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Recent transaction rows */}
-        {recentTransactions.length === 0 ? (
-          <div className="glass rounded-2xl p-5 text-center">
-            <Clock className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-            <p className="text-slate-500 text-xs">No confirmed payments yet</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {recentTransactions.map((tx) => (
-              <div
-                key={tx.id}
-                className="glass rounded-xl px-4 py-3 flex items-center gap-3"
-              >
-                <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center shrink-0">
-                  <Scan className="w-4 h-4 text-teal-400" />
+        {/* ── SPARSE: list + nudge that GROWS to fill gap ── */}
+        {isSparse && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', margin: '0 16px', gap: 10 }}>
+            {/* payee rows */}
+            <div style={{ borderRadius: 13, overflow: 'hidden' }}>
+              {recentPayees.map((p, i) => (
+                <PayeeRow key={p.upiId} payee={p} showDivider={i < recentPayees.length - 1} />
+              ))}
+            </div>
+
+            {/* nudge card — flex:1 fills all remaining space */}
+            <button
+              onClick={onScanToPay}
+              style={{
+                flex: 1,
+                background: 'rgba(78,207,154,0.04)',
+                border: '1px dashed rgba(78,207,154,0.15)',
+                borderRadius: 12, padding: '14px',
+                display: 'flex', alignItems: 'center', gap: 11,
+                cursor: 'pointer', width: '100%', textAlign: 'left',
+                minHeight: 70,
+              }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: 'rgba(78,207,154,0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Scan size={17} color={ACCENT} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 700, marginBottom: 3 }}>
+                  Scan to pay someone new
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-semibold truncate">{tx.payeeName}</p>
-                  <p className="text-slate-500 text-xs">
-                    {isToday(tx.timestamp) ? formatTime(tx.timestamp) : new Date(tx.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-white text-sm font-bold">${tx.usdAmount.toFixed(2)}</p>
-                  <p className="text-slate-500 text-xs">₹{tx.inrAmount.toFixed(0)}</p>
+                <div style={{ color: 'rgba(255,255,255,0.28)', fontSize: 11, lineHeight: 1.45 }}>
+                  They&apos;ll appear here for quick repeat payments.
                 </div>
               </div>
+              <ArrowRight size={16} color="rgba(78,207,154,0.5)" style={{ flexShrink: 0 }} />
+            </button>
+          </div>
+        )}
+
+        {/* ── FULL: list only ── */}
+        {isFull && (
+          <div style={{
+            margin: '0 16px',
+            background: 'rgba(255,255,255,0.06)',
+            borderRadius: 13, overflow: 'hidden',
+          }}>
+            {recentPayees.map((p, i) => (
+              <PayeeRow key={p.upiId} payee={p} showDivider={i < recentPayees.length - 1} />
             ))}
           </div>
         )}
       </div>
-
-      {/* AI Helper */}
-      <div className="pt-4">
-        <button className="w-full glass rounded-2xl p-4 flex items-center gap-3 hover:bg-white/5 transition-all">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-emerald-300 text-xs font-semibold">AI Assistant</p>
-            <p className="text-white text-sm">Ask me anything</p>
-          </div>
-        </button>
-      </div>
-
-      {/* Slide-out Menu */}
-      {isMenuOpen && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
-            onClick={() => setIsMenuOpen(false)}
-          />
-
-          {/* Menu Panel */}
-          <div className="fixed top-0 right-0 bottom-0 w-80 bg-gradient-to-b from-slate-900 to-slate-950 border-l border-teal-500/30 z-50 shadow-2xl">
-            <div className="flex flex-col h-full">
-              {/* Menu Header */}
-              <div className="flex items-center justify-between p-6 border-b border-white/10">
-                <h2 className="text-white text-xl font-bold">Menu</h2>
-                <button
-                  onClick={() => setIsMenuOpen(false)}
-                  className="glass p-2 rounded-xl text-slate-300 hover:bg-white/10 transition-all"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* User Info */}
-              {userName && (
-                <div className="p-6 border-b border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center">
-                      <User className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-white font-semibold">{userName}</p>
-                      <p className="text-slate-400 text-sm">{userEmail}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Menu Items */}
-              <div className="flex-1 p-6">
-                {/* Add more menu items here if needed */}
-              </div>
-
-              {/* Logout Button */}
-              <div className="p-6 border-t border-white/10">
-                <button
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    if (onLogout) onLogout();
-                  }}
-                  className="w-full glass-teal rounded-xl p-4 flex items-center gap-3 hover:bg-red-500/10 transition-all border border-red-500/30 text-red-400"
-                >
-                  <LogOut className="w-5 h-5" />
-                  <span className="font-semibold">Sign Out</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }

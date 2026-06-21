@@ -1,41 +1,42 @@
 /**
  * VittaTravelPayApp
  *
- * Standalone orchestrator for the India-payment flow.
- * Phase 1 philosophy: Vitta remembers who you pay and opens the right app.
- * Money moves through Wise (or another rail) — not through Vitta.
- *
  * Screen state machine:
  *   home → scanner → payment-review → home  (PostLaunchBanner overlays review)
- *   home → add-funds
- *   home → transactions
+ *   home | activity | you  ←→ bottom nav tabs
  */
 
 import React, { useState, useEffect } from 'react';
-import { Info } from 'lucide-react';
+import { Home, Scan, Clock, User } from 'lucide-react';
 import HomeScreen from './travelpay/HomeScreen';
 import ScannerScreen from './travelpay/ScannerScreen';
 import PaymentReviewScreen from './travelpay/PaymentReviewScreen';
 import PostLaunchBanner from './travelpay/PostLaunchBanner';
 import AddFundsScreen from './travelpay/AddFundsScreen';
 import TransactionsScreen from './travelpay/TransactionsScreen';
+import YouScreen from './travelpay/YouScreen';
 import AmountInputModal from './travelpay/AmountInputModal';
+
+const NAV_TABS = [
+  { id: 'home',     label: 'Home',     Icon: Home  },
+  { id: 'scanner',  label: 'Pay',      Icon: Scan  },
+  { id: 'activity', label: 'Activity', Icon: Clock },
+  { id: 'you',      label: 'You',      Icon: User  },
+];
+
+// Screens that take over the full viewport — hide bottom nav during these
+const OVERLAY_SCREENS = ['scanner', 'payment-review', 'add-funds'];
 
 export default function VittaTravelPayApp({ userData, onLogout }) {
   const [currentScreen, setCurrentScreen] = useState('home');
-  const [exchangeRate, setExchangeRate] = useState(null);
-  const [weeklyStats, setWeeklyStats] = useState(null);
-  const [recentTransactions, setRecentTransactions] = useState([]);
-  const [txScreenKey, setTxScreenKey] = useState(0); // incremented to force remount
+  const [exchangeRate, setExchangeRate]   = useState(null);
+  const [weeklyStats, setWeeklyStats]     = useState(null);
+  const [recentPayees, setRecentPayees]   = useState([]);
+  const [txScreenKey, setTxScreenKey]     = useState(0);
 
-  // Scan data — set after a successful QR parse
-  const [scanData, setScanData] = useState(null);
-
-  // Amount modal — shown when the QR has no pre-filled amount
+  const [scanData, setScanData]           = useState(null);
   const [showAmountModal, setShowAmountModal] = useState(false);
   const [pendingScanData, setPendingScanData] = useState(null);
-
-  // Post-launch banner — shown after user taps "Open Wise"
   const [launchContext, setLaunchContext] = useState(null);
 
   // ---------------------------------------------------------------------------
@@ -44,12 +45,12 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   useEffect(() => {
     fetchLiveRate();
     fetchWeeklyStats();
-    fetchRecentTransactions();
+    fetchRecentPayees();
   }, []);
 
   const fetchLiveRate = async () => {
     try {
-      const res = await fetch('/api/wise/rate?source=USD&target=INR');
+      const res  = await fetch('/api/wise/rate?source=USD&target=INR');
       const json = await res.json();
       if (json.success && json.data?.rate) setExchangeRate(json.data.rate);
     } catch {
@@ -59,53 +60,51 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
 
   const fetchWeeklyStats = async () => {
     try {
-      const res = await fetch('/api/payments/stats', {
-        headers: { 'x-user-id': userData.id },
-      });
+      const res  = await fetch('/api/payments/stats', { headers: { 'x-user-id': userData.id } });
       const json = await res.json();
       if (json.success) setWeeklyStats(json.data);
-    } catch {
-      // stats are non-critical — leave as null
-    }
+    } catch { /* non-critical */ }
   };
 
-  const fetchRecentTransactions = async () => {
+  const fetchRecentPayees = async () => {
     try {
-      const res = await fetch('/api/payments/transactions?limit=5', {
-        headers: { 'x-user-id': userData.id },
-      });
+      const res  = await fetch('/api/beneficiaries/recent', { headers: { 'x-user-id': userData.id } });
       const json = await res.json();
-      if (json.success) {
-        setRecentTransactions(
-          (json.data || []).map((row) => ({
-            id: row.id,
-            payeeName: row.recipient_name || row.recipient_upi_id || 'Unknown',
-            usdAmount: Number(row.usd_equivalent) || 0,
-            inrAmount: Number(row.amount_inr) || 0,
-            timestamp: row.launched_at,
-          }))
-        );
-      }
-    } catch {
-      // non-critical
-    }
+      if (json.success) setRecentPayees(json.data || []);
+    } catch { /* non-critical */ }
   };
+
+  // ---------------------------------------------------------------------------
+  // Bottom nav handler
+  // ---------------------------------------------------------------------------
+  const handleTabPress = (tabId) => {
+    if (tabId === 'scanner') {
+      setCurrentScreen('scanner');
+      return;
+    }
+    if (tabId === 'activity') {
+      setTxScreenKey(k => k + 1);
+    }
+    setCurrentScreen(tabId);
+  };
+
+  // Which tab appears active in the nav
+  const activeTab = OVERLAY_SCREENS.includes(currentScreen) ? null : currentScreen;
 
   // ---------------------------------------------------------------------------
   // Scan → parse → review
   // ---------------------------------------------------------------------------
   const handleScanSuccess = async (qrResult) => {
     try {
-      const res = await fetch('/api/upi/parse-qr', {
-        method: 'POST',
+      const res  = await fetch('/api/upi/parse-qr', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': userData.id },
-        body: JSON.stringify({ qrData: qrResult.raw }),
+        body:    JSON.stringify({ qrData: qrResult.raw }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to parse QR code');
 
       if (!json.data.amount || json.data.amount === 0) {
-        // Amount not in QR — ask the user
         setPendingScanData(json.data);
         setShowAmountModal(true);
         return;
@@ -140,16 +139,16 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
     setScanData(null);
     setCurrentScreen('home');
     fetchWeeklyStats();
-    fetchRecentTransactions();
+    fetchRecentPayees();
 
     if (saveContact && ctx?.parsedUPI?.upiId) {
       try {
         await fetch('/api/beneficiaries/save-from-scan', {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json', 'x-user-id': userData.id },
-          body: JSON.stringify({
+          body:    JSON.stringify({
             upiId: ctx.parsedUPI.upiId,
-            name: ctx.parsedUPI.payeeName || ctx.parsedUPI.upiId,
+            name:  ctx.parsedUPI.payeeName || ctx.parsedUPI.upiId,
           }),
         });
       } catch (err) {
@@ -165,57 +164,38 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
     fetchWeeklyStats();
   };
 
+  const showBottomNav = !OVERLAY_SCREENS.includes(currentScreen) && !launchContext;
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-teal-950 to-slate-950">
+    <div style={{ background: '#071412', minHeight: '100vh' }}>
       <style>{`
-        @keyframes slide-up { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes scan-line { 0%, 100% { transform: translateY(-100%); } 50% { transform: translateY(100%); } }
-        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 20px rgba(13,148,136,0.3); } 50% { box-shadow: 0 0 40px rgba(13,148,136,0.6); } }
+        @keyframes slide-up    { from { transform:translateY(30px);opacity:0 } to { transform:translateY(0);opacity:1 } }
+        @keyframes scan-line   { 0%,100%{transform:translateY(-100%)} 50%{transform:translateY(100%)} }
+        @keyframes pulse-glow  { 0%,100%{box-shadow:0 0 20px rgba(13,148,136,0.3)} 50%{box-shadow:0 0 40px rgba(13,148,136,0.6)} }
 
         .animate-slide-up { animation: slide-up 0.35s ease-out; }
-        .scan-line { animation: scan-line 2s linear infinite; }
-        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+        .scan-line        { animation: scan-line 2s linear infinite; }
+        .pulse-glow       { animation: pulse-glow 2s ease-in-out infinite; }
 
-        .glass         { background: rgba(255,255,255,0.04); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); }
-        .glass-strong  { background: rgba(255,255,255,0.08); backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.15); }
-        .glass-teal    { background: rgba(13,148,136,0.08);  backdrop-filter: blur(24px); border: 1px solid rgba(13,148,136,0.2); }
+        .glass        { background:rgba(255,255,255,0.04); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); }
+        .glass-strong { background:rgba(255,255,255,0.08); backdrop-filter:blur(24px); border:1px solid rgba(255,255,255,0.15); }
+        .glass-teal   { background:rgba(13,148,136,0.08);  backdrop-filter:blur(24px); border:1px solid rgba(13,148,136,0.2); }
       `}</style>
 
-      {/* Info banner — home screen only */}
-      {currentScreen === 'home' && (
-        <div className="fixed top-0 left-0 right-0 z-50 px-4 pt-4">
-          <div className="max-w-md mx-auto glass rounded-2xl p-3 border border-teal-500/30 bg-teal-500/5">
-            <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-teal-300 text-xs font-semibold mb-0.5">India Payment Brain</p>
-                <p className="text-slate-300 text-xs leading-relaxed">
-                  Scan any UPI QR · Vitta remembers who you pay · Opens the right app for you.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-md mx-auto min-h-screen">
+      {/* ── SCREEN CONTENT ── */}
+      <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', paddingBottom: showBottomNav ? 64 : 0 }}>
 
         {currentScreen === 'home' && (
           <HomeScreen
             exchangeRate={exchangeRate}
             weeklyStats={weeklyStats}
-            recentTransactions={recentTransactions}
-            onScanToPay={() => setCurrentScreen('scanner')}
-            onViewTransactions={() => {
-              setTxScreenKey((k) => k + 1);
-              setCurrentScreen('transactions');
-            }}
-            onLogout={onLogout}
+            recentPayees={recentPayees}
             userName={userData?.name}
-            userEmail={userData?.email}
+            onScanToPay={() => setCurrentScreen('scanner')}
+            onViewActivity={() => handleTabPress('activity')}
           />
         )}
 
@@ -242,16 +222,63 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
           />
         )}
 
-        {currentScreen === 'transactions' && (
+        {currentScreen === 'activity' && (
           <TransactionsScreen
             key={txScreenKey}
             userId={userData.id}
             onClose={() => setCurrentScreen('home')}
           />
         )}
+
+        {currentScreen === 'you' && (
+          <YouScreen
+            userData={userData}
+            onLogout={onLogout}
+          />
+        )}
       </div>
 
-      {/* PostLaunchBanner — overlays whatever screen is showing */}
+      {/* ── BOTTOM NAV ── */}
+      {showBottomNav && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100%',
+          maxWidth: 480,
+          background: '#071412',
+          borderTop: '1px solid rgba(255,255,255,0.07)',
+          display: 'flex',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          zIndex: 100,
+        }}>
+          {NAV_TABS.map(({ id, label, Icon }) => {
+            const isActive = activeTab === id;
+            const color = isActive ? '#4ecf9a' : 'rgba(255,255,255,0.28)';
+            return (
+              <button
+                key={id}
+                onClick={() => handleTabPress(id)}
+                style={{
+                  flex: 1,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  gap: 3,
+                  padding: '10px 0 12px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                }}
+              >
+                <Icon size={20} color={color} strokeWidth={isActive ? 2.2 : 1.8} />
+                <span style={{ fontSize: 9, fontWeight: isActive ? 700 : 500, color, letterSpacing: '0.2px' }}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── OVERLAYS ── */}
       {launchContext && (
         <PostLaunchBanner
           launchId={launchContext.launchId}
@@ -265,14 +292,9 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
         />
       )}
 
-      {/* Amount input modal — when QR has no pre-filled amount */}
       <AmountInputModal
         isOpen={showAmountModal}
-        onClose={() => {
-          setShowAmountModal(false);
-          setPendingScanData(null);
-          setCurrentScreen('home');
-        }}
+        onClose={() => { setShowAmountModal(false); setPendingScanData(null); setCurrentScreen('home'); }}
         onSubmit={handleAmountSubmit}
         payeeName={pendingScanData?.payeeName}
         upiId={pendingScanData?.upiId}
