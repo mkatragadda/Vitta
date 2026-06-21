@@ -70,29 +70,12 @@ body {
 }
 
 /* ── LandingScreen responsive classes ── */
-@media (min-width: 600px) {
-  .vitta-trust { flex-direction: row !important; flex-wrap: wrap; justify-content: center; gap: 16px !important; }
-  .vitta-cta   { width: auto !important; }
+@media (min-width: 480px) {
+  .vl-hero  { align-items: center; text-align: center; }
+  .vl-pill  { align-self: auto !important; }
+  .vl-sub   { margin-left: auto; margin-right: auto; }
 }
-
-@media (min-width: 900px) {
-  .vitta-router-grid   { flex-direction: row !important; }
-  .vitta-v-mobile      { display: none !important; }
-  .vitta-v-desktop     { display: flex !important; }
-  .vitta-steps         { flex-direction: row !important; }
-  .vitta-step          { flex: 1; flex-direction: column !important; padding-right: 28px; position: relative; }
-  .vitta-step:not(:last-child)::after {
-    content: '';
-    position: absolute; top: 15px; right: 0;
-    width: 28px; height: 1px;
-    background: rgba(78,207,154,0.18);
-  }
-  /* hide mobile vertical connectors when steps go horizontal */
-  .vitta-step-line     { display: none !important; }
-  /* step-left: number goes inline (row) with bottom margin */
-  .vitta-step-left     { flex-direction: row !important; margin-bottom: 14px; align-items: center !important; }
-  /* step-right: no extra padding on desktop */
-  .vitta-step-right    { padding-bottom: 0 !important; padding-top: 0 !important; }
-  /* wider padding for router/steps sections */
-  .vitta-section-wrap  { padding-left: 48px !important; padding-right: 48px !important; }
+@media (min-width: 600px) {
+  .vl-trust { flex-direction: row !important; flex-wrap: wrap; justify-content: center; gap: 14px 22px !important; }
+  .vl-cta   { width: auto !important; }
 }
