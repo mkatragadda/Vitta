@@ -46,20 +46,22 @@ export default function LandingScreen({ onGoogleSignIn }) {
       </nav>
 
       {/* ── HERO ── */}
-      <main className="vl-hero" style={{
+      <main style={{
         flex: 1,
-        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center',
         padding: '40px 24px 52px',
         width: '100%', maxWidth: 560, margin: '0 auto',
       }}>
 
         {/* pill */}
-        <div className="vl-pill" style={{
+        <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           background: 'rgba(78,207,154,0.08)',
           border: '1px solid rgba(78,207,154,0.18)',
           borderRadius: 999, padding: '5px 12px',
-          marginBottom: 28, alignSelf: 'flex-start',
+          marginBottom: 28,
         }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ecf9a', flexShrink: 0 }} />
           <span style={{ color: '#4ecf9a', fontSize: 11, fontWeight: 600 }}>US→India payments · NRIs &amp; travelers</span>
@@ -76,10 +78,10 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </h1>
 
         {/* subheadline */}
-        <p className="vl-sub" style={{
+        <p style={{
           fontSize: 'clamp(14px, 3.5vw, 16px)',
           lineHeight: 1.65, color: 'rgba(255,255,255,0.45)',
-          maxWidth: 380, marginBottom: 38,
+          maxWidth: 380, margin: '0 auto 38px',
         }}>
           Point your camera at any UPI QR. Vitta shows you the{' '}
           <strong style={{ color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>INR amount in USD</strong>,
@@ -91,7 +93,6 @@ export default function LandingScreen({ onGoogleSignIn }) {
         {/* CTA */}
         <button
           onClick={onGoogleSignIn}
-          className="vl-cta"
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             background: '#4ecf9a', color: '#071412',
@@ -112,7 +113,7 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </button>
 
         {/* trust items */}
-        <ul className="vl-trust" style={{ display: 'flex', flexDirection: 'column', gap: 10, listStyle: 'none' }}>
+        <ul style={{ display: 'flex', flexDirection: 'column', gap: 10, listStyle: 'none', alignItems: 'flex-start' }}>
           {TRUST_ITEMS.map(item => (
             <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'rgba(255,255,255,0.28)', fontSize: 13 }}>
               <span style={{
