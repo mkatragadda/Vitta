@@ -269,7 +269,7 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
                 }}
               >
                 <Icon size={20} color={color} strokeWidth={isActive ? 2.2 : 1.8} />
-                <span style={{ fontSize: 9, fontWeight: isActive ? 700 : 500, color, letterSpacing: '0.2px' }}>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color, letterSpacing: '0.2px' }}>
                   {label}
                 </span>
               </button>

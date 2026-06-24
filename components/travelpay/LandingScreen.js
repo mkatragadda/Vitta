@@ -17,90 +17,100 @@ const TRUST_ITEMS = [
 
 export default function LandingScreen({ onGoogleSignIn }) {
   return (
-    <div style={{ background: '#071412', minHeight: '100vh', display: 'flex', flexDirection: 'column', color: '#fff', fontFamily: "Inter, -apple-system, BlinkMacSystemFont, sans-serif" }}>
+    <div style={{
+      background: '#071412', minHeight: '100vh',
+      display: 'flex', flexDirection: 'column',
+      color: '#fff',
+      fontFamily: "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+      WebkitFontSmoothing: 'antialiased',
+    }}>
 
       {/* ── NAV ── */}
-      <nav style={{
+      <nav className="vl-nav" style={{
+        padding: '20px 28px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '20px 24px',
       }}>
-        <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.4px' }}>Vitta</div>
+        <div className="vl-logo" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.6px', color: '#fff' }}>
+          Vitta
+        </div>
         <button
           onClick={onGoogleSignIn}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: '#4ecf9a', color: '#071412',
-            fontSize: 13, fontWeight: 700,
-            padding: '9px 18px', borderRadius: 999,
+            fontSize: 14, fontWeight: 700,
+            padding: '10px 20px', borderRadius: 999,
             border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
           <span style={{
-            width: 16, height: 16, background: '#fff', borderRadius: '50%',
+            width: 17, height: 17, background: '#fff', borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
             <GoogleIcon size={10} />
           </span>
-          Sign in
+          Sign in with Google
         </button>
       </nav>
 
       {/* ── HERO ── */}
-      <main style={{
+      <main className="vl-hero" style={{
         flex: 1,
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
+        justifyContent: 'center', alignItems: 'center',
         textAlign: 'center',
-        padding: '40px 24px 52px',
-        width: '100%', maxWidth: 560, margin: '0 auto',
+        padding: '36px 28px 48px',
+        width: '100%', maxWidth: 580, margin: '0 auto',
       }}>
 
         {/* pill */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
+        <div className="vl-pill" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
           background: 'rgba(78,207,154,0.08)',
-          border: '1px solid rgba(78,207,154,0.18)',
-          borderRadius: 999, padding: '5px 12px',
-          marginBottom: 28,
+          border: '1px solid rgba(78,207,154,0.2)',
+          borderRadius: 999, padding: '6px 14px',
+          marginBottom: 22,
         }}>
-          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ecf9a', flexShrink: 0 }} />
-          <span style={{ color: '#4ecf9a', fontSize: 11, fontWeight: 600 }}>US→India payments · NRIs &amp; travelers</span>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a', flexShrink: 0 }} />
+          <span style={{ color: '#4ecf9a', fontSize: 12, fontWeight: 600 }}>
+            US→India payments · NRIs &amp; travelers
+          </span>
         </div>
 
         {/* H1 */}
-        <h1 className="vl-h1" style={{
-          fontSize: 'clamp(40px, 11vw, 64px)',
-          fontWeight: 900, lineHeight: 1.0,
-          letterSpacing: '-3px', marginBottom: 22, color: '#fff',
+        <h1 style={{
+          fontSize: 'clamp(36px, 8.5vw, 56px)',
+          fontWeight: 900, lineHeight: 1.04,
+          letterSpacing: 'clamp(-2px, -0.4vw, -2.5px)',
+          marginBottom: 18, color: '#fff',
         }}>
           Scan in India.<br />
-          <em style={{ color: '#4ecf9a', fontStyle: 'normal' }}>Pay in USD.</em>
+          <em className="vl-em" style={{ color: '#4ecf9a', fontStyle: 'normal', display: 'block' }}>Pay in USD.</em>
         </h1>
 
-        {/* subheadline */}
-        <p style={{
-          fontSize: 'clamp(14px, 3.5vw, 16px)',
-          lineHeight: 1.65, color: 'rgba(255,255,255,0.45)',
-          maxWidth: 380, margin: '0 auto 38px',
+        {/* subhead */}
+        <p className="vl-subhead" style={{
+          fontSize: 15, lineHeight: 1.6,
+          color: 'rgba(255,255,255,0.48)',
+          maxWidth: 360, marginBottom: 32,
         }}>
-          Point your camera at any UPI QR. Vitta shows you the{' '}
-          <strong style={{ color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>INR amount in USD</strong>,
-          classifies it as a person or merchant, and opens the right app —
-          Wise, Remitly, GPay, or PhonePe.{' '}
-          <strong style={{ color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>You pay with your own accounts.</strong>
+          Point your camera at any UPI QR. Vitta shows the{' '}
+          <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>INR amount in USD</strong>,
+          classifies it, and opens Wise, Remitly, GPay, or PhonePe.{' '}
+          <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>You pay with your own accounts.</strong>
         </p>
 
         {/* CTA */}
         <button
           onClick={onGoogleSignIn}
+          className="vl-cta"
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             background: '#4ecf9a', color: '#071412',
             fontSize: 15, fontWeight: 700,
-            padding: '15px 28px', borderRadius: 14,
+            padding: '15px 32px', borderRadius: 14,
             border: 'none', cursor: 'pointer',
-            width: '100%', maxWidth: 300,
-            marginBottom: 30,
+            marginBottom: 28, whiteSpace: 'nowrap',
           }}
         >
           <span style={{
@@ -112,13 +122,16 @@ export default function LandingScreen({ onGoogleSignIn }) {
           Sign in with Google — it&apos;s free
         </button>
 
-        {/* trust items */}
-        <ul style={{ display: 'flex', flexDirection: 'column', gap: 10, listStyle: 'none', alignItems: 'flex-start' }}>
+        {/* trust */}
+        <ul className="vl-trust" style={{
+          display: 'flex', flexDirection: 'column',
+          gap: 9, listStyle: 'none', alignItems: 'center',
+        }}>
           {TRUST_ITEMS.map(item => (
-            <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'rgba(255,255,255,0.28)', fontSize: 13 }}>
+            <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'rgba(255,255,255,0.42)', fontSize: 13 }}>
               <span style={{
                 width: 18, height: 18, borderRadius: '50%',
-                background: 'rgba(78,207,154,0.1)',
+                background: 'rgba(78,207,154,0.12)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#4ecf9a', fontSize: 10, fontWeight: 700, flexShrink: 0,
               }}>✓</span>
@@ -130,14 +143,14 @@ export default function LandingScreen({ onGoogleSignIn }) {
 
       {/* ── FOOTER ── */}
       <footer style={{
-        padding: '16px 24px',
+        padding: '18px 28px',
         borderTop: '1px solid rgba(255,255,255,0.05)',
-        display: 'flex', justifyContent: 'center', gap: 20,
+        display: 'flex', justifyContent: 'center', gap: 24,
       }}>
         {['Privacy', 'Terms', 'Help'].map(l => (
-          <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.18)', fontSize: 11, textDecoration: 'none' }}>{l}</a>
+          <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, textDecoration: 'none' }}>{l}</a>
         ))}
-        <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: 11 }}>© 2025 Vitta</span>
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>© 2025 Vitta</span>
       </footer>
 
     </div>
