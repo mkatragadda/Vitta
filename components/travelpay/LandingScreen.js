@@ -57,8 +57,6 @@ export default function LandingScreen({ onGoogleSignIn }) {
       <main className="vl-hero" style={{
         flex: 1,
         display: 'flex', flexDirection: 'column',
-        justifyContent: 'center', alignItems: 'center',
-        textAlign: 'center',
         padding: '28px 28px 44px',
         width: '100%', maxWidth: 580, margin: '0 auto',
       }}>

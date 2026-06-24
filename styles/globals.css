@@ -69,17 +69,30 @@ body {
   }
 }
 
-/* ── LandingScreen responsive classes ── */
+/* ── LandingScreen ── */
 
-/* Mobile (<480px): centered, app-like feel */
+/* Base: desktop-first defaults (applied via class so media queries can override) */
+.vl-hero {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.vl-em { display: block; }
+
+/* Mobile (<480px): content starts near top, nothing full-width */
 @media (max-width: 479px) {
   .vl-nav     { padding: 16px 20px !important; }
-  .vl-hero    { padding: 16px 24px 40px !important; text-align: center !important; align-items: center !important; }
+  .vl-hero    {
+    padding: 20px 24px 40px !important;
+    justify-content: flex-start !important;  /* push content to top, no giant top gap */
+    align-items: center !important;
+    text-align: center !important;
+  }
   .vl-em      { display: block !important; }
   .vl-pill    { align-self: center; }
-  .vl-subhead { text-align: center !important; max-width: 320px !important; }
+  .vl-subhead { text-align: center !important; max-width: 300px !important; }
   .vl-trust   { align-items: center !important; }
-  .vl-cta     { width: 100% !important; justify-content: center; }
+  /* .vl-cta: NO width override — stays inline-flex natural width, not full-screen */
 }
 
 /* Desktop (≥900px): bigger logo, more padding, trust goes horizontal */
