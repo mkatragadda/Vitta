@@ -1,5 +1,5 @@
 import React from 'react';
-import { Scan, ArrowRight, Users } from 'lucide-react';
+import { Scan, ArrowRight } from 'lucide-react';
 
 const ACCENT  = '#4ecf9a';
 const P2P_CLR = '#9b7dff';
@@ -160,28 +160,39 @@ export default function HomeScreen({
         )}
       </div>
 
-      {/* ── EMPTY STATE ── */}
+      {/* ── EMPTY STATE: fill nudge card ── */}
       {isEmpty && (
-        <div style={{
-          margin: '0 16px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px dashed rgba(255,255,255,0.1)',
-          borderRadius: 13, padding: '32px 16px', textAlign: 'center',
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: '50%',
-            background: 'rgba(78,207,154,0.1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 12px',
-          }}>
-            <Users size={20} color={ACCENT} />
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: 700, marginBottom: 6 }}>
-            No recent payees yet
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, lineHeight: 1.6 }}>
-            Scan a UPI QR to make your first payment.<br />It&apos;ll show up here.
-          </div>
+        <div style={{ flex: 1, margin: '0 16px 10px', display: 'flex', flexDirection: 'column' }}>
+          <button
+            onClick={onScanToPay}
+            style={{
+              flex: 1,
+              background: 'rgba(78,207,154,0.04)',
+              border: '1px dashed rgba(78,207,154,0.16)',
+              borderRadius: 13,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              gap: 10, cursor: 'pointer',
+              padding: '20px 16px', textAlign: 'center',
+            }}
+          >
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%',
+              background: 'rgba(78,207,154,0.12)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Scan size={22} color={ACCENT} />
+            </div>
+            <div>
+              <div style={{ color: 'rgba(255,255,255,0.60)', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                Scan to make your first payment
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: 11, lineHeight: 1.5 }}>
+                People and merchants you pay will appear here.
+              </div>
+            </div>
+            <ArrowRight size={16} color="rgba(78,207,154,0.45)" />
+          </button>
         </div>
       )}
 
@@ -238,8 +249,8 @@ export default function HomeScreen({
         </div>
       )}
 
-      {/* spacer for empty and full states (sparse uses the nudge itself to fill) */}
-      {!isSparse && <div style={{ flex: 1 }} />}
+      {/* spacer only for full state — empty and sparse use flex:1 fill cards */}
+      {isFull && <div style={{ flex: 1 }} />}
     </div>
   );
 }
