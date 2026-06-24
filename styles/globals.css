@@ -71,21 +71,21 @@ body {
 
 /* ── LandingScreen responsive classes ── */
 
-/* Mobile (<480px): left-align everything */
+/* Mobile (<480px): centered, app-like feel */
 @media (max-width: 479px) {
-  .vl-nav  { padding: 18px 20px !important; }
-  .vl-hero { padding: 32px 20px 44px !important; text-align: left !important; align-items: flex-start !important; }
-  .vl-em   { display: inline !important; }
-  .vl-pill { align-self: flex-start; }
-  .vl-subhead { text-align: left !important; }
-  .vl-trust { align-items: flex-start !important; }
-  .vl-cta  { width: 100%; justify-content: center; }
+  .vl-nav     { padding: 16px 20px !important; }
+  .vl-hero    { padding: 16px 24px 40px !important; text-align: center !important; align-items: center !important; }
+  .vl-em      { display: block !important; }
+  .vl-pill    { align-self: center; }
+  .vl-subhead { text-align: center !important; max-width: 320px !important; }
+  .vl-trust   { align-items: center !important; }
+  .vl-cta     { width: 100% !important; justify-content: center; }
 }
 
 /* Desktop (≥900px): bigger logo, more padding, trust goes horizontal */
 @media (min-width: 900px) {
-  .vl-nav  { padding: 22px 56px !important; }
-  .vl-logo { font-size: 26px !important; }
-  .vl-hero { padding: 60px 56px 80px !important; }
+  .vl-nav   { padding: 22px 56px !important; }
+  .vl-logo  { font-size: 26px !important; }
+  .vl-hero  { padding: 60px 56px 80px !important; }
   .vl-trust { flex-direction: row !important; flex-wrap: wrap; justify-content: center; gap: 14px 28px !important; align-items: center !important; }
 }
