@@ -1,129 +1,350 @@
 /**
  * PaymentReviewScreen
  *
- * Shows parsed UPI details, a live USD equivalent, and the "Open Wise" CTA.
- * Vitta does not move money — it hands the user off to Wise with maximum
- * context so they can complete the transfer themselves.
+ * Three interactive states:
+ *   default      — "Pay with UPI app" (teal) + "Use Wise instead" (dim)
+ *   upi-sheet    — bottom sheet open with GPay / PhonePe rows
+ *   wise-selected — UPI button dimmed, Wise highlighted purple, amber disclaimer,
+ *                   "Continue with Wise" CTA
  *
- * Flow:
- *  1. Mount → fetch live FX rate + check whether recipient is already saved.
- *  2. User reviews amount (editable when the QR had no pre-filled amount).
- *  3. User taps "Open Wise":
- *     a. Log launch via POST /api/payments/launch.
- *     b. Open Wise app (mobile) or Wise web (desktop).
- *     c. Call onLaunched() so the parent can show the PostLaunchBanner.
+ * On UPI app tap  → log launch → fire deep link → call onLaunched()
+ * On Wise confirm → copy UPI ID to clipboard → log launch → open Wise → call onLaunched()
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Scan, X, Check, Pencil, AlertCircle, Loader } from 'lucide-react';
 import {
-  ArrowLeft, Copy, Check, ExternalLink, Loader, AlertCircle,
-  UserCheck, UserPlus, Pencil, X,
-} from 'lucide-react';
-import { detectPlatform, buildWiseWebUrl, buildPaymentSummary } from '../../utils/wiseLauncher';
+  APP_CATALOG,
+  launchUpiApp,
+  launchWise,
+  detectPlatform,
+} from '../../services/upi/upiDeepLink';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+const BG        = '#071412';
+const ACCENT    = '#4ecf9a';
+const P2P_CLR   = '#9b7dff';
+const P2M_CLR   = '#ff9055';
+const WISE_CLR  = '#9b7dff';
+const AMBER     = '#f5be32';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const twoInitials = (name) =>
+  (name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function CopyButton({ text, field, copiedField, onCopy }) {
-  const copied = copiedField === field;
+function PayeeCard({ parsedUPI }) {
+  const isP2P = parsedUPI.upiType === 'p2p';
+  const name  = parsedUPI.payeeName || parsedUPI.upiId;
   return (
-    <button
-      onClick={() => onCopy(text, field)}
-      aria-label={copied ? 'Copied' : `Copy ${field}`}
-      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all
-        bg-teal-500/10 border border-teal-500/30 text-teal-300 hover:bg-teal-500/20 active:scale-95"
-    >
-      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-      {copied ? 'Copied' : 'Copy'}
-    </button>
+    <div style={{
+      margin: '4px 16px 14px',
+      background: 'rgba(255,255,255,0.04)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 14, padding: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <div style={{
+          width: 42, height: 42, flexShrink: 0,
+          borderRadius: isP2P ? '50%' : 11,
+          background: isP2P ? 'rgba(139,107,255,0.20)' : 'rgba(255,140,80,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, fontWeight: 700,
+          color: isP2P ? P2P_CLR : P2M_CLR,
+        }}>
+          {twoInitials(name)}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {name}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {parsedUPI.upiId}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function RecipientBadge({ status }) {
-  if (status.loading) {
-    return (
-      <span className="flex items-center gap-1 text-xs text-slate-400">
-        <Loader className="w-3 h-3 animate-spin" />
-        Checking contacts…
-      </span>
-    );
-  }
-  if (status.found) {
-    return (
-      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
-        bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-        <UserCheck className="w-3 h-3" />
-        Saved contact
-      </span>
-    );
-  }
+function AmountCard({ amountInr, usdEquivalent, rate, rateLoading, rateError, onEdit, editing, amountInput, onAmountChange, onAmountCommit, onAmountKeyDown }) {
   return (
-    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
-      bg-slate-500/15 text-slate-400 border border-slate-500/30">
-      <UserPlus className="w-3 h-3" />
-      New recipient
-    </span>
+    <div style={{
+      margin: '0 16px 16px',
+      background: 'rgba(78,207,154,0.05)',
+      border: `1px solid rgba(78,207,154,0.16)`,
+      borderRadius: 14, padding: '16px 14px',
+    }}>
+      <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 11, fontWeight: 500, marginBottom: 6 }}>
+        Amount to pay
+      </div>
+
+      {editing ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ color: '#fff', fontSize: 26, fontWeight: 800 }}>₹</span>
+          <input
+            type="number"
+            value={amountInput}
+            onChange={(e) => onAmountChange(e.target.value)}
+            onKeyDown={onAmountKeyDown}
+            onBlur={onAmountCommit}
+            placeholder="0"
+            min="0"
+            step="1"
+            autoFocus
+            style={{
+              flex: 1, background: 'transparent', border: 'none',
+              borderBottom: `2px solid ${ACCENT}`,
+              color: '#fff', fontSize: 26, fontWeight: 800,
+              outline: 'none', paddingBottom: 2,
+            }}
+          />
+          <button
+            onClick={onAmountCommit}
+            style={{
+              background: ACCENT, border: 'none', borderRadius: 8,
+              color: BG, fontSize: 12, fontWeight: 700,
+              padding: '6px 12px', cursor: 'pointer',
+            }}
+          >
+            Set
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ color: '#fff', fontSize: 30, fontWeight: 800, letterSpacing: '-1px' }}>
+            ₹{amountInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          </div>
+          <button
+            onClick={onEdit}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 11, marginTop: 4,
+            }}
+          >
+            <Pencil size={11} /> Edit
+          </button>
+        </div>
+      )}
+
+      {rateLoading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.28)', fontSize: 11 }}>
+          <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} />
+          Fetching rate…
+        </div>
+      ) : rateError ? (
+        <div style={{ color: AMBER, fontSize: 11 }}>Rate unavailable</div>
+      ) : usdEquivalent != null ? (
+        <>
+          <div style={{ color: ACCENT, fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+            ≈ ${usdEquivalent} USD
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.28)', fontSize: 11 }}>
+            at live rate · ₹{rate?.toFixed(2)} / USD
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function MemoryNote({ note }) {
+  if (!note) return null;
+  return (
+    <div style={{
+      margin: '0 16px 14px',
+      background: 'rgba(78,207,154,0.04)',
+      border: '1px solid rgba(78,207,154,0.13)',
+      borderRadius: 11, padding: '10px 13px',
+      display: 'flex', gap: 9, alignItems: 'flex-start',
+    }}>
+      <span style={{ fontSize: 14, color: ACCENT, flexShrink: 0, marginTop: 1 }}>🧠</span>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, lineHeight: 1.55 }}>
+        {note}
+      </div>
+    </div>
+  );
+}
+
+// Google Pay icon — white circle with coloured G
+function GPay({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bottom sheet — UPI app chooser
+// ---------------------------------------------------------------------------
+function UpiAppSheet({ onSelectApp, onClose, launching, isWeb }) {
+  return (
+    <>
+      {/* backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.55)',
+          zIndex: 50,
+        }}
+      />
+      {/* sheet */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100%', maxWidth: 480,
+        background: '#0d1f1a',
+        borderRadius: '20px 20px 0 0',
+        zIndex: 51,
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}>
+        {/* handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 18px 14px' }}>
+          <div>
+            <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, letterSpacing: '-0.3px' }}>
+              Choose UPI app
+            </div>
+            {isWeb && (
+              <div style={{ color: AMBER, fontSize: 10, fontWeight: 600, marginTop: 2 }}>
+                Open on your phone to launch
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ margin: '0 14px 22px', borderRadius: 13, overflow: 'hidden' }}>
+          {APP_CATALOG.map((app, idx) => {
+            const isFirst = idx === 0;
+            return (
+              <button
+                key={app.id}
+                onClick={() => onSelectApp(app.id)}
+                disabled={launching === app.id}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '13px 14px',
+                  background: isFirst ? '#0a1a17' : BG,
+                  border: 'none',
+                  borderBottom: idx < APP_CATALOG.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                  cursor: 'pointer',
+                  opacity: launching && launching !== app.id ? 0.4 : 1,
+                }}
+              >
+                {/* app icon */}
+                <div style={{
+                  width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+                  background: app.id === 'gpay' ? '#fff' : '#5f259f',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {app.id === 'gpay'
+                    ? <GPay size={20} />
+                    : <span style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>Ph</span>
+                  }
+                </div>
+
+                {/* label */}
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, marginBottom: 1 }}>
+                    {app.name}
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
+                    {launching === app.id ? 'Launching…' : 'Tap to launch'}
+                  </div>
+                </div>
+
+                {/* recommended badge + arrow */}
+                {app.recommended && (
+                  <span style={{
+                    background: 'rgba(78,207,154,0.12)', color: ACCENT,
+                    fontSize: 9, fontWeight: 700,
+                    padding: '2px 7px', borderRadius: 5,
+                    whiteSpace: 'nowrap', marginRight: 4,
+                  }}>
+                    Recommended
+                  </span>
+                )}
+
+                {launching === app.id
+                  ? <Loader size={15} color={ACCENT} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                  : <span style={{ color: isFirst ? ACCENT : 'rgba(255,255,255,0.20)', fontSize: 18, flexShrink: 0 }}>›</span>
+                }
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-
 export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLaunched }) {
-  const [rate, setRate] = useState(null);
+  // ── FX rate ─────────────────────────────────────────────────────────────────
+  const [rate, setRate]             = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
-  const [rateError, setRateError] = useState(false);
+  const [rateError, setRateError]   = useState(false);
 
-  // Amount — editable when the QR had no pre-filled amount
-  const [amountInr, setAmountInr] = useState(parsedUPI.amount || 0);
+  // ── Amount editing ──────────────────────────────────────────────────────────
+  const [amountInr, setAmountInr]   = useState(parsedUPI.amount || 0);
   const [editingAmount, setEditingAmount] = useState(!parsedUPI.amount || parsedUPI.amount === 0);
   const [amountInput, setAmountInput] = useState(parsedUPI.amount ? String(parsedUPI.amount) : '');
 
-  // Recipient existence check
-  const [recipientStatus, setRecipientStatus] = useState({ loading: true, found: false, beneficiary: null });
+  // ── Recipient check ─────────────────────────────────────────────────────────
+  const [savedNote, setSavedNote]   = useState(null); // "Last visit: …" string or null
+  const [savedId, setSavedId]       = useState(null);
 
-  // Save-contact toggle — only offered when the recipient isn't already saved
-  const [saveContact, setSaveContact] = useState(false);
+  // ── Screen state ────────────────────────────────────────────────────────────
+  // 'default' | 'upi-sheet' | 'wise-selected'
+  const [mode, setMode]             = useState('default');
 
-  // Launch state
-  const [launching, setLaunching] = useState(false);
+  // ── Launch ──────────────────────────────────────────────────────────────────
+  const [launching, setLaunching]   = useState(null); // appId or 'wise'
   const [launchError, setLaunchError] = useState(null);
+  const [wiseCopied, setWiseCopied] = useState(false);
+  const [currentPlatform] = useState(() => detectPlatform());
 
-  // Clipboard feedback
-  const [copiedField, setCopiedField] = useState(null);
-
-  // ---------------------------------------------------------------------------
-  // Derived values
-  // ---------------------------------------------------------------------------
+  // ── Derived ─────────────────────────────────────────────────────────────────
   const usdEquivalent = rate && amountInr > 0
     ? parseFloat((amountInr / rate).toFixed(2))
     : null;
 
+  const upiType = parsedUPI.upiType || (parsedUPI.merchantCode ? 'p2m' : 'unknown');
+
   // ---------------------------------------------------------------------------
-  // Effects
+  // Bootstrap
   // ---------------------------------------------------------------------------
   useEffect(() => {
     fetchRate();
     checkRecipient();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Default the save toggle once we know whether the recipient exists
-  useEffect(() => {
-    if (!recipientStatus.loading) {
-      setSaveContact(!recipientStatus.found);
-    }
-  }, [recipientStatus.loading, recipientStatus.found]);
-
-  // ---------------------------------------------------------------------------
-  // Data fetching
-  // ---------------------------------------------------------------------------
   const fetchRate = async () => {
     setRateLoading(true);
     setRateError(false);
     try {
-      const res = await fetch('/api/wise/rate?source=USD&target=INR');
+      const res  = await fetch('/api/wise/rate?source=USD&target=INR');
       const json = await res.json();
       if (json.success && json.data?.rate) {
         setRate(json.data.rate);
@@ -138,21 +359,23 @@ export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLau
   };
 
   const checkRecipient = async () => {
-    setRecipientStatus({ loading: true, found: false, beneficiary: null });
     try {
-      const res = await fetch(
+      const res  = await fetch(
         `/api/beneficiaries/check-upi?upiId=${encodeURIComponent(parsedUPI.upiId)}`,
         { headers: { 'x-user-id': userData.id } }
       );
       const json = await res.json();
-      setRecipientStatus({
-        loading: false,
-        found: json.found ?? false,
-        beneficiary: json.beneficiary ?? null,
-      });
+      if (json.found && json.beneficiary) {
+        setSavedId(json.beneficiary.id);
+        // Build memory note from last_paid_at if available
+        if (json.beneficiary.last_paid_at) {
+          const d = new Date(json.beneficiary.last_paid_at);
+          const fmt = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          setSavedNote(`Last visit: You paid here on ${fmt}.`);
+        }
+      }
     } catch {
-      // Non-fatal — treat as new recipient
-      setRecipientStatus({ loading: false, found: false, beneficiary: null });
+      // Non-fatal
     }
   };
 
@@ -168,343 +391,332 @@ export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLau
   }, [amountInput]);
 
   const handleAmountKeyDown = (e) => {
-    if (e.key === 'Enter') commitAmount();
-    if (e.key === 'Escape') {
-      setAmountInput(amountInr ? String(amountInr) : '');
-      setEditingAmount(false);
+    if (e.key === 'Enter')  commitAmount();
+    if (e.key === 'Escape') { setAmountInput(String(amountInr)); setEditingAmount(false); }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Log launch helper
+  // ---------------------------------------------------------------------------
+  const logLaunch = useCallback(async (rail) => {
+    const platform = detectPlatform();
+    const res = await fetch('/api/payments/launch', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-id': userData.id },
+      body: JSON.stringify({
+        recipientUpiId:  parsedUPI.upiId,
+        recipientName:   parsedUPI.payeeName || null,
+        amountInr,
+        usdEquivalent,
+        exchangeRate:    rate,
+        rail,
+        platform,
+        upiType,
+        savedRecipientId: savedId || null,
+      }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Could not log launch');
+    return json.launchId;
+  }, [parsedUPI, amountInr, usdEquivalent, rate, upiType, savedId, userData.id]);
+
+  // ---------------------------------------------------------------------------
+  // UPI app launch
+  // ---------------------------------------------------------------------------
+  const handleUpiAppSelect = async (appId) => {
+    if (!amountInr || amountInr <= 0) {
+      setLaunchError('Please set an amount first.');
+      setMode('default');
+      return;
+    }
+
+    setLaunching(appId);
+    setLaunchError(null);
+
+    try {
+      const launchId = await logLaunch(appId);
+
+      // Fire deep link — must be in user-gesture call stack.
+      // On desktop/DevTools this will error in the browser console (expected —
+      // intent:// and tez:// have no handler on desktop). The PostLaunchBanner
+      // still shows so the user isn't stuck.
+      launchUpiApp(appId, {
+        upiId:        parsedUPI.upiId,
+        payeeName:    parsedUPI.payeeName,
+        amountInr,
+        merchantCode: parsedUPI.merchantCode,
+      });
+
+      // Close sheet BEFORE calling onLaunched so the PostLaunchBanner
+      // is not hidden behind the bottom sheet overlay.
+      setMode('default');
+      onLaunched({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact: !savedId, rail: appId });
+    } catch (err) {
+      console.error('[PaymentReviewScreen] UPI launch failed:', err.message);
+      setLaunchError('Could not launch. Try again.');
+      setLaunching(null);
     }
   };
 
   // ---------------------------------------------------------------------------
-  // Clipboard
+  // Wise launch
   // ---------------------------------------------------------------------------
-  const copyToClipboard = useCallback(async (text, field) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch {
-      // Clipboard API unavailable (e.g. HTTP in dev) — silently ignore
-    }
-  }, []);
-
-  const copySummary = useCallback(() => {
-    const summary = buildPaymentSummary({
-      upiId: parsedUPI.upiId,
-      payeeName: parsedUPI.payeeName,
-      amountInr,
-      usdEquivalent,
-      exchangeRate: rate,
-    });
-    copyToClipboard(summary, 'summary');
-  }, [parsedUPI, amountInr, usdEquivalent, rate, copyToClipboard]);
-
-  // ---------------------------------------------------------------------------
-  // Launch
-  // ---------------------------------------------------------------------------
-  const handleLaunch = async () => {
+  const handleWiseContinue = async () => {
     if (!amountInr || amountInr <= 0) {
-      setLaunchError('Please enter an amount before continuing.');
+      setLaunchError('Please set an amount first.');
       return;
     }
-    setLaunching(true);
+    setLaunching('wise');
     setLaunchError(null);
 
     try {
-      // 1. Log the launch — do this before opening the external app so the
-      //    record exists even if the user never returns to Vitta.
-      const launchRes = await fetch('/api/payments/launch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': userData.id,
-        },
-        body: JSON.stringify({
-          recipientUpiId: parsedUPI.upiId,
-          recipientName: parsedUPI.payeeName || null,
-          amountInr,
-          usdEquivalent,
-          exchangeRate: rate,
-          rail: 'wise',
-          savedRecipientId: recipientStatus.beneficiary?.id || null,
-        }),
-      });
+      const launchId = await logLaunch('wise');
 
-      const launchJson = await launchRes.json();
-      if (!launchJson.success) {
-        throw new Error(launchJson.error || 'Could not log payment launch');
-      }
+      // Copy UPI ID + open Wise — launchWise handles clipboard internally
+      const { copied } = await launchWise(parsedUPI.upiId);
+      setWiseCopied(copied);
 
-      // 2. Build Wise URL with best-effort amount pre-fill.
-      const wiseUrl = buildWiseWebUrl({ amountInr, usdEquivalent });
-
-      // 3. Open Wise synchronously (must be in the user-gesture call stack
-      //    or popup blockers will fire).
-      window.open(wiseUrl, '_blank');
-
-      // 4. On real mobile hardware, try the Wise app scheme so the installed
-      //    app can intercept. Chrome DevTools responsive mode spoofs the UA
-      //    AND maxTouchPoints, but navigator.platform still reports the host
-      //    OS (MacIntel / Win32) — use that to filter out simulated devices.
-      const uaPlatform = detectPlatform(navigator.userAgent);
-      const nativePlatform = (navigator.platform || '').toLowerCase();
-      const isRealMobile = (uaPlatform === 'ios' || uaPlatform === 'android')
-        && /iphone|ipad|ipod|android/.test(nativePlatform);
-      if (isRealMobile) {
-        try { window.location.href = 'wise://'; } catch { /* ignore */ }
-      }
-
-      // 5. Notify parent — it will show the PostLaunchBanner.
-      onLaunched({
-        launchId: launchJson.launchId,
-        parsedUPI,
-        amountInr,
-        usdEquivalent,
-        saveContact: saveContact && !recipientStatus.found,
-      });
-
+      onLaunched({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact: !savedId, rail: 'wise' });
     } catch (err) {
-      console.error('[PaymentReviewScreen] Launch failed:', err.message);
-      setLaunchError(err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setLaunching(false);
+      console.error('[PaymentReviewScreen] Wise launch failed:', err.message);
+      setLaunchError('Could not open Wise. Try again.');
+      setLaunching(null);
     }
   };
 
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
-  const displayName = parsedUPI.payeeName || parsedUPI.upiId;
-  const initials = displayName
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+  const canProceed = amountInr > 0 && !editingAmount;
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-950 via-teal-950 to-slate-950 pb-[env(safe-area-inset-bottom)]">
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      minHeight: 'calc(100vh - 64px)',
+      background: BG, color: '#fff',
+      fontFamily: "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+      WebkitFontSmoothing: 'antialiased',
+    }}>
+      {/* ── Back ── */}
+      <button
+        onClick={onBack}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '14px 20px 8px',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: 500,
+        }}
+      >
+        ‹ Scan again
+      </button>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-4">
+      {/* ── Payee ── */}
+      <PayeeCard parsedUPI={parsedUPI} />
+
+      {/* ── Amount ── */}
+      <AmountCard
+        amountInr={amountInr}
+        usdEquivalent={usdEquivalent}
+        rate={rate}
+        rateLoading={rateLoading}
+        rateError={rateError}
+        onEdit={() => { setAmountInput(String(amountInr)); setEditingAmount(true); }}
+        editing={editingAmount}
+        amountInput={amountInput}
+        onAmountChange={setAmountInput}
+        onAmountCommit={commitAmount}
+        onAmountKeyDown={handleAmountKeyDown}
+      />
+
+      {/* ── PRIMARY: Pay with UPI app ── */}
+      <div style={{ margin: '0 16px 10px', opacity: mode === 'wise-selected' ? 0.5 : 1 }}>
         <button
-          onClick={onBack}
-          className="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-all"
-          aria-label="Go back"
+          onClick={() => { if (mode !== 'wise-selected') setMode('upi-sheet'); }}
+          disabled={!canProceed || mode === 'wise-selected'}
+          style={{
+            width: '100%',
+            background: mode === 'wise-selected' ? 'rgba(255,255,255,0.04)' : ACCENT,
+            border: mode === 'wise-selected' ? '1px solid rgba(255,255,255,0.08)' : 'none',
+            borderRadius: 13, padding: '15px 16px',
+            display: 'flex', alignItems: 'center', gap: 12,
+            cursor: mode === 'wise-selected' ? 'default' : 'pointer',
+          }}
         >
-          <ArrowLeft className="w-5 h-5 text-white" />
+          <div style={{
+            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+            background: mode === 'wise-selected' ? 'rgba(255,255,255,0.07)' : 'rgba(7,20,18,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Scan size={18} color={mode === 'wise-selected' ? 'rgba(255,255,255,0.4)' : BG} />
+          </div>
+          <div style={{ flex: 1, textAlign: 'left' }}>
+            <div style={{
+              fontSize: 14, fontWeight: 800, marginBottom: 1,
+              color: mode === 'wise-selected' ? 'rgba(255,255,255,0.5)' : BG,
+            }}>
+              Pay with UPI app
+            </div>
+            <div style={{ fontSize: 11, color: mode === 'wise-selected' ? 'rgba(255,255,255,0.28)' : 'rgba(7,20,18,0.55)' }}>
+              Google Pay, PhonePe &amp; more
+            </div>
+          </div>
+          <span style={{ fontSize: 18, color: mode === 'wise-selected' ? 'rgba(255,255,255,0.2)' : BG, opacity: 0.6 }}>›</span>
         </button>
-        <h2 className="text-white font-semibold text-base">Review Payment</h2>
-        <div className="w-10" />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 space-y-4 pb-6">
-
-        {/* ── Recipient card ─────────────────────────────────────────────── */}
-        <div className="glass-teal rounded-3xl p-5 border border-teal-500/30">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center shrink-0">
-              <span className="text-white font-bold text-lg">{initials}</span>
+      {/* ── SECONDARY: Use Wise instead / Wise selected ── */}
+      {mode !== 'wise-selected' ? (
+        <div style={{ margin: '0 16px 14px' }}>
+          <button
+            onClick={() => setMode('wise-selected')}
+            style={{
+              width: '100%', background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 13, padding: '12px 14px',
+              display: 'flex', alignItems: 'center', gap: 11,
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: WISE_CLR,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 13, fontWeight: 800,
+            }}>
+              W
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-white font-bold text-lg truncate">{displayName}</p>
-              <p className="text-slate-400 text-sm truncate">{parsedUPI.upiId}</p>
-              <div className="mt-1.5">
-                <RecipientBadge status={recipientStatus} />
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
+                Use Wise instead
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.30)', fontSize: 10, lineHeight: 1.4 }}>
+                For person-to-person transfers only — not for merchants
               </div>
             </div>
-          </div>
+            <span style={{ color: 'rgba(255,255,255,0.20)', fontSize: 16 }}>›</span>
+          </button>
         </div>
-
-        {/* ── Amount ─────────────────────────────────────────────────────── */}
-        <div className="glass rounded-2xl p-5 border border-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-slate-400 text-sm font-medium">Amount (INR)</span>
-            {!editingAmount && (
-              <button
-                onClick={() => { setAmountInput(String(amountInr)); setEditingAmount(true); }}
-                className="flex items-center gap-1 text-teal-400 text-xs hover:text-teal-300"
-                aria-label="Edit amount"
-              >
-                <Pencil className="w-3 h-3" />
-                Edit
-              </button>
-            )}
-          </div>
-
-          {editingAmount ? (
-            <div className="flex items-center gap-2">
-              <span className="text-white text-2xl font-bold">₹</span>
-              <input
-                type="number"
-                value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
-                onKeyDown={handleAmountKeyDown}
-                onBlur={commitAmount}
-                placeholder="0"
-                min="0"
-                step="0.01"
-                autoFocus
-                className="flex-1 bg-transparent text-white text-2xl font-bold outline-none
-                  border-b-2 border-teal-500 pb-1"
-                aria-label="Amount in INR"
-              />
-              <button
-                onClick={commitAmount}
-                className="px-3 py-1.5 rounded-xl bg-teal-500 text-white text-sm font-semibold"
-              >
-                Set
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-baseline gap-2">
-              <span className="text-white text-4xl font-bold">
-                ₹{amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          )}
-
-          {/* USD equivalent */}
-          <div className="mt-3 pt-3 border-t border-white/10">
-            {rateLoading ? (
-              <span className="text-slate-500 text-xs flex items-center gap-1">
-                <Loader className="w-3 h-3 animate-spin" />
-                Fetching live rate…
-              </span>
-            ) : rateError ? (
-              <span className="text-amber-400 text-xs">Rate unavailable — Wise will show the exact amount</span>
-            ) : (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">
-                  ≈ <span className="text-white font-semibold">${usdEquivalent} USD</span>
-                </span>
-                <span className="text-slate-500 text-xs">₹{rate?.toFixed(2)}/USD</span>
+      ) : (
+        <>
+          {/* Wise selected state */}
+          <div style={{ margin: '0 16px 10px' }}>
+            <button
+              onClick={() => setMode('default')}
+              style={{
+                width: '100%',
+                background: 'rgba(155,125,255,0.10)',
+                border: '2px solid rgba(155,125,255,0.40)',
+                borderRadius: 13, padding: '13px 14px',
+                display: 'flex', alignItems: 'center', gap: 11,
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                background: WISE_CLR,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 15, fontWeight: 800,
+              }}>
+                W
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── How to pay guide ───────────────────────────────────────────── */}
-        <div className="glass rounded-2xl p-4 border border-white/10 space-y-3">
-          <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">
-            How to complete in Wise
-          </p>
-
-          {/* Step 1 — copy UPI ID */}
-          <div className="flex items-start gap-3">
-            <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-400
-              text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-slate-400 text-xs mb-1">Copy UPI ID → paste as recipient in Wise</p>
-              <div className="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-3 py-2">
-                <p className="text-white text-sm font-mono truncate">{parsedUPI.upiId}</p>
-                <CopyButton
-                  text={parsedUPI.upiId}
-                  field="upiId"
-                  copiedField={copiedField}
-                  onCopy={copyToClipboard}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2 — copy amount */}
-          {amountInr > 0 && (
-            <div className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-400
-                text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-              <div className="flex-1">
-                <p className="text-slate-400 text-xs mb-1">Confirm amount in Wise (pre-filled if supported)</p>
-                <div className="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-3 py-2">
-                  <p className="text-white text-sm font-mono">
-                    ₹{amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </p>
-                  <CopyButton
-                    text={String(amountInr)}
-                    field="amount"
-                    copiedField={copiedField}
-                    onCopy={copyToClipboard}
-                  />
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <div style={{ color: '#fff', fontSize: 14, fontWeight: 800, marginBottom: 2 }}>
+                  Wise selected
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10, lineHeight: 1.4 }}>
+                  Person-to-person transfers only — not for merchants
                 </div>
               </div>
-            </div>
-          )}
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: WISE_CLR, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Check size={11} color="#fff" />
+              </div>
+            </button>
+          </div>
 
-          {/* Step 3 — copy all */}
-          <div className="flex items-start gap-3">
-            <span className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-400
-              text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{amountInr > 0 ? 3 : 2}</span>
-            <div className="flex-1">
-              <p className="text-slate-400 text-xs mb-1">Or copy everything at once</p>
-              <button
-                onClick={copySummary}
-                className="w-full py-2 rounded-xl glass text-teal-300 text-xs font-semibold
-                  border border-teal-500/20 hover:bg-teal-500/10 transition-all flex items-center justify-center gap-1.5"
-              >
-                {copiedField === 'summary' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedField === 'summary' ? 'Copied!' : 'Copy all payment details'}
-              </button>
+          {/* Amber P2P disclaimer */}
+          <div style={{
+            margin: '0 16px 14px',
+            background: 'rgba(245,190,50,0.07)',
+            border: '1px solid rgba(245,190,50,0.20)',
+            borderRadius: 11, padding: '10px 13px',
+            display: 'flex', gap: 9, alignItems: 'flex-start',
+          }}>
+            <AlertCircle size={14} color={AMBER} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ color: 'rgba(255,255,255,0.50)', fontSize: 11, lineHeight: 1.55 }}>
+              <span style={{ color: AMBER, fontWeight: 600 }}>P2P only: </span>
+              Wise works for sending money to a person. If this is a merchant, use a UPI app instead.
             </div>
           </div>
+
+          {/* Wise CTA */}
+          <div style={{ margin: '0 16px 14px' }}>
+            <button
+              onClick={handleWiseContinue}
+              disabled={!canProceed || launching === 'wise'}
+              style={{
+                width: '100%', background: WISE_CLR,
+                border: 'none', borderRadius: 13, padding: 15,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                color: '#fff', fontSize: 14, fontWeight: 800,
+                cursor: canProceed && launching !== 'wise' ? 'pointer' : 'not-allowed',
+                opacity: !canProceed ? 0.5 : 1,
+              }}
+            >
+              {launching === 'wise'
+                ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Opening Wise…</>
+                : <>→ Continue with Wise</>
+              }
+            </button>
+          </div>
+
+          {wiseCopied && (
+            <div style={{
+              margin: '-8px 16px 10px',
+              color: ACCENT, fontSize: 11, textAlign: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            }}>
+              <Check size={11} /> UPI ID copied — paste it in Wise
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Memory note ── */}
+      <MemoryNote note={savedNote} />
+
+      {/* ── Error ── */}
+      {launchError && (
+        <div style={{
+          margin: '0 16px 10px',
+          background: 'rgba(255,80,80,0.08)',
+          border: '1px solid rgba(255,80,80,0.25)',
+          borderRadius: 11, padding: '10px 13px',
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+        }}>
+          <AlertCircle size={14} color="#f87171" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ color: '#f87171', fontSize: 11, lineHeight: 1.5 }}>{launchError}</span>
         </div>
+      )}
 
-        {/* ── Save contact toggle (only for new recipients) ──────────────── */}
-        {!recipientStatus.loading && !recipientStatus.found && (
-          <button
-            onClick={() => setSaveContact((v) => !v)}
-            className={`w-full flex items-center gap-3 p-4 rounded-2xl border transition-all
-              ${saveContact
-                ? 'bg-teal-500/10 border-teal-500/40 text-teal-300'
-                : 'glass border-white/10 text-slate-400'}`}
-          >
-            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0
-              ${saveContact ? 'bg-teal-500 border-teal-500' : 'border-slate-500'}`}>
-              {saveContact && <Check className="w-3 h-3 text-white" />}
-            </div>
-            <div className="text-left">
-              <p className="font-semibold text-sm">
-                Remember {parsedUPI.payeeName ? parsedUPI.payeeName.split(' ')[0] : 'this recipient'}
-              </p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Save to contacts so next payment is one tap
-              </p>
-            </div>
-          </button>
-        )}
-
-        {/* ── Error ──────────────────────────────────────────────────────── */}
-        {launchError && (
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <p className="text-red-300 text-sm">{launchError}</p>
-          </div>
-        )}
-
-        {/* ── Disclaimer ─────────────────────────────────────────────────── */}
-        <p className="text-center text-slate-600 text-xs px-4">
-          Vitta shows you the details.&nbsp;
-          <span className="text-slate-500">Money moves through Wise — not Vitta.</span>
-        </p>
+      {/* ── Disclaimer ── */}
+      <div style={{ flex: 1 }} />
+      <div style={{ padding: '8px 20px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.20)', fontSize: 11 }}>
+        Money moves through the app you choose. Vitta shows details only.
       </div>
 
-      {/* ── CTA ────────────────────────────────────────────────────────────── */}
-      <div className="px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <button
-          onClick={handleLaunch}
-          disabled={launching || !amountInr || amountInr <= 0 || editingAmount}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-400
-            text-white font-bold text-base shadow-2xl shadow-teal-500/30
-            hover:shadow-teal-500/50 transition-all active:scale-[0.98]
-            disabled:opacity-50 disabled:cursor-not-allowed
-            flex items-center justify-center gap-2"
-        >
-          {launching ? (
-            <><Loader className="w-5 h-5 animate-spin" />Opening Wise…</>
-          ) : (
-            <><ExternalLink className="w-5 h-5" />Open Wise</>
-          )}
-        </button>
-      </div>
+      {/* ── UPI App Bottom Sheet ── */}
+      {mode === 'upi-sheet' && (
+        <UpiAppSheet
+          onSelectApp={handleUpiAppSelect}
+          onClose={() => setMode('default')}
+          launching={launching}
+          isWeb={currentPlatform === 'web'}
+        />
+      )}
     </div>
   );
 }

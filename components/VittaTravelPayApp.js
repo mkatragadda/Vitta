@@ -129,8 +129,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   // ---------------------------------------------------------------------------
   // Launch → banner → done
   // ---------------------------------------------------------------------------
-  const handleLaunched = ({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact }) => {
-    setLaunchContext({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact });
+  const handleLaunched = ({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact, rail }) => {
+    setLaunchContext({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact, rail });
   };
 
   const handleConfirmed = async ({ saveContact }) => {
@@ -287,6 +287,7 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
           amountInr={launchContext.amountInr}
           usdEquivalent={launchContext.usdEquivalent}
           saveContact={launchContext.saveContact}
+          rail={launchContext.rail}
           onConfirmed={handleConfirmed}
           onDismissed={handleDismissed}
         />

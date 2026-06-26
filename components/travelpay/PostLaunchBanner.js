@@ -30,6 +30,7 @@ export default function PostLaunchBanner({
   amountInr,
   usdEquivalent,
   saveContact,
+  rail,
   onConfirmed,
   onDismissed,
 }) {
@@ -41,6 +42,7 @@ export default function PostLaunchBanner({
     ? `₹${Number(amountInr).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
     : '';
   const formattedUsd = usdEquivalent ? `$${Number(usdEquivalent).toFixed(2)}` : '';
+  const railLabel = { gpay: 'Google Pay', phonepe: 'PhonePe', paytm: 'Paytm', wise: 'Wise' }[rail] || 'the app';
 
   const handle = async (status) => {
     setLoading(status);
@@ -68,7 +70,7 @@ export default function PostLaunchBanner({
 
   return (
     /* Backdrop */
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm">
 
       {/* Panel */}
       <div
@@ -87,8 +89,8 @@ export default function PostLaunchBanner({
         </h3>
         <p className="text-slate-400 text-sm text-center mb-5">
           {formattedInr && formattedUsd
-            ? `${formattedInr} (${formattedUsd}) to ${displayName} via Wise`
-            : `To ${displayName} via Wise`}
+            ? `${formattedInr} (${formattedUsd}) to ${displayName} via ${railLabel}`
+            : `To ${displayName} via ${railLabel}`}
         </p>
 
         {/* Error */}

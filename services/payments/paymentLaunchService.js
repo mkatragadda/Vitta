@@ -12,7 +12,9 @@
  * Vitta does not move money.  A "launch" is an intent record, not a transfer.
  */
 
-const VALID_RAILS = ['wise', 'gpay', 'phonepe', 'paytm', 'bank'];
+const VALID_RAILS     = ['wise', 'gpay', 'phonepe', 'paytm', 'bank'];
+const VALID_PLATFORMS = ['ios', 'android', 'web'];
+const VALID_UPI_TYPES = ['p2p', 'p2m', 'unknown'];
 const VALID_STATUSES = ['launched', 'completed', 'cancelled', 'failed'];
 const UPI_REGEX = /^[\w.-]+@[\w]+$/;
 
@@ -43,8 +45,10 @@ class PaymentLaunchService {
    * @param {number}  data.amountInr         - positive INR amount
    * @param {number}  [data.usdEquivalent]   - approximate USD at time of launch
    * @param {number}  [data.exchangeRate]    - USD/INR rate used for display
-   * @param {string}  [data.rail='wise']     - one of VALID_RAILS
-   * @param {string}  [data.savedRecipientId] - beneficiary UUID if already saved
+   * @param {string}  [data.rail='wise']        - one of VALID_RAILS
+   * @param {string}  [data.platform]           - 'ios' | 'android' | 'web'
+   * @param {string}  [data.upiType]            - 'p2p' | 'p2m' | 'unknown'
+   * @param {string}  [data.savedRecipientId]   - beneficiary UUID if already saved
    * @param {string}  [data.note]
    * @returns {Promise<{ success: boolean, launchId?: string, error?: string }>}
    */
@@ -59,6 +63,11 @@ class PaymentLaunchService {
       return { success: false, error: `Invalid rail. Valid values: ${VALID_RAILS.join(', ')}` };
     }
 
+    const platform = data.platform && VALID_PLATFORMS.includes(data.platform)
+      ? data.platform : null;
+    const upiType = data.upiType && VALID_UPI_TYPES.includes(data.upiType)
+      ? data.upiType : null;
+
     const row = {
       user_id: userId,
       recipient_upi_id: data.recipientUpiId.toLowerCase().trim(),
@@ -68,6 +77,8 @@ class PaymentLaunchService {
       exchange_rate: data.exchangeRate != null ? Number(data.exchangeRate) : null,
       rail,
       status: 'launched',
+      platform,
+      upi_type: upiType,
       saved_recipient_id: data.savedRecipientId || null,
       note: data.note?.trim() || null,
       launched_at: new Date().toISOString(),

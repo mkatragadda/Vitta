@@ -587,6 +587,10 @@ CREATE TABLE IF NOT EXISTS payment_launches (
     CHECK (rail IN ('wise', 'gpay', 'phonepe', 'paytm', 'bank')),
   status TEXT NOT NULL DEFAULT 'launched'
     CHECK (status IN ('launched', 'completed', 'cancelled', 'failed')),
+  platform TEXT                             -- 'ios' | 'android' | 'web' — for deep-link debug
+    CHECK (platform IN ('ios', 'android', 'web')),
+  upi_type TEXT                             -- 'p2p' | 'p2m' | 'unknown' — from QR classification
+    CHECK (upi_type IN ('p2p', 'p2m', 'unknown')),
   saved_recipient_id UUID REFERENCES beneficiaries(id) ON DELETE SET NULL,
   note TEXT,
   launched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

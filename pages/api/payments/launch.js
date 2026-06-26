@@ -40,6 +40,8 @@ async function handlePost(req, res, userId) {
     usdEquivalent,
     exchangeRate,
     rail,
+    platform,
+    upiType,
     savedRecipientId,
     note,
   } = req.body;
@@ -68,6 +70,8 @@ async function handlePost(req, res, userId) {
     usdEquivalent,
     exchangeRate,
     rail,
+    platform,
+    upiType,
     savedRecipientId,
     note,
   });
