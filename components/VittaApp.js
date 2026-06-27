@@ -479,7 +479,8 @@ const VittaApp = () => {
           return;
         }
         if (tokenClientRef.current && !isAuthenticated) {
-          const fallbackReasons = ['user_cancel', 'suppressed_by_user', 'secure_request_required'];
+          // tap_outside: user dismissed One Tap — open popup so they can still sign in
+          const fallbackReasons = ['user_cancel', 'suppressed_by_user', 'secure_request_required', 'tap_outside'];
           if (fallbackReasons.includes(reason)) {
             triggerOAuthTokenFlow();
             return;
@@ -490,7 +491,8 @@ const VittaApp = () => {
       if (notification.isSkippedMoment?.()) {
         const reason = notification.getSkippedReason?.();
         console.warn('[Vitta] Prompt skipped:', reason);
-        if (reason === 'opt_out_or_no_session' && tokenClientRef.current) {
+        if (tokenClientRef.current && !isAuthenticated) {
+          // For any skip reason, fall back to the popup flow
           triggerOAuthTokenFlow();
         }
       }
@@ -1401,9 +1403,19 @@ const VittaApp = () => {
 
   // If not authenticated, show landing screen
   if (!isAuthenticated) {
+    // Explicit button clicks skip One Tap and go directly to the OAuth popup.
+    // One Tap (FedCM) is unreliable in Chrome 120+ when the user hasn't
+    // pre-selected an account. The popup flow is more reliable for intentional clicks.
+    const handleSignInClick = () => {
+      if (tokenClientRef.current) {
+        triggerOAuthTokenFlow();
+      } else {
+        showGooglePrompt(); // token client not ready yet — fall back to prompt
+      }
+    };
     return (
       <LandingScreen
-        onGoogleSignIn={showGooglePrompt}
+        onGoogleSignIn={handleSignInClick}
       />
     );
   }
