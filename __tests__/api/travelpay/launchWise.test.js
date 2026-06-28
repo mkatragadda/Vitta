@@ -150,14 +150,38 @@ describe('launchWise — iOS', () => {
     });
   });
 
-  test('opens wise.com/send via universal link (works whether app is installed or not)', async () => {
+  test('fires wise://send custom scheme (syntactically valid — opens Wise app)', async () => {
     await launchWise('friend@upi');
-    expect(window.open).toHaveBeenCalledWith('https://wise.com/send', '_blank', 'noopener');
+    expect(hrefLog[0]).toBe('wise://send');
   });
 
-  test('does NOT set window.location.href (avoids Safari invalid-address dialog)', async () => {
+  test('navigates to wise.com/send after 1.5 s when app is NOT installed', async () => {
     await launchWise('friend@upi');
-    expect(hrefLog).toHaveLength(0);
+
+    jest.advanceTimersByTime(1499);
+    expect(hrefLog).toHaveLength(1); // only the wise://send attempt
+
+    jest.advanceTimersByTime(2);
+    expect(hrefLog[1]).toBe('https://wise.com/send');
+  });
+
+  test('does NOT fall back to web when app IS installed (page hides)', async () => {
+    await launchWise('friend@upi');
+
+    simulateAppOpen();
+    jest.advanceTimersByTime(3000);
+
+    expect(hrefLog).toHaveLength(1); // only wise://send, no fallback
+  });
+
+  test('cancels web fallback when app opens within 1.5 s', async () => {
+    await launchWise('friend@upi');
+
+    jest.advanceTimersByTime(400);
+    simulateAppOpen();
+    jest.advanceTimersByTime(2000);
+
+    expect(hrefLog).toHaveLength(1);
   });
 
   test('copies UPI ID to clipboard', async () => {
