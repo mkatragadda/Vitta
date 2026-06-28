@@ -155,30 +155,67 @@ export async function launchWise(upiId) {
   const platform = detectPlatform();
   let copied = false;
 
-  // Copy UPI ID to clipboard before any navigation suspends the page
+  // Copy UPI ID to clipboard so user can paste it in Wise
   if (upiId && typeof navigator !== 'undefined' && navigator.clipboard) {
     try {
       await navigator.clipboard.writeText(upiId);
       copied = true;
-    } catch {
-      // Clipboard denied — non-fatal
-    }
+    } catch { /* non-fatal */ }
   }
 
   if (typeof window === 'undefined') return { platform, copied };
 
-  // Always open the Wise web URL — safe fallback for every environment
-  window.open('https://wise.com/send', '_blank', 'noopener');
+  // Guard against Chrome DevTools UA spoofing.
+  // DevTools leaves navigator.platform as the desktop value (e.g. 'MacIntel',
+  // 'Win32', 'Linux x86_64') even when the UA is set to a mobile device.
+  // Real Android devices report platform as 'Linux armv8l', 'Linux aarch64', etc.
+  // Real iOS devices report 'iPhone', 'iPad', 'iPod'.
+  // So we detect "real mobile" by EXCLUDING known desktop platform strings.
+  const nativePlatform    = (navigator.platform || '').toLowerCase();
+  const DESKTOP_PLATFORMS = /^(macintel|macppc|mac68k|win32|wince|linux x86_64|linux i686|linux i386|freebsd|sunos|openbsd)/;
+  const isRealMobile      = !DESKTOP_PLATFORMS.test(nativePlatform);
 
-  // Additionally try the app scheme on a confirmed real mobile device.
-  // navigator.platform is NOT spoofed by DevTools responsive mode,
-  // so this check keeps us from trying wise:// on desktop Chrome.
-  const nativePlatform = (navigator.platform || '').toLowerCase();
-  const isRealMobile = /iphone|ipad|ipod|android/.test(nativePlatform);
-  if (isRealMobile && (platform === 'ios' || platform === 'android')) {
-    try { window.location.href = 'wise://'; } catch { /* ignore */ }
+  // ── Android ───────────────────────────────────────────────────────────────
+  // Intent URL: Chrome intercepts → opens Wise app if installed, else falls
+  // back to wise.com/send automatically. No JS timer needed.
+  if (isRealMobile && platform === 'android') {
+    const fallback = encodeURIComponent('https://wise.com/send');
+    window.location.href =
+      `intent://send#Intent;scheme=wise;package=com.transferwise.android;S.browser_fallback_url=${fallback};end`;
+    return { platform, copied };
   }
 
+  // ── iOS ───────────────────────────────────────────────────────────────────
+  // Try wise:// custom scheme. If the app is installed Safari hands off and
+  // the page goes to background (visibilitychange → 'hidden'). If not
+  // installed nothing happens, so after 2 s open the web URL instead.
+  if (isRealMobile && platform === 'ios') {
+    let appOpened = false;
+
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        appOpened = true;
+      }
+    };
+    document.addEventListener('visibilitychange', onHidden, { once: true });
+
+    const fallbackTimer = setTimeout(() => {
+      document.removeEventListener('visibilitychange', onHidden);
+      if (!appOpened) {
+        window.open('https://wise.com/send', '_blank', 'noopener');
+      }
+    }, 2000);
+
+    // If page hides quickly, clear the timer
+    const onPageHide = () => { appOpened = true; clearTimeout(fallbackTimer); };
+    window.addEventListener('pagehide', onPageHide, { once: true });
+
+    try { window.location.href = 'wise://'; } catch { /* ignore */ }
+    return { platform, copied };
+  }
+
+  // ── Desktop / web ─────────────────────────────────────────────────────────
+  window.open('https://wise.com/send', '_blank', 'noopener');
   return { platform, copied };
 }
 
