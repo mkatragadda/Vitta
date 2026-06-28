@@ -18,14 +18,21 @@ const formatDate = (ts) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const PayeeRow = ({ payee, showDivider }) => {
+const PayeeRow = ({ payee, showDivider, onPress }) => {
   const isP2P = payee.upiType === 'p2p';
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '11px 12px', background: 'rgba(255,255,255,0.06)', cursor: 'pointer',
-      borderBottom: showDivider ? '1px solid rgba(255,255,255,0.05)' : 'none',
-    }}>
+    <div
+      onClick={() => onPress && onPress(payee)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '11px 12px', background: 'rgba(255,255,255,0.06)', cursor: 'pointer',
+        borderBottom: showDivider ? '1px solid rgba(255,255,255,0.05)' : 'none',
+        WebkitTapHighlightColor: 'transparent',
+        transition: 'background 0.12s',
+      }}
+      onTouchStart={e => e.currentTarget.style.background = 'rgba(255,255,255,0.09)'}
+      onTouchEnd={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+    >
       <div style={{
         width: 36, height: 36, flexShrink: 0,
         borderRadius: isP2P ? '50%' : '9px',
@@ -44,21 +51,24 @@ const PayeeRow = ({ payee, showDivider }) => {
           {formatDate(payee.lastPaidAt)}
         </div>
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: 700 }}>
-          ₹{payee.amountInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: 700 }}>
+            ₹{payee.amountInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10 }}>
+            ${payee.amountUsd.toFixed(2)}
+          </div>
+          <span style={{
+            display: 'inline-block', marginTop: 2,
+            background: isP2P ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)',
+            color: isP2P ? P2P_CLR : P2M_CLR,
+            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+          }}>
+            {isP2P ? 'P2P' : 'P2M'}
+          </span>
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10 }}>
-          ${payee.amountUsd.toFixed(2)}
-        </div>
-        <span style={{
-          display: 'inline-block', marginTop: 2,
-          background: isP2P ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)',
-          color: isP2P ? P2P_CLR : P2M_CLR,
-          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-        }}>
-          {isP2P ? 'P2P' : 'P2M'}
-        </span>
+        <span style={{ color: 'rgba(255,255,255,0.20)', fontSize: 18, lineHeight: 1 }}>›</span>
       </div>
     </div>
   );
@@ -70,6 +80,7 @@ export default function HomeScreen({
   userName,
   onScanToPay,
   onViewActivity,
+  onPayeePress,
 }) {
   const isEmpty  = recentPayees.length === 0;
   const isSparse = recentPayees.length > 0 && recentPayees.length < 3;
@@ -201,7 +212,7 @@ export default function HomeScreen({
         <>
           <div style={{ margin: '0 16px 10px', borderRadius: 13, overflow: 'hidden' }}>
             {recentPayees.map((p, i) => (
-              <PayeeRow key={p.upiId} payee={p} showDivider={i < recentPayees.length - 1} />
+              <PayeeRow key={p.upiId} payee={p} showDivider={i < recentPayees.length - 1} onPress={onPayeePress} />
             ))}
           </div>
 
@@ -244,7 +255,7 @@ export default function HomeScreen({
       {isFull && (
         <div style={{ margin: '0 16px', borderRadius: 13, overflow: 'hidden' }}>
           {recentPayees.map((p, i) => (
-            <PayeeRow key={p.upiId} payee={p} showDivider={i < recentPayees.length - 1} />
+            <PayeeRow key={p.upiId} payee={p} showDivider={i < recentPayees.length - 1} onPress={onPayeePress} />
           ))}
         </div>
       )}

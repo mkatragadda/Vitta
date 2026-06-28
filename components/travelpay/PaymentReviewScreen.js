@@ -300,7 +300,7 @@ function UpiAppSheet({ onSelectApp, onClose, launching, isWeb }) {
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLaunched }) {
+export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLaunched, sourceLabel = 'Scan again' }) {
   // ── FX rate ─────────────────────────────────────────────────────────────────
   const [rate, setRate]             = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
@@ -507,7 +507,7 @@ export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLau
           color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: 500,
         }}
       >
-        ‹ Scan again
+        ‹ {sourceLabel}
       </button>
 
       {/* ── Payee ── */}

@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Home, Scan, Clock, User } from 'lucide-react';
+import { detectPlatform } from '../services/upi/upiDeepLink';
 import HomeScreen from './travelpay/HomeScreen';
 import ScannerScreen from './travelpay/ScannerScreen';
 import PaymentReviewScreen from './travelpay/PaymentReviewScreen';
@@ -16,6 +17,7 @@ import AddFundsScreen from './travelpay/AddFundsScreen';
 import TransactionsScreen from './travelpay/TransactionsScreen';
 import YouScreen from './travelpay/YouScreen';
 import AmountInputModal from './travelpay/AmountInputModal';
+import QuickPaySheet from './travelpay/QuickPaySheet';
 
 const NAV_TABS = [
   { id: 'home',     label: 'Home',     Icon: Home  },
@@ -38,6 +40,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   const [showAmountModal, setShowAmountModal] = useState(false);
   const [pendingScanData, setPendingScanData] = useState(null);
   const [launchContext, setLaunchContext] = useState(null);
+  const [quickPayPayee, setQuickPayPayee] = useState(null);
+  const [sourceLabel, setSourceLabel]     = useState('Scan again');
 
   // ---------------------------------------------------------------------------
   // Bootstrap
@@ -111,6 +115,7 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
       }
 
       setScanData(json.data);
+      setSourceLabel('Scan again');
       setCurrentScreen('payment-review');
     } catch (err) {
       console.error('[TravelPayApp] Scan error:', err.message);
@@ -123,7 +128,65 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
     setPendingScanData(null);
     setShowAmountModal(false);
     setScanData(resolved);
+    // sourceLabel is already set by whichever path opened the modal
     setCurrentScreen('payment-review');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Repay recent payee
+  // ---------------------------------------------------------------------------
+  const handlePayeePress = (payee) => {
+    setQuickPayPayee(payee);
+  };
+
+  // Called after QuickPaySheet fires the deep link — just log + show banner
+  const handleQuickLaunch = async (payee, amountInr, appId) => {
+    setQuickPayPayee(null);
+
+    const usdEquivalent = exchangeRate ? +(amountInr / exchangeRate).toFixed(2) : 0;
+    const parsedUPI = {
+      upiId:        payee.upiId,
+      payeeName:    payee.name,
+      amount:       amountInr,
+      upiType:      payee.upiType,
+      merchantCode: '',
+    };
+
+    let launchId = null;
+    try {
+      const res = await fetch('/api/payments/launch', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': userData.id },
+        body: JSON.stringify({
+          recipientUpiId: payee.upiId,
+          recipientName:  payee.name || null,
+          amountInr,
+          usdEquivalent,
+          exchangeRate:   exchangeRate || null,
+          rail:           appId,
+          platform:       detectPlatform(),
+          upiType:        payee.upiType,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) launchId = json.launchId;
+    } catch (err) {
+      console.error('[TravelPayApp] Quick launch log failed:', err.message);
+    }
+
+    setLaunchContext({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact: false, rail: appId });
+  };
+
+  const handleRepayDifferentAmount = (payee) => {
+    setQuickPayPayee(null);
+    setPendingScanData({
+      upiId:        payee.upiId,
+      payeeName:    payee.name,
+      upiType:      payee.upiType,
+      merchantCode: '',
+    });
+    setSourceLabel('Payees');
+    setShowAmountModal(true);
   };
 
   // ---------------------------------------------------------------------------
@@ -177,6 +240,10 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
         @keyframes pulse-glow  { 0%,100%{box-shadow:0 0 20px rgba(13,148,136,0.3)} 50%{box-shadow:0 0 40px rgba(13,148,136,0.6)} }
 
         .animate-slide-up { animation: slide-up 0.35s ease-out; }
+
+        /* Hide number input spinners for quick-pay amount field */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .scan-line        { animation: scan-line 2s linear infinite; }
         .pulse-glow       { animation: pulse-glow 2s ease-in-out infinite; }
 
@@ -196,6 +263,7 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
             userName={userData?.name}
             onScanToPay={() => setCurrentScreen('scanner')}
             onViewActivity={() => handleTabPress('activity')}
+            onPayeePress={handlePayeePress}
           />
         )}
 
@@ -210,7 +278,8 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
           <PaymentReviewScreen
             parsedUPI={scanData}
             userData={userData}
-            onBack={() => { setScanData(null); setCurrentScreen('home'); }}
+            sourceLabel={sourceLabel}
+            onBack={() => { setScanData(null); setSourceLabel('Scan again'); setCurrentScreen('home'); }}
             onLaunched={handleLaunched}
           />
         )}
@@ -295,11 +364,20 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
 
       <AmountInputModal
         isOpen={showAmountModal}
-        onClose={() => { setShowAmountModal(false); setPendingScanData(null); setCurrentScreen('home'); }}
+        onClose={() => { setShowAmountModal(false); setPendingScanData(null); setSourceLabel('Scan again'); setCurrentScreen('home'); }}
         onSubmit={handleAmountSubmit}
         payeeName={pendingScanData?.payeeName}
         upiId={pendingScanData?.upiId}
       />
+
+      {quickPayPayee && (
+        <QuickPaySheet
+          payee={quickPayPayee}
+          onAppSelected={handleQuickLaunch}
+          onDifferentAmount={handleRepayDifferentAmount}
+          onClose={() => setQuickPayPayee(null)}
+        />
+      )}
     </div>
   );
 }
