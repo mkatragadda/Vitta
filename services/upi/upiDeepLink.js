@@ -186,31 +186,13 @@ export async function launchWise(upiId) {
   }
 
   // ── iOS ───────────────────────────────────────────────────────────────────
-  // Try wise:// custom scheme. If the app is installed Safari hands off and
-  // the page goes to background (visibilitychange → 'hidden'). If not
-  // installed nothing happens, so after 2 s open the web URL instead.
+  // Use the Wise universal link (https://wise.com/send).
+  // When the Wise app is installed, iOS intercepts the universal link and opens
+  // the app directly — no error dialog. When not installed, Safari loads the
+  // web page. This avoids the "Safari cannot open the page" alert that fires
+  // when wise:// custom scheme is used on a device without Wise installed.
   if (isRealMobile && platform === 'ios') {
-    let appOpened = false;
-
-    const onHidden = () => {
-      if (document.visibilityState === 'hidden') {
-        appOpened = true;
-      }
-    };
-    document.addEventListener('visibilitychange', onHidden, { once: true });
-
-    const fallbackTimer = setTimeout(() => {
-      document.removeEventListener('visibilitychange', onHidden);
-      if (!appOpened) {
-        window.open('https://wise.com/send', '_blank', 'noopener');
-      }
-    }, 2000);
-
-    // If page hides quickly, clear the timer
-    const onPageHide = () => { appOpened = true; clearTimeout(fallbackTimer); };
-    window.addEventListener('pagehide', onPageHide, { once: true });
-
-    try { window.location.href = 'wise://'; } catch { /* ignore */ }
+    window.open('https://wise.com/send', '_blank', 'noopener');
     return { platform, copied };
   }
 
