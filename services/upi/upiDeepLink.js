@@ -139,23 +139,17 @@ export function launchUpiApp(appId, upiData) {
 
 /**
  * Open Wise for the user to complete a transfer.
- * Copies upiId to clipboard first so they can paste it in Wise.
+ * Copies upiId to clipboard and pre-fills amount + currency in the deep link.
  *
- * Strategy (matches original wiseLauncher behaviour):
- *  1. Always open https://wise.com/send in a new tab — works on every platform.
- *  2. On a REAL mobile device (both UA and navigator.platform agree), also fire
- *     wise:// so an installed Wise app intercepts it.
- *     DevTools responsive mode spoofs the UA but leaves navigator.platform as
- *     "MacIntel"/"Win32", so the app-scheme attempt is skipped on desktop.
- *
- * @param {string} upiId
+ * @param {string} upiId      - payee UPI VPA (copied to clipboard for pasting in Wise)
+ * @param {number} [amountInr] - INR amount to pre-fill in the Wise send screen
  * @returns {{ platform: string, copied: boolean }}
  */
-export async function launchWise(upiId) {
+export async function launchWise(upiId, amountInr = 0) {
   const platform = detectPlatform();
   let copied = false;
 
-  // Copy UPI ID to clipboard so user can paste it in Wise
+  // Copy UPI ID to clipboard so user can paste it as the recipient in Wise
   if (upiId && typeof navigator !== 'undefined' && navigator.clipboard) {
     try {
       await navigator.clipboard.writeText(upiId);
@@ -165,39 +159,38 @@ export async function launchWise(upiId) {
 
   if (typeof window === 'undefined') return { platform, copied };
 
+  // Build query string: pre-fill amount and target currency in the Wise send screen
+  const amountQuery = amountInr > 0
+    ? `?amount=${amountInr}&currency=INR`
+    : '';
+
   // Guard against Chrome DevTools UA spoofing.
-  // DevTools leaves navigator.platform as the desktop value (e.g. 'MacIntel',
-  // 'Win32', 'Linux x86_64') even when the UA is set to a mobile device.
-  // Real Android devices report platform as 'Linux armv8l', 'Linux aarch64', etc.
-  // Real iOS devices report 'iPhone', 'iPad', 'iPod'.
-  // So we detect "real mobile" by EXCLUDING known desktop platform strings.
   const nativePlatform    = (navigator.platform || '').toLowerCase();
   const DESKTOP_PLATFORMS = /^(macintel|macppc|mac68k|win32|wince|linux x86_64|linux i686|linux i386|freebsd|sunos|openbsd)/;
   const isRealMobile      = !DESKTOP_PLATFORMS.test(nativePlatform);
 
   // ── Android ───────────────────────────────────────────────────────────────
-  // Intent URL: Chrome intercepts → opens Wise app if installed, else falls
-  // back to wise.com/send automatically. No JS timer needed.
+  // Wise's Android package is com.transferwise.android; scheme is 'wise'.
+  // Intent URL lets Chrome open the app (with amount params) or fall back to web.
   if (isRealMobile && platform === 'android') {
-    const fallback = encodeURIComponent('https://wise.com/send');
+    const fallback = encodeURIComponent(`https://wise.com/send${amountQuery}`);
     window.location.href =
-      `intent://send#Intent;scheme=wise;package=com.transferwise.android;S.browser_fallback_url=${fallback};end`;
+      `intent://send${amountQuery}#Intent;scheme=wise;package=com.transferwise.android;S.browser_fallback_url=${fallback};end`;
     return { platform, copied };
   }
 
   // ── iOS ───────────────────────────────────────────────────────────────────
-  // Wise kept the old 'transferwise://' URL scheme after rebranding.
-  // 'wise://' is NOT registered on iOS (gives "address is invalid").
-  // Navigation is handled by an <a href="transferwise://send"> anchor in
-  // QuickPaySheet (requires real user-gesture tap to open custom schemes on iOS).
-  // This fallback runs if launchWise is called directly from another context.
+  // Wise's iOS URL scheme is 'transferwise://' (old name, still registered).
+  // Navigation is handled by an <a href="transferwise://send?..."> anchor in
+  // QuickPaySheet — custom schemes on iOS require a real user-gesture tap.
+  // This branch is a safe fallback when called from a non-anchor context.
   if (isRealMobile && platform === 'ios') {
-    window.open('https://wise.com/send', '_blank', 'noopener');
+    window.open(`https://wise.com/send${amountQuery}`, '_blank', 'noopener');
     return { platform, copied };
   }
 
   // ── Desktop / web ─────────────────────────────────────────────────────────
-  window.open('https://wise.com/send', '_blank', 'noopener');
+  window.open(`https://wise.com/send${amountQuery}`, '_blank', 'noopener');
   return { platform, copied };
 }
 

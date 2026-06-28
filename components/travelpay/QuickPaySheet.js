@@ -114,7 +114,7 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
     if (launching) return;
     if (currentAmount <= 0) { startEdit(); return; }
     setLaunching('wise');
-    await launchWise(payee.upiId);
+    await launchWise(payee.upiId, currentAmount);
     onAppSelected(payee, currentAmount, 'wise');
   };
 
@@ -137,9 +137,10 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
     window.addEventListener('pagehide', markOpened, { once: true });
 
     // Fallback: if still on page after 1.5 s, Wise not installed → open web
+    const amountQuery = currentAmount > 0 ? `?amount=${currentAmount}&currency=INR` : '';
     setTimeout(() => {
       document.removeEventListener('visibilitychange', markOpened);
-      if (!appOpened) window.open('https://wise.com/send', '_blank', 'noopener');
+      if (!appOpened) window.open(`https://wise.com/send${amountQuery}`, '_blank', 'noopener');
     }, 1500);
 
     // Don't preventDefault — let the anchor fire transferwise://send.
@@ -322,7 +323,7 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
             /* iOS: real anchor so the tap triggers iOS Universal Link → Wise app.
                window.location / window.open bypasses Universal Links entirely. */
             <a
-              href="transferwise://send"
+              href={`transferwise://send${currentAmount > 0 ? `?amount=${currentAmount}&currency=INR` : ''}`}
               onClick={handleWiseIosTap}
               style={{ ...wiseStyle, textDecoration: 'none', cursor: launching ? 'not-allowed' : 'pointer' }}
             >
