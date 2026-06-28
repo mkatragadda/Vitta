@@ -159,10 +159,11 @@ export async function launchWise(upiId, amountInr = 0) {
 
   if (typeof window === 'undefined') return { platform, copied };
 
-  // Build query string: pre-fill amount and target currency in the Wise send screen
-  const amountQuery = amountInr > 0
-    ? `?amount=${amountInr}&currency=INR`
-    : '';
+  // Web fallback URL — wise.com/send supports sendAmount/sourceCurrency/targetCurrency
+  // for the web form, but the native app scheme (transferwise://) ignores all params.
+  const webFallback = amountInr > 0
+    ? `https://wise.com/send?sendAmount=${amountInr}&sourceCurrency=INR&targetCurrency=INR`
+    : 'https://wise.com/send';
 
   // Guard against Chrome DevTools UA spoofing.
   const nativePlatform    = (navigator.platform || '').toLowerCase();
@@ -173,9 +174,10 @@ export async function launchWise(upiId, amountInr = 0) {
   // Wise's Android package is com.transferwise.android; scheme is 'wise'.
   // Intent URL lets Chrome open the app (with amount params) or fall back to web.
   if (isRealMobile && platform === 'android') {
-    const fallback = encodeURIComponent(`https://wise.com/send${amountQuery}`);
+    // Native app params not supported — pass clean scheme, web fallback has params
+    const fallback = encodeURIComponent(webFallback);
     window.location.href =
-      `intent://send${amountQuery}#Intent;scheme=wise;package=com.transferwise.android;S.browser_fallback_url=${fallback};end`;
+      `intent://send#Intent;scheme=wise;package=com.transferwise.android;S.browser_fallback_url=${fallback};end`;
     return { platform, copied };
   }
 
@@ -185,12 +187,12 @@ export async function launchWise(upiId, amountInr = 0) {
   // QuickPaySheet — custom schemes on iOS require a real user-gesture tap.
   // This branch is a safe fallback when called from a non-anchor context.
   if (isRealMobile && platform === 'ios') {
-    window.open(`https://wise.com/send${amountQuery}`, '_blank', 'noopener');
+    window.open(webFallback, '_blank', 'noopener');
     return { platform, copied };
   }
 
   // ── Desktop / web ─────────────────────────────────────────────────────────
-  window.open(`https://wise.com/send${amountQuery}`, '_blank', 'noopener');
+  window.open(webFallback, '_blank', 'noopener');
   return { platform, copied };
 }
 
