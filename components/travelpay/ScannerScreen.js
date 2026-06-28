@@ -1,31 +1,45 @@
 import React, { useState, useRef } from 'react';
-import { X, Keyboard, Camera, Upload, Image } from 'lucide-react';
+import { X, Keyboard, Camera, Image } from 'lucide-react';
 import QRScanner from './QRScanner';
 
+// Detect whether a string is a bare UPI ID (e.g. "merchant@okicici")
+// vs a full UPI URL (e.g. "upi://pay?pa=...")
+function isUpiId(value) {
+  const trimmed = value.trim();
+  return trimmed.includes('@') && !trimmed.startsWith('upi://');
+}
+
 export default function ScannerScreen({ onScanSuccess, onClose }) {
-  const [mode, setMode] = useState('manual'); // Default to manual for desktop testing
+  const [mode, setMode] = useState('camera');
   const [manualInput, setManualInput] = useState('');
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  const inputIsUpiId = isUpiId(manualInput);
+
   const handleManualSubmit = (e) => {
     e.preventDefault();
     setError('');
 
-    if (!manualInput.trim()) {
-      setError('Please enter a UPI URL');
+    const trimmed = manualInput.trim();
+    if (!trimmed) {
+      setError('Please enter a UPI ID or UPI URL');
       return;
     }
 
-    // Validate UPI format
-    if (!manualInput.startsWith('upi://pay')) {
-      setError('Invalid UPI format. Should start with "upi://pay"');
+    if (inputIsUpiId) {
+      // Bare UPI ID — build a minimal UPI URL so the rest of the flow works
+      onScanSuccess({ raw: `upi://pay?pa=${encodeURIComponent(trimmed)}&cu=INR` });
       return;
     }
 
-    // Simulate QR scan success with manual input
-    onScanSuccess({ raw: manualInput });
+    if (!trimmed.startsWith('upi://pay')) {
+      setError('Enter a UPI ID (e.g. name@bank) or a full UPI URL starting with "upi://pay"');
+      return;
+    }
+
+    onScanSuccess({ raw: trimmed });
   };
 
   const handleImageUpload = async (e) => {
@@ -60,9 +74,6 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
       }
     }
   };
-
-  const sampleUPI = 'upi://pay?pa=merchant@paytm&pn=Sample Merchant&am=450&cu=INR';
-  const sampleUPINoAmount = 'upi://pay?pa=testmerchant@paytm&pn=Test Shop&cu=INR';
 
   return (
     <div className="h-screen flex flex-col bg-black relative">
@@ -126,7 +137,7 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
 
               {/* Actual QR Scanner Component */}
               <div className="absolute inset-0">
-                <QRScanner onScanSuccess={onScanSuccess} onClose={onClose} />
+                <QRScanner onScanSuccess={onScanSuccess} />
               </div>
             </div>
           </div>
@@ -150,24 +161,30 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         <div className="flex-1 flex items-center justify-center px-6 mt-32">
           <div className="w-full max-w-md">
             <form onSubmit={handleManualSubmit} className="space-y-4">
-              {/* Manual Input Field */}
+              {/* Input Field */}
               <div>
                 <label className="text-white text-sm font-semibold mb-2 block">
-                  Enter UPI URL
+                  Enter UPI ID or UPI URL
                 </label>
                 <textarea
                   value={manualInput}
-                  onChange={(e) => setManualInput(e.target.value)}
-                  placeholder="upi://pay?pa=merchant@paytm&pn=Merchant&am=450&cu=INR"
+                  onChange={(e) => { setManualInput(e.target.value); setError(''); }}
+                  placeholder={'name@bank  or  upi://pay?pa=name@bank&am=500&cu=INR'}
                   className="w-full bg-white/10 backdrop-blur border border-teal-500/30 rounded-2xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono text-sm"
-                  rows={4}
+                  rows={3}
                 />
                 {error && (
                   <p className="text-red-400 text-xs mt-2">{error}</p>
                 )}
+                {/* UPI ID disclaimer — shown only when user typed a bare UPI ID */}
+                {inputIsUpiId && !error && (
+                  <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+                    UPI ID entered. Identity is not verified here — your payment app will confirm the recipient before you approve.
+                  </p>
+                )}
               </div>
 
-              {/* Upload QR Image Button */}
+              {/* Upload QR Image */}
               <div>
                 <input
                   ref={fileInputRef}
@@ -195,25 +212,7 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
                 </label>
               </div>
 
-              {/* Sample UPI Buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setManualInput(sampleUPI)}
-                  className="py-3 rounded-xl bg-white/10 backdrop-blur border border-teal-500/30 text-teal-300 text-sm font-semibold hover:bg-white/20 transition-all"
-                >
-                  Sample (₹450)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManualInput(sampleUPINoAmount)}
-                  className="py-3 rounded-xl bg-white/10 backdrop-blur border border-amber-500/30 text-amber-300 text-sm font-semibold hover:bg-white/20 transition-all"
-                >
-                  Sample (No Amount)
-                </button>
-              </div>
-
-              {/* Submit Button */}
+              {/* Submit */}
               <button
                 type="submit"
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-400 text-white font-bold shadow-2xl shadow-teal-500/30 hover:shadow-teal-500/50 transition-all"
@@ -221,13 +220,6 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
                 Continue
               </button>
             </form>
-
-            {/* Info */}
-            <div className="mt-6 glass-teal rounded-2xl p-4 border border-teal-500/30">
-              <p className="text-slate-300 text-xs leading-relaxed">
-                <span className="font-semibold text-white">Desktop Testing:</span> Upload a QR code screenshot, paste UPI URL, or use the sample. On mobile, use camera mode to scan real QR codes.
-              </p>
-            </div>
           </div>
         </div>
       )}
