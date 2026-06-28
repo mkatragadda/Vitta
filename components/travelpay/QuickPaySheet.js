@@ -118,21 +118,33 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
     onAppSelected(payee, currentAmount, 'wise');
   };
 
-  // iOS only: called from the <a href> onClick.
-  // We do NOT preventDefault — the browser's own link navigation is what triggers
-  // iOS Universal Links. Any programmatic window.location / window.open bypasses
-  // the Universal Link mechanism and opens Safari instead of the Wise app.
+  // iOS only: Wise rebranded from TransferWise but kept the old URL scheme.
+  // The iOS app registers 'transferwise://' (not 'wise://') — confirmed by bundle
+  // ID com.transferwise.TransferWise. Universal Links to wise.com/send aren't
+  // registered in their apple-app-site-association so they just open Safari.
+  // Strategy: fire transferwise://send (opens Wise if installed), detect via
+  // visibilitychange whether the app opened, and fall back to wise.com after 1.5 s.
   const handleWiseIosTap = (e) => {
     if (launching) { e.preventDefault(); return; }
     if (currentAmount <= 0) { e.preventDefault(); startEdit(); return; }
     setLaunching('wise');
-    // Clipboard copy (fire & forget — async but kicks off immediately)
     navigator?.clipboard?.writeText(payee.upiId).catch(() => {});
-    // Notify parent to log + show PostLaunchBanner.
-    // On Universal Link success iOS intercepts the navigation so the page
-    // stays alive and the banner renders normally.
     onAppSelected(payee, currentAmount, 'wise');
-    // Default link navigation continues → iOS Universal Link → Wise app
+
+    let appOpened = false;
+    const markOpened = () => { appOpened = true; };
+    document.addEventListener('visibilitychange', markOpened, { once: true });
+    window.addEventListener('pagehide', markOpened, { once: true });
+
+    // Fallback: if still on page after 1.5 s, Wise not installed → open web
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', markOpened);
+      if (!appOpened) window.open('https://wise.com/send', '_blank', 'noopener');
+    }, 1500);
+
+    // Don't preventDefault — let the anchor fire transferwise://send.
+    // This keeps the navigation inside the original user-gesture stack,
+    // which is required for custom URL schemes to work on iOS Safari.
   };
 
   const fmtInr    = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -310,7 +322,7 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
             /* iOS: real anchor so the tap triggers iOS Universal Link → Wise app.
                window.location / window.open bypasses Universal Links entirely. */
             <a
-              href="https://wise.com/send"
+              href="transferwise://send"
               onClick={handleWiseIosTap}
               style={{ ...wiseStyle, textDecoration: 'none', cursor: launching ? 'not-allowed' : 'pointer' }}
             >

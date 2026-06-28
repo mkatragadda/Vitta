@@ -186,12 +186,11 @@ export async function launchWise(upiId) {
   }
 
   // ── iOS ───────────────────────────────────────────────────────────────────
-  // Universal Links only fire when the user physically taps an <a href> element.
-  // window.location.href, window.open, and programmatic .click() all bypass the
-  // Universal Link mechanism and open Safari instead of the Wise app.
-  // Navigation is therefore handled by an <a href="https://wise.com/send"> anchor
-  // rendered in QuickPaySheet — launchWise is not called at all on the iOS path.
-  // This branch exists only as a safe fallback if called from another context.
+  // Wise kept the old 'transferwise://' URL scheme after rebranding.
+  // 'wise://' is NOT registered on iOS (gives "address is invalid").
+  // Navigation is handled by an <a href="transferwise://send"> anchor in
+  // QuickPaySheet (requires real user-gesture tap to open custom schemes on iOS).
+  // This fallback runs if launchWise is called directly from another context.
   if (isRealMobile && platform === 'ios') {
     window.open('https://wise.com/send', '_blank', 'noopener');
     return { platform, copied };
