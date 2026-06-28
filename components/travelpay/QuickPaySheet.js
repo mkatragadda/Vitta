@@ -109,6 +109,7 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
     onAppSelected(payee, currentAmount, appId);
   };
 
+  // Non-iOS (Android + desktop): call launchWise which fires intent:// or window.open
   const handleWiseTap = async () => {
     if (launching) return;
     if (currentAmount <= 0) { startEdit(); return; }
@@ -117,7 +118,48 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
     onAppSelected(payee, currentAmount, 'wise');
   };
 
-  const fmtInr = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  // iOS only: called from the <a href> onClick.
+  // We do NOT preventDefault — the browser's own link navigation is what triggers
+  // iOS Universal Links. Any programmatic window.location / window.open bypasses
+  // the Universal Link mechanism and opens Safari instead of the Wise app.
+  const handleWiseIosTap = (e) => {
+    if (launching) { e.preventDefault(); return; }
+    if (currentAmount <= 0) { e.preventDefault(); startEdit(); return; }
+    setLaunching('wise');
+    // Clipboard copy (fire & forget — async but kicks off immediately)
+    navigator?.clipboard?.writeText(payee.upiId).catch(() => {});
+    // Notify parent to log + show PostLaunchBanner.
+    // On Universal Link success iOS intercepts the navigation so the page
+    // stays alive and the banner renders normally.
+    onAppSelected(payee, currentAmount, 'wise');
+    // Default link navigation continues → iOS Universal Link → Wise app
+  };
+
+  const fmtInr    = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const isIOS     = detectPlatform() === 'ios';
+  const wiseStyle = {
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '12px 14px', width: '100%',
+    background: 'rgba(255,255,255,0.03)',
+    opacity: (launching && launching !== 'wise') ? 0.35 : 1,
+    transition: 'opacity 0.15s',
+  };
+  const wiseInner = (
+    <>
+      <WiseIcon size={26} />
+      <div style={{ flex:1, textAlign:'left' }}>
+        <div style={{ color:'rgba(255,255,255,0.60)', fontSize:13, fontWeight:600, marginBottom:1 }}>
+          Wise
+        </div>
+        <div style={{ color:'rgba(255,255,255,0.25)', fontSize:10 }}>
+          {isP2P ? 'Person-to-person · opens Wise app' : 'P2P only · not for merchants'}
+        </div>
+      </div>
+      <span style={{ color: launching === 'wise' ? ACCENT : 'rgba(255,255,255,0.15)', fontSize:18 }}>
+        {launching === 'wise' ? '···' : '›'}
+      </span>
+    </>
+  );
 
   return (
     <>
@@ -264,31 +306,25 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
 
         {/* ── Wise row ── */}
         <div style={{ margin:'0 16px', borderRadius:13, overflow:'hidden', border:'1px solid rgba(255,255,255,0.07)' }}>
-          <button
-            onClick={handleWiseTap}
-            disabled={!!launching}
-            style={{
-              width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
-              padding: '12px 14px',
-              display: 'flex', alignItems: 'center', gap: 12,
-              cursor: launching ? 'not-allowed' : 'pointer',
-              opacity: (launching && launching !== 'wise') ? 0.35 : 1,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            <WiseIcon size={26} />
-            <div style={{ flex:1, textAlign:'left' }}>
-              <div style={{ color:'rgba(255,255,255,0.60)', fontSize:13, fontWeight:600, marginBottom:1 }}>
-                Wise
-              </div>
-              <div style={{ color:'rgba(255,255,255,0.25)', fontSize:10 }}>
-                {isP2P ? 'Person-to-person · opens wise.com' : 'P2P only · not for merchants'}
-              </div>
-            </div>
-            <span style={{ color: launching === 'wise' ? ACCENT : 'rgba(255,255,255,0.15)', fontSize:18 }}>
-              {launching === 'wise' ? '···' : '›'}
-            </span>
-          </button>
+          {isIOS ? (
+            /* iOS: real anchor so the tap triggers iOS Universal Link → Wise app.
+               window.location / window.open bypasses Universal Links entirely. */
+            <a
+              href="https://wise.com/send"
+              onClick={handleWiseIosTap}
+              style={{ ...wiseStyle, textDecoration: 'none', cursor: launching ? 'not-allowed' : 'pointer' }}
+            >
+              {wiseInner}
+            </a>
+          ) : (
+            <button
+              onClick={handleWiseTap}
+              disabled={!!launching}
+              style={{ ...wiseStyle, border: 'none', cursor: launching ? 'not-allowed' : 'pointer' }}
+            >
+              {wiseInner}
+            </button>
+          )}
         </div>
 
         <div style={{ height:20 }} />

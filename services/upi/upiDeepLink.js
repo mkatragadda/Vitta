@@ -186,15 +186,14 @@ export async function launchWise(upiId) {
   }
 
   // ── iOS ───────────────────────────────────────────────────────────────────
-  // Wise does NOT register a custom URL scheme on iOS (wise:// gives
-  // "address is invalid" regardless of whether the app is installed).
-  // Use a same-tab navigation to the Universal Link instead.
-  // iOS intercepts same-tab https navigations for Universal Links: if Wise
-  // is installed Safari hands off to the app and the Vitta page stays loaded.
-  // If Wise is not installed, Safari navigates to wise.com (acceptable fallback).
-  // NOTE: window.open(_blank) does NOT trigger Universal Links — same-tab only.
+  // Universal Links only fire when the user physically taps an <a href> element.
+  // window.location.href, window.open, and programmatic .click() all bypass the
+  // Universal Link mechanism and open Safari instead of the Wise app.
+  // Navigation is therefore handled by an <a href="https://wise.com/send"> anchor
+  // rendered in QuickPaySheet — launchWise is not called at all on the iOS path.
+  // This branch exists only as a safe fallback if called from another context.
   if (isRealMobile && platform === 'ios') {
-    window.location.href = 'https://wise.com/send';
+    window.open('https://wise.com/send', '_blank', 'noopener');
     return { platform, copied };
   }
 

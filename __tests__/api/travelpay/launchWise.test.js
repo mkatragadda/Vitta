@@ -150,14 +150,16 @@ describe('launchWise — iOS', () => {
     });
   });
 
-  test('navigates same-tab to wise.com/send (Universal Link — opens app if installed)', async () => {
+  // launchWise is NOT called on iOS in normal flow — QuickPaySheet uses an
+  // <a href> anchor instead. This is the fallback if called from another context.
+  test('fallback: opens wise.com/send in new tab', async () => {
     await launchWise('friend@upi');
-    expect(lastHref()).toBe('https://wise.com/send');
+    expect(window.open).toHaveBeenCalledWith('https://wise.com/send', '_blank', 'noopener');
   });
 
-  test('does NOT call window.open (same-tab navigation required for Universal Links)', async () => {
+  test('fallback: does not touch window.location.href', async () => {
     await launchWise('friend@upi');
-    expect(window.open).not.toHaveBeenCalled();
+    expect(hrefLog).toHaveLength(0);
   });
 
   test('copies UPI ID to clipboard', async () => {
