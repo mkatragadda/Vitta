@@ -186,33 +186,15 @@ export async function launchWise(upiId) {
   }
 
   // ── iOS ───────────────────────────────────────────────────────────────────
-  // Try the Wise custom URL scheme. `wise://send` is syntactically valid
-  // (scheme=wise, host=send) — the Android intent URI uses the same `send`
-  // path, so iOS registers it too. If Wise is installed the app opens and the
-  // page goes to background (visibilitychange→'hidden'). If not installed,
-  // Safari shows a "no app installed" dialog, the 1.5 s timer fires and opens
-  // wise.com/send as a same-tab navigation (which triggers the universal link /
-  // shows the Wise website). NOTE: window.open(_blank) does NOT trigger
-  // universal links on iOS — that's why we use location.href for the fallback.
+  // Wise does NOT register a custom URL scheme on iOS (wise:// gives
+  // "address is invalid" regardless of whether the app is installed).
+  // Use a same-tab navigation to the Universal Link instead.
+  // iOS intercepts same-tab https navigations for Universal Links: if Wise
+  // is installed Safari hands off to the app and the Vitta page stays loaded.
+  // If Wise is not installed, Safari navigates to wise.com (acceptable fallback).
+  // NOTE: window.open(_blank) does NOT trigger Universal Links — same-tab only.
   if (isRealMobile && platform === 'ios') {
-    let appOpened = false;
-
-    const onHidden = () => {
-      if (document.visibilityState === 'hidden') appOpened = true;
-    };
-    document.addEventListener('visibilitychange', onHidden, { once: true });
-
-    const fallbackTimer = setTimeout(() => {
-      document.removeEventListener('visibilitychange', onHidden);
-      if (!appOpened) {
-        window.location.href = 'https://wise.com/send';
-      }
-    }, 1500);
-
-    const onPageHide = () => { appOpened = true; clearTimeout(fallbackTimer); };
-    window.addEventListener('pagehide', onPageHide, { once: true });
-
-    window.location.href = 'wise://send';
+    window.location.href = 'https://wise.com/send';
     return { platform, copied };
   }
 
