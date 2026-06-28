@@ -92,11 +92,13 @@ export function buildDeepLinkUrl(appId, platform, upiParams) {
 
   if (appId === 'gpay') {
     if (platform === 'ios') {
-      return `tez://upi/pay?${upiParams}`;
+      // Google Pay renamed from "Google Tez" — official iOS scheme is now gpay://
+      return `gpay://upi/pay?${upiParams}`;
     }
     // Android Intent URL — Chrome intercepts natively, no JS needed
+    // UPI URI spec is upi://pay?... so intent:// host must be 'pay', not 'upi/pay'
     const fallback = encodeURIComponent(PLAY_STORE.gpay);
-    return `intent://upi/pay?${upiParams}#Intent;scheme=upi;package=${PACKAGES.gpay};S.browser_fallback_url=${fallback};end`;
+    return `intent://pay?${upiParams}#Intent;scheme=upi;package=${PACKAGES.gpay};S.browser_fallback_url=${fallback};end`;
   }
 
   if (appId === 'phonepe') {
