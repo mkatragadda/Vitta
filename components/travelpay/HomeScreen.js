@@ -18,10 +18,17 @@ const formatDate = (ts) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+// A "real name" is something that doesn't look like a UPI ID (no @ in the middle)
+const isRealName = (name) => name && !name.includes('@');
+
 const PayeeRow = ({ payee, showDivider, onPress }) => {
-  const isP2P    = payee.upiType === 'p2p';
-  const isP2M    = payee.upiType === 'p2m';
+  const isP2P     = payee.upiType === 'p2p';
+  const isP2M     = payee.upiType === 'p2m';
   const showBadge = isP2P || isP2M;
+  const hasName   = isRealName(payee.name);
+  // Primary display: real name if available, otherwise the UPI ID
+  const displayName = hasName ? payee.name : payee.upiId;
+
   return (
     <div
       onClick={() => onPress && onPress(payee)}
@@ -43,18 +50,34 @@ const PayeeRow = ({ payee, showDivider, onPress }) => {
         fontSize: 12, fontWeight: 700,
         color: isP2P ? P2P_CLR : P2M_CLR,
       }}>
-        {twoInitials(payee.name)}
+        {twoInitials(displayName)}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {payee.name}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-          <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
+        {/* Primary: real name (bold) or UPI ID (smaller, muted — clearly an identifier) */}
+        {hasName ? (
+          <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {payee.name}
+          </div>
+        ) : (
+          <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {payee.upiId}
+          </div>
+        )}
+        {/* Secondary line: UPI ID (when we have a real name) + date + Pay again */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, overflow: 'hidden' }}>
+          {hasName && (
+            <>
+              <span style={{ color: 'rgba(255,255,255,0.22)', fontSize: 10, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
+                {payee.upiId}
+              </span>
+              <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, flexShrink: 0 }}>·</span>
+            </>
+          )}
+          <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, flexShrink: 0 }}>
             {formatDate(payee.lastPaidAt)}
           </span>
-          <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: 10 }}>·</span>
-          <span style={{ color: ACCENT, fontSize: 11, fontWeight: 600 }}>
+          <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: 10, flexShrink: 0 }}>·</span>
+          <span style={{ color: ACCENT, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
             Pay again
           </span>
         </div>

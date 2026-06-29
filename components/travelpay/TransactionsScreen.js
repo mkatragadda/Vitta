@@ -122,9 +122,11 @@ export default function TransactionsScreen({ userId, onClose }) {
               {/* transaction rows */}
               <div style={{ margin: '0 16px', borderRadius: 12, overflow: 'hidden' }}>
                 {groups[dateLabel].map((tx, i) => {
-                  const type    = tx.resolved_upi_type || null;
-                  const isP2P   = type === 'p2p';
-                  const name    = tx.resolved_name || tx.recipient_name || tx.recipient_upi_id || 'Unknown';
+                  const type       = tx.resolved_upi_type || null;
+                  const isP2P      = type === 'p2p';
+                  const resolvedName = tx.resolved_name || tx.recipient_name || tx.recipient_upi_id || 'Unknown';
+                  const hasName    = resolvedName && !resolvedName.includes('@');
+                  const name       = hasName ? resolvedName : tx.recipient_upi_id || 'Unknown';
                   const showDiv = i < groups[dateLabel].length - 1;
                   return (
                     <div key={tx.id} style={{
@@ -147,9 +149,15 @@ export default function TransactionsScreen({ userId, onClose }) {
 
                       {/* name + meta */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {name}
-                        </div>
+                        {hasName ? (
+                          <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {name}
+                          </div>
+                        ) : (
+                          <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {name}
+                          </div>
+                        )}
                         <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 11, marginTop: 1 }}>
                           {formatTime(tx.launched_at)}
                           {tx.rail && <span style={{ marginLeft: 6, color: 'rgba(255,255,255,0.2)' }}>· {railLabel(tx.rail)}</span>}
