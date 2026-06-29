@@ -9,6 +9,7 @@ import TransferInitiation from './transfer/TransferInitiation';
 import TransferReview from './transfer/TransferReview';
 import TransferReceipt from './transfer/TransferReceipt';
 import { getUserCards, addCard, deleteCard, calculateUtilization } from '../services/cardService';
+import { warmupCache } from '../services/cache/cacheWarmup';
 
 /**
  * VittaChatInterface
@@ -57,6 +58,11 @@ const VittaChatInterface = ({
     setInput(query);
     setQuickActionTrigger(true);
   }, [setInput, setQuickActionTrigger]);
+
+  // Warm up embedding cache only when chat interface is actually opened
+  useEffect(() => {
+    warmupCache().catch(() => {});
+  }, []);
 
   // Effect to trigger send after input is set by quick action
   useEffect(() => {

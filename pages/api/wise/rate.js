@@ -1,8 +1,6 @@
 /**
  * GET /api/wise/rate
- * Get live exchange rate from Wise API
- *
- * Uses unauthenticated quote endpoint (no auth required, just for display)
+ * Get live exchange rate from Wise API using the authenticated /v1/rates endpoint.
  *
  * Query params:
  * - source: Source currency (default: 'USD')
@@ -17,22 +15,22 @@ export default async function handler(req, res) {
   try {
     const { source = 'USD', target = 'INR' } = req.query;
 
-    console.log('[API /wise/rate] Fetching live rate:', `${source} → ${target}`);
+    const isSandbox = process.env.WISE_ENVIRONMENT === 'sandbox';
+    const apiToken  = isSandbox
+      ? process.env.WISE_API_TOKEN_SANDBOX
+      : process.env.WISE_API_TOKEN_LIVE;
 
-    const baseURL = process.env.WISE_ENVIRONMENT === 'sandbox'
+    const baseURL = isSandbox
       ? 'https://api.sandbox.transferwise.tech'
       : 'https://api.transferwise.com';
 
-    const url = `${baseURL}/v3/quotes`;
+    const url = `${baseURL}/v1/rates?source=${source}&target=${target}`;
 
     const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sourceCurrency: source,
-        targetCurrency: target,
-        sourceAmount: 1,
-      }),
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     if (!response.ok) {
@@ -41,22 +39,26 @@ export default async function handler(req, res) {
       throw new Error(`Wise API error: ${response.status}`);
     }
 
-    const quoteData = await response.json();
+    const rates = await response.json();
+    // Response is an array: [{ rate, source, target, time }]
+    const rateObj = Array.isArray(rates) ? rates[0] : rates;
 
-    console.log('[API /wise/rate] ✅ Rate fetched:', quoteData.rate);
+    if (!rateObj || !rateObj.rate) {
+      throw new Error('No rate returned from Wise API');
+    }
 
     return res.status(200).json({
       success: true,
       data: {
-        rate: quoteData.rate,
-        source: quoteData.sourceCurrency,
-        target: quoteData.targetCurrency,
-        timestamp: new Date().toISOString(),
+        rate:      rateObj.rate,
+        source:    rateObj.source,
+        target:    rateObj.target,
+        timestamp: rateObj.time || new Date().toISOString(),
       },
     });
 
   } catch (error) {
-    console.error('[API /wise/rate] Error:', error);
+    console.error('[API /wise/rate] Error:', error.message);
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch exchange rate',

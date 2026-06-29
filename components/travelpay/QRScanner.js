@@ -2,14 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { AlertCircle } from 'lucide-react';
 
-// Pure camera-feed component — no fixed overlay, no own header.
-// ScannerScreen controls layout and navigation.
 export default function QRScanner({ onScanSuccess }) {
   const [error, setError] = useState(null);
-  const instanceRef = useRef(null);
-  const startedRef  = useRef(false);
+  const instanceRef  = useRef(null);
+  const startedRef   = useRef(false);
+  // Tracks whether the component unmounted before start() resolved.
+  // If true, the scanner must be stopped inside the .then() handler
+  // because the normal cleanup already ran and found nothing to stop.
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
+    cancelledRef.current = false;
+
     const html5QrCode = new Html5Qrcode('qr-reader');
     instanceRef.current = html5QrCode;
 
@@ -21,17 +25,32 @@ export default function QRScanner({ onScanSuccess }) {
           safeStop();
           onScanSuccess({ raw: decodedText });
         },
-        (err) => {
-          if (!err.includes('No QR code found')) console.warn('[QRScanner]', err);
+        () => {
+          // Per-frame "no QR found" callback — fires 10×/s during normal scanning.
+          // Completely normal; never log or act on these.
         }
       )
-      .then(() => { startedRef.current = true; })
+      .then(() => {
+        if (cancelledRef.current) {
+          // Component unmounted while start() was in-flight.
+          // Cleanup already ran and couldn't stop (startedRef was false).
+          // Stop the now-orphaned scanner here before it runs forever.
+          html5QrCode.stop().catch(() => {});
+          return;
+        }
+        startedRef.current = true;
+      })
       .catch((err) => {
-        console.error('[QRScanner] start failed:', err);
-        setError('Camera access denied. Please enable camera permissions or use Manual entry.');
+        if (!cancelledRef.current) {
+          console.error('[QRScanner] camera start failed:', err);
+          setError('Camera access denied. Enable camera permissions or use Manual entry.');
+        }
       });
 
-    return () => { safeStop(); };
+    return () => {
+      cancelledRef.current = true;
+      safeStop();
+    };
   }, []);
 
   function safeStop() {
@@ -44,12 +63,12 @@ export default function QRScanner({ onScanSuccess }) {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-        <AlertCircle className="w-7 h-7 text-red-400 mb-2" />
-        <p className="text-red-400 text-xs leading-relaxed">{error}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 12px', textAlign: 'center' }}>
+        <AlertCircle size={28} color="#f87171" style={{ marginBottom: 8 }} />
+        <p style={{ color: '#f87171', fontSize: 12, lineHeight: 1.5, margin: 0 }}>{error}</p>
       </div>
     );
   }
 
-  return <div id="qr-reader" className="w-full h-full" />;
+  return <div id="qr-reader" style={{ width: '100%', height: '100%' }} />;
 }

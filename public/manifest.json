@@ -13,10 +13,10 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "/favicon.png",
+      "sizes": "200x200",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "categories": ["finance", "productivity"],

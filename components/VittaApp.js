@@ -11,7 +11,6 @@ import WaitlistScreen from './WaitlistScreen';
 import { saveGoogleUser } from '../services/userService';
 import { getUserCards } from '../services/cardService';
 import { processQuery, loadConversationHistory } from '../services/chat/conversationEngineV2';
-import { warmupCache } from '../services/cache/cacheWarmup';
 import transferFlowManager, { TRANSFER_STEPS } from '../services/chat/transferFlowManager';
 
 // Component to render message content with clickable links and tables
@@ -194,6 +193,8 @@ const VittaApp = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [userCards, setUserCards] = useState([]);
   const fileInputRef = useRef(null);
+  // Tracks which userId has had cards loaded — avoids fetching when on TravelPay
+  const cardsLoadedForUser = useRef(null);
   const [quickActionTrigger, setQuickActionTrigger] = useState(false);
   const userId = user?.id;
 
@@ -534,12 +535,14 @@ const VittaApp = () => {
     return [];
   }, [userId]);
 
-  // Load user cards when user logs in
+  // Load user cards only when a card-based screen is active.
+  // TravelPay never uses userCards, so skip the DB call for those users entirely.
   useEffect(() => {
-    if (userId) {
+    if (userId && currentScreen !== 'travelpay' && cardsLoadedForUser.current !== userId) {
+      cardsLoadedForUser.current = userId;
       refreshCards();
     }
-  }, [refreshCards, userId]);
+  }, [userId, currentScreen, refreshCards]);
 
   // Ensure official Google button renders once initialized and ref is ready
   useEffect(() => {
@@ -563,19 +566,11 @@ const VittaApp = () => {
     }
   }, [isGsiInitialized, hasRenderedGsiButton]);
 
-  // Phase 7: Warm up embedding cache on app initialization
-  // Runs once to pre-cache common queries
-  useEffect(() => {
-    // Run warmup in background, non-blocking
-    warmupCache().catch(error => {
-      console.warn('[VittaApp] Cache warmup error:', error);
-    });
-  }, []); // Run once on mount
-
   // Logout handler
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUser(null);
+    cardsLoadedForUser.current = null;
     setCurrentScreen('main');
     setMessages([{
       type: 'bot',
