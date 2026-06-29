@@ -9,9 +9,10 @@ const railLabel = (rail) => {
   return map[rail] || rail;
 };
 
-const upiType = (rail) => (rail === 'wise' ? 'P2P' : 'P2M');
-const upiColor = (rail) => (rail === 'wise' ? '#9b7dff' : '#ff9055');
-const upiBg    = (rail) => (rail === 'wise' ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)');
+// resolved_upi_type is computed server-side per UPI ID (canonical across all transactions)
+const upiLabel = (type) => type === 'p2p' ? 'P2P' : 'P2M';
+const upiColor = (type) => type === 'p2p' ? '#9b7dff' : '#ff9055';
+const upiBg    = (type) => type === 'p2p' ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)';
 
 const initials = (name) =>
   (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -32,7 +33,7 @@ const formatTime = (ts) =>
 export default function TransactionsScreen({ userId, onClose }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [monthStats, setMonthStats]     = useState({ totalUsd: 0, count: 0 });
+  const [monthStats, setMonthStats]     = useState({ totalInr: 0, totalUsd: 0, count: 0 });
 
   useEffect(() => { fetchTransactions(); }, [userId]);
 
@@ -45,7 +46,7 @@ export default function TransactionsScreen({ userId, onClose }) {
       if (!json.success) throw new Error(json.error);
       setTransactions(json.data || []);
       const ms = json.monthStats || {};
-      setMonthStats({ totalUsd: ms.totalUsd || 0, count: ms.count || 0 });
+      setMonthStats({ totalInr: ms.totalInr || 0, totalUsd: ms.totalUsd || 0, count: ms.count || 0 });
     } catch (e) {
       console.error('[TransactionsScreen]', e.message);
       setTransactions([]);
@@ -77,8 +78,13 @@ export default function TransactionsScreen({ userId, onClose }) {
           flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 12, padding: '12px 14px',
         }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginBottom: 4 }}>This month (USD)</div>
-          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>${monthStats.totalUsd.toFixed(2)}</div>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginBottom: 4 }}>This month</div>
+          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>
+            ₹{Math.round(monthStats.totalInr).toLocaleString('en-IN')}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>
+            ≈ ${monthStats.totalUsd.toFixed(2)}
+          </div>
         </div>
         <div style={{
           flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
@@ -86,6 +92,7 @@ export default function TransactionsScreen({ userId, onClose }) {
         }}>
           <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginBottom: 4 }}>Payments</div>
           <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{monthStats.count}</div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>this month</div>
         </div>
       </div>
 
@@ -115,8 +122,9 @@ export default function TransactionsScreen({ userId, onClose }) {
               {/* transaction rows */}
               <div style={{ margin: '0 16px', borderRadius: 12, overflow: 'hidden' }}>
                 {groups[dateLabel].map((tx, i) => {
-                  const isP2P   = tx.rail === 'wise';
-                  const name    = tx.recipient_name || tx.recipient_upi_id || 'Unknown';
+                  const type    = tx.resolved_upi_type || null;
+                  const isP2P   = type === 'p2p';
+                  const name    = tx.resolved_name || tx.recipient_name || tx.recipient_upi_id || 'Unknown';
                   const showDiv = i < groups[dateLabel].length - 1;
                   return (
                     <div key={tx.id} style={{
@@ -125,14 +133,14 @@ export default function TransactionsScreen({ userId, onClose }) {
                       background: 'rgba(255,255,255,0.05)',
                       borderBottom: showDiv ? '1px solid rgba(255,255,255,0.05)' : 'none',
                     }}>
-                      {/* avatar */}
+                      {/* avatar — circle for P2P, rounded square for P2M, neutral for unknown */}
                       <div style={{
                         width: 32, height: 32, flexShrink: 0,
-                        borderRadius: isP2P ? '50%' : '8px',
-                        background: isP2P ? 'rgba(139,107,255,0.24)' : 'rgba(255,140,80,0.2)',
+                        borderRadius: type === null ? '8px' : isP2P ? '50%' : '8px',
+                        background: type === null ? 'rgba(255,255,255,0.08)' : isP2P ? 'rgba(139,107,255,0.24)' : 'rgba(255,140,80,0.2)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 11, fontWeight: 700,
-                        color: isP2P ? '#9b7dff' : '#ff9055',
+                        color: type === null ? 'rgba(255,255,255,0.45)' : isP2P ? '#9b7dff' : '#ff9055',
                       }}>
                         {initials(name)}
                       </div>
@@ -156,13 +164,15 @@ export default function TransactionsScreen({ userId, onClose }) {
                         <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10 }}>
                           ${Number(tx.usd_equivalent || 0).toFixed(2)}
                         </div>
-                        <span style={{
-                          display: 'inline-block', marginTop: 2,
-                          background: upiBg(tx.rail), color: upiColor(tx.rail),
-                          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                        }}>
-                          {upiType(tx.rail)}
-                        </span>
+                        {type && (
+                          <span style={{
+                            display: 'inline-block', marginTop: 2,
+                            background: upiBg(type), color: upiColor(type),
+                            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                          }}>
+                            {upiLabel(type)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

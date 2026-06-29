@@ -79,7 +79,9 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
 
   if (!payee) return null;
 
-  const isP2P = payee.upiType === 'p2p';
+  const isP2P     = payee.upiType === 'p2p';
+  const isP2M     = payee.upiType === 'p2m';
+  const isUnknown = !isP2P && !isP2M;
   const name  = payee.name || payee.upiId;
 
   // ── Amount editing ───────────────────────────────────────────────────────────
@@ -168,7 +170,9 @@ export default function QuickPaySheet({ payee, onAppSelected, onClose }) {
           Wise
         </div>
         <div style={{ color:'rgba(255,255,255,0.25)', fontSize:10 }}>
-          {isP2P ? 'Person-to-person · opens Wise app' : 'P2P only · not for merchants'}
+          {isP2P    ? 'Person-to-person · opens Wise app' :
+           isP2M    ? 'P2P only · not for merchants' :
+                      'For personal payments only'}
         </div>
       </div>
       <span style={{ color: launching === 'wise' ? ACCENT : 'rgba(255,255,255,0.15)', fontSize:18 }}>

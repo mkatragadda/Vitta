@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     // Fetch recent launches (any status) — enough to find 5 distinct payees
     const { data, error } = await supabase
       .from('payment_launches')
-      .select('recipient_upi_id, recipient_name, amount_inr, usd_equivalent, launched_at, rail')
+      .select('recipient_upi_id, recipient_name, amount_inr, usd_equivalent, launched_at, rail, upi_type')
       .eq('user_id', userId)
       .order('launched_at', { ascending: false })
       .limit(100);
@@ -39,27 +39,51 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, data: [] });
     }
 
-    // Deduplicate — keep first occurrence (most recent) per UPI ID
+    const rows = data || [];
+
+    // Pass 1: build canonical name and type per UPI ID across ALL fetched rows.
+    // Same UPI ID must always show the same name and type regardless of which
+    // transaction stored them — scan all 100 rows before deduplicating.
+    const canonicalType = {};
+    const canonicalName = {};
+    for (const row of rows) {
+      const key = (row.recipient_upi_id || '').toLowerCase();
+      if (!key) continue;
+
+      // Type: P2P is sticky — Wise or QR-without-mc overrides stale P2M entries
+      if (canonicalType[key] !== 'p2p') {
+        if (row.rail === 'wise' || row.upi_type === 'p2p') {
+          canonicalType[key] = 'p2p';
+        } else if (row.upi_type === 'p2m') {
+          canonicalType[key] = 'p2m';
+        }
+      }
+
+      // Name: prefer a real name over the raw UPI ID — first found wins
+      if (!canonicalName[key]) {
+        const name = (row.recipient_name || '').trim();
+        if (name && name.toLowerCase() !== key) {
+          canonicalName[key] = name;
+        }
+      }
+    }
+
+    // Pass 2: deduplicate — keep first occurrence (most recent) per UPI ID
     const seen = new Set();
     const payees = [];
-    for (const row of data || []) {
+    for (const row of rows) {
       const key = (row.recipient_upi_id || '').toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);
 
-      // Derive P2P vs P2M from the rail used:
-      // Wise = international remittance → person-to-person
-      // GPay / PhonePe / Paytm / bank = local UPI → typically merchant
-      const upiType = row.rail === 'wise' ? 'p2p' : 'p2m';
-
       payees.push({
         upiId:      key,
-        name:       row.recipient_name || key,
+        name:       canonicalName[key] || key,
         amountInr:  Number(row.amount_inr)    || 0,
         amountUsd:  Number(row.usd_equivalent) || 0,
         lastPaidAt: row.launched_at,
-        upiType,
-        rail: row.rail,
+        upiType:    canonicalType[key] || 'unknown',
+        rail:       row.rail,
       });
 
       if (payees.length === 5) break;

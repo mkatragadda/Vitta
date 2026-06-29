@@ -19,7 +19,9 @@ const formatDate = (ts) => {
 };
 
 const PayeeRow = ({ payee, showDivider, onPress }) => {
-  const isP2P = payee.upiType === 'p2p';
+  const isP2P    = payee.upiType === 'p2p';
+  const isP2M    = payee.upiType === 'p2m';
+  const showBadge = isP2P || isP2M;
   return (
     <div
       onClick={() => onPress && onPress(payee)}
@@ -47,8 +49,14 @@ const PayeeRow = ({ payee, showDivider, onPress }) => {
         <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {payee.name}
         </div>
-        <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 11, marginTop: 1 }}>
-          {formatDate(payee.lastPaidAt)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+          <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
+            {formatDate(payee.lastPaidAt)}
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.18)', fontSize: 10 }}>·</span>
+          <span style={{ color: ACCENT, fontSize: 11, fontWeight: 600 }}>
+            Pay again
+          </span>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -59,16 +67,18 @@ const PayeeRow = ({ payee, showDivider, onPress }) => {
           <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10 }}>
             ${payee.amountUsd.toFixed(2)}
           </div>
-          <span style={{
-            display: 'inline-block', marginTop: 2,
-            background: isP2P ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)',
-            color: isP2P ? P2P_CLR : P2M_CLR,
-            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-          }}>
-            {isP2P ? 'P2P' : 'P2M'}
-          </span>
+          {showBadge && (
+            <span style={{
+              display: 'inline-block', marginTop: 2,
+              background: isP2P ? 'rgba(139,107,255,0.12)' : 'rgba(255,140,80,0.12)',
+              color: isP2P ? P2P_CLR : P2M_CLR,
+              fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+            }}>
+              {isP2P ? 'P2P' : 'P2M'}
+            </span>
+          )}
         </div>
-        <span style={{ color: 'rgba(255,255,255,0.20)', fontSize: 18, lineHeight: 1 }}>›</span>
+        <span style={{ color: 'rgba(78,207,154,0.55)', fontSize: 17, lineHeight: 1 }}>›</span>
       </div>
     </div>
   );
