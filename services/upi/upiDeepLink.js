@@ -65,14 +65,18 @@ const PACKAGES = {
  * @returns {string} URL-encoded params (no leading "?")
  */
 export function buildUpiParams({ upiId, payeeName, amountInr, note, merchantCode }) {
-  const params = new URLSearchParams();
-  params.set('pa', upiId);
-  if (payeeName)    params.set('pn', payeeName);
-  if (amountInr > 0) params.set('am', amountInr.toFixed(2));
-  params.set('cu', 'INR');
-  params.set('tn', note || 'Vitta Payment');
-  if (merchantCode) params.set('mc', merchantCode);
-  return params.toString();
+  // Build manually using encodeURIComponent — URLSearchParams.toString() uses
+  // application/x-www-form-urlencoded which encodes spaces as '+'. UPI apps
+  // treat '+' as a literal character, so "Vitta Payment" becomes "Vitta+Payment"
+  // in the transaction note. Use %20 per the URI spec instead.
+  const enc = encodeURIComponent;
+  const parts = [`pa=${enc(upiId)}`];
+  if (payeeName)     parts.push(`pn=${enc(payeeName)}`);
+  if (amountInr > 0) parts.push(`am=${enc(amountInr.toFixed(2))}`);
+  parts.push('cu=INR');
+  if (note)          parts.push(`tn=${enc(note)}`);
+  if (merchantCode)  parts.push(`mc=${enc(merchantCode)}`);
+  return parts.join('&');
 }
 
 // ---------------------------------------------------------------------------
