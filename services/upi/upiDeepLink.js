@@ -67,10 +67,16 @@ const PACKAGES = {
 export function buildUpiParams({ upiId, payeeName, amountInr, note, merchantCode }) {
   // Build manually using encodeURIComponent — URLSearchParams.toString() uses
   // application/x-www-form-urlencoded which encodes spaces as '+'. UPI apps
-  // treat '+' as a literal character, so "Vitta Payment" becomes "Vitta+Payment"
-  // in the transaction note. Use %20 per the URI spec instead.
+  // treat '+' as a literal character. Use %20 per the URI spec instead.
+  //
+  // UPI IDs (pa=): NPCI spec uses @ literally: "user@bank". encodeURIComponent
+  // would encode it as %40, which ICICI Bank and others reject during payee lookup.
+  // We keep @ unencoded and only encode the two halves around it.
   const enc = encodeURIComponent;
-  const parts = [`pa=${enc(upiId)}`];
+  const encUpiId = (id) => id.includes('@')
+    ? id.split('@').map(enc).join('@')   // encode each side, keep @ literal
+    : enc(id);
+  const parts = [`pa=${encUpiId(upiId)}`];
   if (payeeName)     parts.push(`pn=${enc(payeeName)}`);
   if (amountInr > 0) parts.push(`am=${enc(amountInr.toFixed(2))}`);
   parts.push('cu=INR');
