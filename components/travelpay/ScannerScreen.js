@@ -50,28 +50,46 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
     setError('');
 
     try {
-      // Use html5-qrcode library to decode QR from image
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const html5QrCode = new Html5Qrcode('qr-reader-upload');
+      let qrCodeText = null;
 
-      const qrCodeText = await html5QrCode.scanFile(file, true);
+      // BarcodeDetector: native browser API available on iOS Safari 17+ and Android Chrome.
+      // Handles EXIF rotation correctly — images from iPhone camera roll work without fix-up.
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          const bitmap   = await createImageBitmap(file);
+          const codes    = await detector.detect(bitmap);
+          if (codes.length > 0) qrCodeText = codes[0].rawValue;
+        } catch (_) { /* fall through to html5-qrcode */ }
+      }
 
-      if (qrCodeText && qrCodeText.startsWith('upi://pay')) {
-        // Auto-fill the manual input with decoded URL
-        setManualInput(qrCodeText);
-        setError('');
+      // Fallback: html5-qrcode scanFile (works on desktop Chrome/Firefox).
+      // showImage=false so it doesn't need the container div to be visible.
+      if (!qrCodeText) {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        const scanner = new Html5Qrcode('qr-reader-upload');
+        qrCodeText = await scanner.scanFile(file, /* showImage */ false);
+      }
+
+      if (qrCodeText) {
+        if (qrCodeText.startsWith('upi://pay')) {
+          setManualInput(qrCodeText);
+          setError('');
+        } else if (isUpiId(qrCodeText)) {
+          // QR contained a bare UPI ID — auto-submit directly
+          onScanSuccess({ raw: `upi://pay?pa=${encodeURIComponent(qrCodeText)}&cu=INR` });
+        } else {
+          setError('Could not find a valid UPI QR code in this image');
+        }
       } else {
-        setError('Could not find valid UPI QR code in image');
+        setError('Could not find a valid UPI QR code in this image');
       }
     } catch (err) {
       console.error('[ScannerScreen] QR decode error:', err);
-      setError('Failed to decode QR code from image. Please try another image or enter URL manually.');
+      setError('Failed to decode QR code from image. Please try another image or enter the UPI ID manually.');
     } finally {
       setUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -224,8 +242,8 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         </div>
       )}
 
-      {/* Hidden div for QR code decoding */}
-      <div id="qr-reader-upload" className="hidden"></div>
+      {/* Off-screen div for html5-qrcode fallback — must NOT be display:none or canvas rendering breaks */}
+      <div id="qr-reader-upload" style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}></div>
     </div>
   );
 }
