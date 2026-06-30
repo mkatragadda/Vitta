@@ -4,11 +4,59 @@ import QRScanner from './QRScanner';
 
 // ── QR decode helpers ──────────────────────────────────────────────────────
 
-// ZXing via html5-qrcode with a throwaway div per call (avoids "already
-// initialised" error when called multiple times concurrently).
+/**
+ * Load a File into a canvas via blob URL (EXIF-corrected, memory-safe).
+ *
+ * blob URL avoids copying the entire file into a base64 string (which would
+ * be ~1.37× the file size in memory — fatal for a 12MP iPhone JPEG that's
+ * already ~5 MB). <img> element applies EXIF rotation automatically on
+ * iOS Safari 13+ so the canvas pixels are always right-side-up.
+ *
+ * targetPx caps the longest dimension; 512 is safe for all iOS canvas limits
+ * while providing enough resolution for QR module detection.
+ */
+function prepareCanvas(file, targetPx = 512) {
+  return new Promise((resolve, reject) => {
+    const bail   = setTimeout(() => reject(new Error('canvas-timeout')), 10000);
+    const blobUrl = URL.createObjectURL(file);
+    const img    = new window.Image();   // window.Image = HTMLImageElement (not Lucide icon)
+
+    img.onerror = () => {
+      clearTimeout(bail);
+      URL.revokeObjectURL(blobUrl);
+      reject(new Error('img-load-error'));
+    };
+    img.onload = () => {
+      clearTimeout(bail);
+      URL.revokeObjectURL(blobUrl);      // free memory immediately after draw
+
+      const scale  = Math.min(1, targetPx / Math.max(img.naturalWidth, img.naturalHeight));
+      const w      = Math.round(img.naturalWidth  * scale);
+      const h      = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve({ canvas, w, h });
+    };
+    img.src = blobUrl;
+  });
+}
+
+/** Encode canvas as a PNG File (lossless — no extra JPEG artefact layer). */
+function canvasToFile(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(new File([blob], 'qr.png', { type: 'image/png' }));
+      else      reject(new Error('toBlob-failed'));
+    }, 'image/png');
+  });
+}
+
+/** ZXing via html5-qrcode with a unique off-screen div per call. */
 async function decodeWithZxing(file) {
   const { Html5Qrcode } = await import('html5-qrcode');
-  const divId = `qr-decode-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const divId = `qr-tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const div   = document.createElement('div');
   div.id = divId;
   div.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;';
@@ -20,44 +68,7 @@ async function decodeWithZxing(file) {
   }
 }
 
-// Load File into <img> (applies EXIF rotation) → canvas at target px (PNG).
-// PNG avoids double-JPEG-compression artifacts; bail after 10 s on mobile.
-function prepareCanvas(file, targetPx) {
-  return new Promise((resolve, reject) => {
-    const bail = setTimeout(() => reject(new Error('canvas-timeout')), 10000);
-    const reader = new FileReader();
-    reader.onerror = () => { clearTimeout(bail); reject(new Error('FileReader error')); };
-    reader.onload  = (ev) => {
-      const img = new window.Image();
-      img.onerror = () => { clearTimeout(bail); reject(new Error('Image load error')); };
-      img.onload  = () => {
-        const scale  = Math.min(1, targetPx / Math.max(img.naturalWidth, img.naturalHeight));
-        const w      = Math.round(img.naturalWidth  * scale);
-        const h      = Math.round(img.naturalHeight * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width  = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        clearTimeout(bail);
-        resolve({ canvas, w, h });
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-// Convert canvas to a File object (PNG, no quality loss).
-function canvasToFile(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(new File([blob], 'qr.png', { type: 'image/png' }));
-      else      reject(new Error('toBlob failed'));
-    }, 'image/png');
-  });
-}
-
-// Extract UPI ID string from a decoded QR value (URL or bare VPA).
+/** Pull the UPI ID out of a decoded QR string (URL or bare VPA). */
 function extractUpiId(text) {
   if (!text) return null;
   try {
@@ -65,7 +76,104 @@ function extractUpiId(text) {
       return new URLSearchParams(new URL(text).search).get('pa') || null;
     }
   } catch (_) {}
-  return (text.includes('@') && !text.startsWith('upi://')) ? text.trim() : null;
+  return text.includes('@') && !text.startsWith('upi://') ? text.trim() : null;
+}
+
+/**
+ * Decode a QR code from a File using sequential strategies.
+ *
+ * Sequential (not parallel) is critical on mobile: running multiple canvas
+ * decode passes in parallel on a high-res iPhone photo causes iOS Safari to
+ * exhaust its canvas memory budget and crash the tab silently.
+ *
+ * A single 512-px canvas is prepared once and reused across all canvas
+ * strategies to avoid repeated large allocations.
+ */
+async function decodeQrFromFile(file) {
+  // ── Shared canvas: one allocation, reused by strategies 1–4 ──────────────
+  let canvas = null;
+  try {
+    const prepared = await prepareCanvas(file, 512);
+    canvas = prepared.canvas;
+  } catch (_) { /* fall through — canvas-free strategies can still run */ }
+
+  // ── Strategy 1: BarcodeDetector on the scaled canvas ─────────────────────
+  // Operating on the 512-px canvas avoids iOS's full-res canvas OOM limit.
+  // BarcodeDetector is the OS-level QR engine (iOS 17+, Chrome Android/desktop).
+  if ('BarcodeDetector' in window && canvas) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      const bitmap   = await createImageBitmap(canvas);
+      const codes    = await detector.detect(bitmap);
+      bitmap.close();
+      if (codes.length > 0) return codes[0].rawValue;
+    } catch (_) {}
+  }
+
+  // ── Strategy 2: ZXing on lossless PNG from the canvas ────────────────────
+  // ZXing has strong Reed-Solomon ECC and handles logo-overlay QRs well.
+  // Passing PNG avoids a second JPEG-compression cycle.
+  if (canvas) {
+    try {
+      const pngFile = await canvasToFile(canvas);
+      const result  = await decodeWithZxing(pngFile);
+      if (result) return result;
+    } catch (_) {}
+  }
+
+  // ── Strategy 3: ZXing on original file (small files only) ────────────────
+  // Skipped for files > 3 MB because html5-qrcode internally creates a
+  // full-resolution canvas that will OOM on iPhone (4032×3024 ≈ 196 MB).
+  if (file.size < 3 * 1024 * 1024) {
+    try {
+      const result = await decodeWithZxing(file);
+      if (result) return result;
+    } catch (_) {}
+  }
+
+  // ── Strategy 4: jsqr on canvas (standard grayscale) ──────────────────────
+  if (canvas) {
+    try {
+      const jsQR = (await import('jsqr')).default;
+      const ctx  = canvas.getContext('2d');
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(data.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' });
+      if (code?.data) return code.data;
+    } catch (_) {}
+  }
+
+  // ── Strategy 5: jsqr with binary threshold (different pixel path) ─────────
+  // Binarising with an adaptive mean threshold sharpens ambiguous JPEG-blurred
+  // module edges, giving jsqr a different set of bits to error-correct from.
+  if (canvas) {
+    try {
+      const jsQR  = (await import('jsqr')).default;
+      const ctx   = canvas.getContext('2d');
+      const orig  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const bin   = new ImageData(
+        new Uint8ClampedArray(orig.data),
+        canvas.width,
+        canvas.height,
+      );
+
+      // Mean-luminance threshold
+      let sum = 0;
+      for (let i = 0; i < bin.data.length; i += 4) {
+        sum += bin.data[i] * 0.299 + bin.data[i+1] * 0.587 + bin.data[i+2] * 0.114;
+      }
+      const thr = sum / (bin.data.length / 4);
+      for (let i = 0; i < bin.data.length; i += 4) {
+        const lum = bin.data[i] * 0.299 + bin.data[i+1] * 0.587 + bin.data[i+2] * 0.114;
+        const bw  = lum < thr ? 0 : 255;
+        bin.data[i] = bin.data[i+1] = bin.data[i+2] = bw;
+        bin.data[i+3] = 255;
+      }
+      const code = jsQR(bin.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' });
+      if (code?.data) return code.data;
+    } catch (_) {}
+  }
+
+  return null;
 }
 
 function isUpiId(value) {
@@ -76,11 +184,11 @@ function isUpiId(value) {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function ScannerScreen({ onScanSuccess, onClose }) {
-  const [mode, setMode]             = useState('camera');
-  const [manualInput, setManualInput] = useState('');
+  const [mode, setMode]                   = useState('camera');
+  const [manualInput, setManualInput]     = useState('');
   const [decodedPayeeName, setDecodedPayeeName] = useState('');
-  const [error, setError]           = useState('');
-  const [uploading, setUploading]   = useState(false);
+  const [error, setError]                 = useState('');
+  const [uploading, setUploading]         = useState(false);
   const fileInputRef = useRef(null);
 
   const inputIsUpiId = isUpiId(manualInput);
@@ -109,126 +217,22 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
     setUploading(true);
     setError('');
 
-    // Run all decoders in parallel — do NOT short-circuit on first hit.
-    // Different algorithms handle logo-overlay and JPEG-artifact QRs
-    // differently; collecting all results lets us pick the best one.
-    const decode = async () => {
-      const results = await Promise.allSettled([
-
-        // ── A: BarcodeDetector (iOS 17+, Chrome 83+) ─────────────────────
-        // Native OS QR reader — fastest but uses the same ZXing engine as B.
-        (async () => {
-          if (!('BarcodeDetector' in window)) return null;
-          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-          const bitmap   = await createImageBitmap(file);
-          const codes    = await detector.detect(bitmap);
-          return codes.length > 0 ? codes[0].rawValue : null;
-        })(),
-
-        // ── B: EXIF-corrected PNG → ZXing ─────────────────────────────────
-        // Output as PNG (no extra JPEG artifacts) at ≤1024 px.
-        // ZXing has strong Reed-Solomon ECC and handles logo-overlay QRs well.
-        (async () => {
-          const { canvas, w, h } = await prepareCanvas(file, 1024);
-          const pngFile = await canvasToFile(canvas);
-          return decodeWithZxing(pngFile);
-        })(),
-
-        // ── C: ZXing on the raw original file ─────────────────────────────
-        // Separate attempt without EXIF correction / rescaling.
-        decodeWithZxing(file),
-
-        // ── D: jsqr with standard grayscale ──────────────────────────────
-        (async () => {
-          const jsQR = (await import('jsqr')).default;
-          const { canvas, w, h } = await prepareCanvas(file, 1024);
-          const ctx  = canvas.getContext('2d');
-          const raw  = ctx.getImageData(0, 0, w, h);
-          const code = jsQR(raw.data, w, h, { inversionAttempts: 'attemptBoth' });
-          return code?.data || null;
-        })(),
-
-        // ── E: jsqr with binary threshold ─────────────────────────────────
-        // Binarise with Otsu-inspired adaptive threshold.  Genuinely different
-        // pixel path compared to D — may recover modules that JPEG blurring
-        // makes ambiguous in a continuous-tone image.
-        (async () => {
-          const jsQR = (await import('jsqr')).default;
-          const { canvas, w, h } = await prepareCanvas(file, 1024);
-          const ctx  = canvas.getContext('2d');
-          const raw  = ctx.getImageData(0, 0, w, h);
-
-          // Compute mean luminance for threshold
-          let sum = 0;
-          for (let i = 0; i < raw.data.length; i += 4) {
-            sum += raw.data[i] * 0.299 + raw.data[i+1] * 0.587 + raw.data[i+2] * 0.114;
-          }
-          const threshold = sum / (raw.data.length / 4);
-
-          for (let i = 0; i < raw.data.length; i += 4) {
-            const lum = raw.data[i] * 0.299 + raw.data[i+1] * 0.587 + raw.data[i+2] * 0.114;
-            const bw  = lum < threshold ? 0 : 255;
-            raw.data[i] = raw.data[i+1] = raw.data[i+2] = bw;
-            raw.data[i+3] = 255;
-          }
-          ctx.putImageData(raw, 0, 0);
-          const bin = ctx.getImageData(0, 0, w, h);
-          const code = jsQR(bin.data, w, h, { inversionAttempts: 'attemptBoth' });
-          return code?.data || null;
-        })(),
-      ]);
-
-      // Collect all non-null decoded strings
-      const candidates = results
-        .filter(r => r.status === 'fulfilled' && r.value)
-        .map(r => r.value);
-
-      if (candidates.length === 0) return null;
-
-      // Majority vote on the UPI ID part (bank handle is where errors occur)
-      const upiIdCounts = {};
-      const upiIdToCandidate = {};
-      for (const c of candidates) {
-        const uid = extractUpiId(c);
-        if (!uid) continue;
-        upiIdCounts[uid] = (upiIdCounts[uid] || 0) + 1;
-        // Prefer a full UPI URL candidate over a bare ID for metadata
-        if (!upiIdToCandidate[uid] || c.startsWith('upi://')) {
-          upiIdToCandidate[uid] = c;
-        }
-      }
-
-      if (Object.keys(upiIdCounts).length === 0) return candidates[0];
-
-      // Sort by vote count desc, then alphabetically for determinism
-      const ranked = Object.entries(upiIdCounts)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-
-      // Use the majority winner (or the sole result if unanimous)
-      const winnerUpiId = ranked[0][0];
-      return upiIdToCandidate[winnerUpiId];
-    };
-
     try {
       const qrCodeText = await Promise.race([
-        decode(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('DECODE_TIMEOUT')), 25000)),
+        decodeQrFromFile(file),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('DECODE_TIMEOUT')), 20000)),
       ]);
 
       if (qrCodeText) {
         const upiId = extractUpiId(qrCodeText);
         if (upiId) {
-          // Extract payee name for display when available
           try {
             const pn = new URLSearchParams(new URL(qrCodeText).search).get('pn');
             if (pn) setDecodedPayeeName(decodeURIComponent(pn));
           } catch (_) {}
-
-          // Show just the UPI ID for easy verification/editing
           setManualInput(upiId);
-          setError('');
         } else {
-          setError('Image decoded but no UPI QR code found. Enter the UPI ID manually.');
+          setError('Image decoded but no UPI QR found. Enter the UPI ID manually.');
         }
       } else {
         setError('Could not read QR code. Make sure the full QR is visible and well-lit, or enter the UPI ID manually.');
@@ -237,8 +241,8 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
       if (err.message === 'DECODE_TIMEOUT') {
         setError('QR decode timed out. Try a clearer image or enter the UPI ID manually.');
       } else {
-        console.error('[ScannerScreen] QR image decode error:', err);
-        setError('Failed to read image. Please try another photo or enter the UPI ID manually.');
+        console.error('[ScannerScreen] decode error:', err);
+        setError('Failed to read image. Try another photo or enter the UPI ID manually.');
       }
     } finally {
       setUploading(false);
@@ -321,7 +325,7 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         </>
       )}
 
-      {/* Manual / Image Upload Mode */}
+      {/* Manual / Upload Mode */}
       {mode === 'manual' && (
         <div className="flex-1 flex items-center justify-center px-6 mt-32">
           <div className="w-full max-w-md">
@@ -335,7 +339,7 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
                 </div>
               )}
 
-              {/* UPI ID input */}
+              {/* UPI ID field */}
               <div>
                 <label className="text-white text-sm font-semibold mb-2 block">
                   {decodedPayeeName ? 'UPI ID — verify before continuing' : 'Enter UPI ID or UPI URL'}
@@ -350,12 +354,12 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
                 {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
                 {decodedPayeeName && !error && (
                   <p className="text-amber-400 text-xs mt-2 leading-relaxed">
-                    ⚠ Auto-decoded from QR — please verify the UPI ID is correct. QRs with logo overlays can occasionally be mis-read.
+                    Auto-decoded from QR — verify the UPI ID is correct before continuing.
                   </p>
                 )}
                 {inputIsUpiId && !decodedPayeeName && !error && (
                   <p className="text-slate-400 text-xs mt-2 leading-relaxed">
-                    UPI ID entered. Identity is verified by your payment app before you approve.
+                    UPI ID entered. Your payment app will confirm the recipient before you approve.
                   </p>
                 )}
               </div>
