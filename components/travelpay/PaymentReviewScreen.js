@@ -461,27 +461,60 @@ export default function PaymentReviewScreen({ parsedUPI, userData, onBack, onLau
   // ---------------------------------------------------------------------------
   // Wise launch
   // ---------------------------------------------------------------------------
-  const handleWiseContinue = async () => {
+  // MUST be synchronous — any await before the URL open breaks the iOS Safari
+  // gesture chain, causing window.open('_blank') to be popup-blocked.
+  // UPI app launch uses window.location.href (same-frame, iOS is lenient) but
+  // Wise uses window.open for a new tab, which is strictly blocked after async.
+  const handleWiseContinue = () => {
     if (!amountInr || amountInr <= 0) {
       setLaunchError('Please set an amount first.');
       return;
     }
+    if (launching) return;
+
     setLaunching('wise');
     setLaunchError(null);
 
-    try {
-      const launchId = await logLaunch('wise');
+    const platform = detectPlatform();
 
-      // Copy UPI ID + open Wise — launchWise handles clipboard internally
-      const { copied } = await launchWise(parsedUPI.upiId);
-      setWiseCopied(copied);
+    if (platform === 'ios') {
+      // Wise iOS app registers 'transferwise://' (legacy bundle name, still active).
+      // Fire the scheme synchronously here — before any await — so it stays inside
+      // the user-gesture call stack that iOS requires for custom URL schemes.
+      navigator?.clipboard?.writeText(parsedUPI.upiId).catch(() => {});
+      setWiseCopied(true);
 
-      onLaunched({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact: !savedId, rail: 'wise' });
-    } catch (err) {
-      console.error('[PaymentReviewScreen] Wise launch failed:', err.message);
-      setLaunchError('Could not open Wise. Try again.');
-      setLaunching(null);
+      window.location.href = 'transferwise://send';
+
+      // If Wise isn't installed, iOS stays on page (no visibilitychange/pagehide).
+      // After 1.5 s with no app-open signal, open the Wise web fallback.
+      const webUrl = amountInr > 0
+        ? `https://wise.com/send?sendAmount=${amountInr}&sourceCurrency=INR&targetCurrency=INR`
+        : 'https://wise.com/send';
+      let appOpened = false;
+      const mark = () => { appOpened = true; };
+      document.addEventListener('visibilitychange', mark, { once: true });
+      window.addEventListener('pagehide', mark, { once: true });
+      setTimeout(() => {
+        document.removeEventListener('visibilitychange', mark);
+        if (!appOpened) window.open(webUrl, '_blank', 'noopener');
+      }, 1500);
+
+    } else {
+      // Android / desktop: launchWise handles intent:// and window.open
+      launchWise(parsedUPI.upiId, amountInr).then(({ copied }) => setWiseCopied(copied));
     }
+
+    // Log the launch asynchronously — never block the URL open on a network call
+    logLaunch('wise')
+      .then((launchId) => {
+        onLaunched({ launchId, parsedUPI, amountInr, usdEquivalent, saveContact: !savedId, rail: 'wise' });
+      })
+      .catch((err) => {
+        console.error('[PaymentReviewScreen] Wise log failed:', err.message);
+        // Still call onLaunched so the banner and flow complete normally
+        onLaunched({ launchId: null, parsedUPI, amountInr, usdEquivalent, saveContact: !savedId, rail: 'wise' });
+      });
   };
 
   // ---------------------------------------------------------------------------
