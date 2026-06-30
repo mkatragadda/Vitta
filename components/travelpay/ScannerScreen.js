@@ -2,6 +2,57 @@ import React, { useState, useRef } from 'react';
 import { X, Keyboard, Camera, Image } from 'lucide-react';
 import QRScanner from './QRScanner';
 
+// ── QR decode helpers ──────────────────────────────────────────────────────
+
+// ZXing decoder via html5-qrcode. Creates a throwaway off-screen div each
+// call so multiple decode attempts never hit the "already initialised" error.
+async function decodeWithZxing(file) {
+  const { Html5Qrcode } = await import('html5-qrcode');
+  const divId = `qr-decode-${Date.now()}`;
+  const div   = document.createElement('div');
+  div.id = divId;
+  div.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;';
+  document.body.appendChild(div);
+  try {
+    return await new Html5Qrcode(divId).scanFile(file, false);
+  } finally {
+    try { document.body.removeChild(div); } catch (_) {}
+  }
+}
+
+// Load a File into an <img> element (applies EXIF orientation on iOS/Chrome)
+// then draw to a ≤1024px canvas and return the re-encoded File.
+// Rejects after 10 s to prevent infinite hangs on mobile.
+function exifCorrectAndScale(file) {
+  return new Promise((resolve, reject) => {
+    const MAX  = 1024;
+    const bail = setTimeout(() => reject(new Error('exif-timeout')), 10000);
+
+    const reader = new FileReader();
+    reader.onerror = () => { clearTimeout(bail); reject(new Error('FileReader error')); };
+    reader.onload  = (ev) => {
+      const img = new Image();
+      img.onerror = () => { clearTimeout(bail); reject(new Error('Image load error')); };
+      img.onload  = () => {
+        const scale  = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        const w      = Math.round(img.naturalWidth  * scale);
+        const h      = Math.round(img.naturalHeight * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width  = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          clearTimeout(bail);
+          if (blob) resolve(new File([blob], 'qr.jpg', { type: 'image/jpeg' }));
+          else      reject(new Error('toBlob failed'));
+        }, 'image/jpeg', 0.92);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // Detect whether a string is a bare UPI ID (e.g. "merchant@okicici")
 // vs a full UPI URL (e.g. "upi://pay?pa=...")
 function isUpiId(value) {
@@ -49,11 +100,13 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
     setUploading(true);
     setError('');
 
-    try {
+    // All decode attempts wrapped in a 20s race — prevents infinite spinner if
+    // FileReader / BarcodeDetector / canvas silently hangs on some mobile browsers.
+    const decode = async () => {
       let qrCodeText = null;
 
-      // ── Strategy 1: BarcodeDetector (iOS Safari 17+, Android Chrome) ──────
-      // Native API, fastest, handles EXIF rotation automatically.
+      // ── Strategy 1: BarcodeDetector (iOS 17+, Android Chrome) ────────────
+      // Native OS decoder, best accuracy, handles EXIF automatically.
       if ('BarcodeDetector' in window) {
         try {
           const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
@@ -63,44 +116,64 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         } catch (_) {}
       }
 
-      // ── Strategy 2: <img> → canvas (EXIF-aware) → jsQR ──────────────────
-      // Works on iOS 13-16 where BarcodeDetector is unavailable.
-      // Loading via <img> lets the browser apply EXIF orientation before we
-      // draw to canvas. We scale down to ≤1024px so large iPhone photos
-      // (12MP+) don't cause canvas memory pressure.
+      // ── Strategy 2: EXIF-corrected image → ZXing (html5-qrcode) ─────────
+      // ZXing has stronger error correction than jsqr — handles QRs with logo
+      // overlays (PhonePe, GPay) that cover center modules.
+      // We run on an EXIF-corrected/scaled canvas blob so mobile photos arrive
+      // with correct orientation and don't OOM on large sensor images.
       if (!qrCodeText) {
         try {
-          const jsQR = (await import('jsqr')).default;
+          const corrected = await exifCorrectAndScale(file);
+          qrCodeText = await decodeWithZxing(corrected);
+        } catch (_) {}
+      }
 
-          const imgEl = await new Promise((resolve, reject) => {
+      // ── Strategy 3: ZXing on the original file (desktop / quick path) ────
+      // Fallback if EXIF correction itself failed (e.g. unsupported file type).
+      if (!qrCodeText) {
+        try {
+          qrCodeText = await decodeWithZxing(file);
+        } catch (_) {}
+      }
+
+      // ── Strategy 4: jsqr on EXIF-corrected canvas ────────────────────────
+      // Last resort — lighter library, sometimes succeeds when ZXing throws.
+      if (!qrCodeText) {
+        try {
+          const jsQR   = (await import('jsqr')).default;
+          const imgEl  = await new Promise((res, rej) => {
             const reader = new FileReader();
-            reader.onload = (ev) => {
+            reader.onerror = rej;
+            reader.onload  = (ev) => {
               const img = new Image();
-              img.onload  = () => resolve(img);
-              img.onerror = reject;
+              img.onerror = rej;
+              img.onload  = () => res(img);
               img.src = ev.target.result;
             };
-            reader.onerror = reject;
             reader.readAsDataURL(file);
           });
-
-          // Scale down while keeping aspect ratio — keeps decode fast and avoids OOM
-          const MAX = 1024;
-          const scale  = Math.min(1, MAX / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
-          const width  = Math.round(imgEl.naturalWidth  * scale);
-          const height = Math.round(imgEl.naturalHeight * scale);
-
+          const MAX   = 1024;
+          const scale = Math.min(1, MAX / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
+          const w     = Math.round(imgEl.naturalWidth  * scale);
+          const h     = Math.round(imgEl.naturalHeight * scale);
           const canvas = document.createElement('canvas');
-          canvas.width  = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(imgEl, 0, 0, width, height);
-
-          const imageData = ctx.getImageData(0, 0, width, height);
-          const code = jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
+          canvas.width  = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
+          const imageData = canvas.getContext('2d').getImageData(0, 0, w, h);
+          const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
           if (code?.data) qrCodeText = code.data;
         } catch (_) {}
       }
+
+      return qrCodeText;
+    };
+
+    try {
+      const qrCodeText = await Promise.race([
+        decode(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('DECODE_TIMEOUT')), 20000)),
+      ]);
 
       if (qrCodeText) {
         if (qrCodeText.startsWith('upi://pay')) {
@@ -108,14 +181,18 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         } else if (isUpiId(qrCodeText)) {
           onScanSuccess({ raw: `upi://pay?pa=${encodeURIComponent(qrCodeText)}&cu=INR` });
         } else {
-          setError('Image decoded but no UPI QR code found in it');
+          setError('Image decoded but no UPI QR code found. Enter the UPI ID manually.');
         }
       } else {
-        setError('Could not read QR code. Make sure it is clearly visible, or enter the UPI ID manually.');
+        setError('Could not read QR code. Make sure the full QR is visible and well-lit, or enter the UPI ID manually.');
       }
     } catch (err) {
-      console.error('[ScannerScreen] QR image decode error:', err);
-      setError('Failed to read image. Please try another photo or enter the UPI ID manually.');
+      if (err.message === 'DECODE_TIMEOUT') {
+        setError('QR decode timed out. Try a clearer image or enter the UPI ID manually.');
+      } else {
+        console.error('[ScannerScreen] QR image decode error:', err);
+        setError('Failed to read image. Please try another photo or enter the UPI ID manually.');
+      }
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
