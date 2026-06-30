@@ -4,11 +4,11 @@ import QRScanner from './QRScanner';
 
 // ── QR decode helpers ──────────────────────────────────────────────────────
 
-// ZXing decoder via html5-qrcode. Creates a throwaway off-screen div each
-// call so multiple decode attempts never hit the "already initialised" error.
+// ZXing via html5-qrcode with a throwaway div per call (avoids "already
+// initialised" error when called multiple times concurrently).
 async function decodeWithZxing(file) {
   const { Html5Qrcode } = await import('html5-qrcode');
-  const divId = `qr-decode-${Date.now()}`;
+  const divId = `qr-decode-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const div   = document.createElement('div');
   div.id = divId;
   div.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;';
@@ -20,32 +20,26 @@ async function decodeWithZxing(file) {
   }
 }
 
-// Load a File into an <img> element (applies EXIF orientation on iOS/Chrome)
-// then draw to a ≤1024px canvas and return the re-encoded File.
-// Rejects after 10 s to prevent infinite hangs on mobile.
-function exifCorrectAndScale(file) {
+// Load File into <img> (applies EXIF rotation) → canvas at target px (PNG).
+// PNG avoids double-JPEG-compression artifacts; bail after 10 s on mobile.
+function prepareCanvas(file, targetPx) {
   return new Promise((resolve, reject) => {
-    const MAX  = 1024;
-    const bail = setTimeout(() => reject(new Error('exif-timeout')), 10000);
-
+    const bail = setTimeout(() => reject(new Error('canvas-timeout')), 10000);
     const reader = new FileReader();
     reader.onerror = () => { clearTimeout(bail); reject(new Error('FileReader error')); };
     reader.onload  = (ev) => {
       const img = new Image();
       img.onerror = () => { clearTimeout(bail); reject(new Error('Image load error')); };
       img.onload  = () => {
-        const scale  = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        const scale  = Math.min(1, targetPx / Math.max(img.naturalWidth, img.naturalHeight));
         const w      = Math.round(img.naturalWidth  * scale);
         const h      = Math.round(img.naturalHeight * scale);
         const canvas = document.createElement('canvas');
         canvas.width  = w;
         canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        canvas.toBlob((blob) => {
-          clearTimeout(bail);
-          if (blob) resolve(new File([blob], 'qr.jpg', { type: 'image/jpeg' }));
-          else      reject(new Error('toBlob failed'));
-        }, 'image/jpeg', 0.92);
+        clearTimeout(bail);
+        resolve({ canvas, w, h });
       };
       img.src = ev.target.result;
     };
@@ -53,18 +47,40 @@ function exifCorrectAndScale(file) {
   });
 }
 
-// Detect whether a string is a bare UPI ID (e.g. "merchant@okicici")
-// vs a full UPI URL (e.g. "upi://pay?pa=...")
-function isUpiId(value) {
-  const trimmed = value.trim();
-  return trimmed.includes('@') && !trimmed.startsWith('upi://');
+// Convert canvas to a File object (PNG, no quality loss).
+function canvasToFile(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(new File([blob], 'qr.png', { type: 'image/png' }));
+      else      reject(new Error('toBlob failed'));
+    }, 'image/png');
+  });
 }
 
+// Extract UPI ID string from a decoded QR value (URL or bare VPA).
+function extractUpiId(text) {
+  if (!text) return null;
+  try {
+    if (text.startsWith('upi://')) {
+      return new URLSearchParams(new URL(text).search).get('pa') || null;
+    }
+  } catch (_) {}
+  return (text.includes('@') && !text.startsWith('upi://')) ? text.trim() : null;
+}
+
+function isUpiId(value) {
+  const t = (value || '').trim();
+  return t.includes('@') && !t.startsWith('upi://');
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 export default function ScannerScreen({ onScanSuccess, onClose }) {
-  const [mode, setMode] = useState('camera');
+  const [mode, setMode]             = useState('camera');
   const [manualInput, setManualInput] = useState('');
-  const [error, setError] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [decodedPayeeName, setDecodedPayeeName] = useState('');
+  const [error, setError]           = useState('');
+  const [uploading, setUploading]   = useState(false);
   const fileInputRef = useRef(null);
 
   const inputIsUpiId = isUpiId(manualInput);
@@ -72,24 +88,17 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
   const handleManualSubmit = (e) => {
     e.preventDefault();
     setError('');
-
     const trimmed = manualInput.trim();
-    if (!trimmed) {
-      setError('Please enter a UPI ID or UPI URL');
-      return;
-    }
+    if (!trimmed) { setError('Please enter a UPI ID or UPI URL'); return; }
 
     if (inputIsUpiId) {
-      // Bare UPI ID — build a minimal UPI URL so the rest of the flow works
       onScanSuccess({ raw: `upi://pay?pa=${encodeURIComponent(trimmed)}&cu=INR` });
       return;
     }
-
     if (!trimmed.startsWith('upi://pay')) {
       setError('Enter a UPI ID (e.g. name@bank) or a full UPI URL starting with "upi://pay"');
       return;
     }
-
     onScanSuccess({ raw: trimmed });
   };
 
@@ -100,86 +109,124 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
     setUploading(true);
     setError('');
 
-    // All decode attempts wrapped in a 20s race — prevents infinite spinner if
-    // FileReader / BarcodeDetector / canvas silently hangs on some mobile browsers.
+    // Run all decoders in parallel — do NOT short-circuit on first hit.
+    // Different algorithms handle logo-overlay and JPEG-artifact QRs
+    // differently; collecting all results lets us pick the best one.
     const decode = async () => {
-      let qrCodeText = null;
+      const results = await Promise.allSettled([
 
-      // ── Strategy 1: BarcodeDetector (iOS 17+, Android Chrome) ────────────
-      // Native OS decoder, best accuracy, handles EXIF automatically.
-      if ('BarcodeDetector' in window) {
-        try {
+        // ── A: BarcodeDetector (iOS 17+, Chrome 83+) ─────────────────────
+        // Native OS QR reader — fastest but uses the same ZXing engine as B.
+        (async () => {
+          if (!('BarcodeDetector' in window)) return null;
           const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
           const bitmap   = await createImageBitmap(file);
           const codes    = await detector.detect(bitmap);
-          if (codes.length > 0) qrCodeText = codes[0].rawValue;
-        } catch (_) {}
+          return codes.length > 0 ? codes[0].rawValue : null;
+        })(),
+
+        // ── B: EXIF-corrected PNG → ZXing ─────────────────────────────────
+        // Output as PNG (no extra JPEG artifacts) at ≤1024 px.
+        // ZXing has strong Reed-Solomon ECC and handles logo-overlay QRs well.
+        (async () => {
+          const { canvas, w, h } = await prepareCanvas(file, 1024);
+          const pngFile = await canvasToFile(canvas);
+          return decodeWithZxing(pngFile);
+        })(),
+
+        // ── C: ZXing on the raw original file ─────────────────────────────
+        // Separate attempt without EXIF correction / rescaling.
+        decodeWithZxing(file),
+
+        // ── D: jsqr with standard grayscale ──────────────────────────────
+        (async () => {
+          const jsQR = (await import('jsqr')).default;
+          const { canvas, w, h } = await prepareCanvas(file, 1024);
+          const ctx  = canvas.getContext('2d');
+          const raw  = ctx.getImageData(0, 0, w, h);
+          const code = jsQR(raw.data, w, h, { inversionAttempts: 'attemptBoth' });
+          return code?.data || null;
+        })(),
+
+        // ── E: jsqr with binary threshold ─────────────────────────────────
+        // Binarise with Otsu-inspired adaptive threshold.  Genuinely different
+        // pixel path compared to D — may recover modules that JPEG blurring
+        // makes ambiguous in a continuous-tone image.
+        (async () => {
+          const jsQR = (await import('jsqr')).default;
+          const { canvas, w, h } = await prepareCanvas(file, 1024);
+          const ctx  = canvas.getContext('2d');
+          const raw  = ctx.getImageData(0, 0, w, h);
+
+          // Compute mean luminance for threshold
+          let sum = 0;
+          for (let i = 0; i < raw.data.length; i += 4) {
+            sum += raw.data[i] * 0.299 + raw.data[i+1] * 0.587 + raw.data[i+2] * 0.114;
+          }
+          const threshold = sum / (raw.data.length / 4);
+
+          for (let i = 0; i < raw.data.length; i += 4) {
+            const lum = raw.data[i] * 0.299 + raw.data[i+1] * 0.587 + raw.data[i+2] * 0.114;
+            const bw  = lum < threshold ? 0 : 255;
+            raw.data[i] = raw.data[i+1] = raw.data[i+2] = bw;
+            raw.data[i+3] = 255;
+          }
+          ctx.putImageData(raw, 0, 0);
+          const bin = ctx.getImageData(0, 0, w, h);
+          const code = jsQR(bin.data, w, h, { inversionAttempts: 'attemptBoth' });
+          return code?.data || null;
+        })(),
+      ]);
+
+      // Collect all non-null decoded strings
+      const candidates = results
+        .filter(r => r.status === 'fulfilled' && r.value)
+        .map(r => r.value);
+
+      if (candidates.length === 0) return null;
+
+      // Majority vote on the UPI ID part (bank handle is where errors occur)
+      const upiIdCounts = {};
+      const upiIdToCandidate = {};
+      for (const c of candidates) {
+        const uid = extractUpiId(c);
+        if (!uid) continue;
+        upiIdCounts[uid] = (upiIdCounts[uid] || 0) + 1;
+        // Prefer a full UPI URL candidate over a bare ID for metadata
+        if (!upiIdToCandidate[uid] || c.startsWith('upi://')) {
+          upiIdToCandidate[uid] = c;
+        }
       }
 
-      // ── Strategy 2: EXIF-corrected image → ZXing (html5-qrcode) ─────────
-      // ZXing has stronger error correction than jsqr — handles QRs with logo
-      // overlays (PhonePe, GPay) that cover center modules.
-      // We run on an EXIF-corrected/scaled canvas blob so mobile photos arrive
-      // with correct orientation and don't OOM on large sensor images.
-      if (!qrCodeText) {
-        try {
-          const corrected = await exifCorrectAndScale(file);
-          qrCodeText = await decodeWithZxing(corrected);
-        } catch (_) {}
-      }
+      if (Object.keys(upiIdCounts).length === 0) return candidates[0];
 
-      // ── Strategy 3: ZXing on the original file (desktop / quick path) ────
-      // Fallback if EXIF correction itself failed (e.g. unsupported file type).
-      if (!qrCodeText) {
-        try {
-          qrCodeText = await decodeWithZxing(file);
-        } catch (_) {}
-      }
+      // Sort by vote count desc, then alphabetically for determinism
+      const ranked = Object.entries(upiIdCounts)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
-      // ── Strategy 4: jsqr on EXIF-corrected canvas ────────────────────────
-      // Last resort — lighter library, sometimes succeeds when ZXing throws.
-      if (!qrCodeText) {
-        try {
-          const jsQR   = (await import('jsqr')).default;
-          const imgEl  = await new Promise((res, rej) => {
-            const reader = new FileReader();
-            reader.onerror = rej;
-            reader.onload  = (ev) => {
-              const img = new Image();
-              img.onerror = rej;
-              img.onload  = () => res(img);
-              img.src = ev.target.result;
-            };
-            reader.readAsDataURL(file);
-          });
-          const MAX   = 1024;
-          const scale = Math.min(1, MAX / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
-          const w     = Math.round(imgEl.naturalWidth  * scale);
-          const h     = Math.round(imgEl.naturalHeight * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width  = w;
-          canvas.height = h;
-          canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
-          const imageData = canvas.getContext('2d').getImageData(0, 0, w, h);
-          const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
-          if (code?.data) qrCodeText = code.data;
-        } catch (_) {}
-      }
-
-      return qrCodeText;
+      // Use the majority winner (or the sole result if unanimous)
+      const winnerUpiId = ranked[0][0];
+      return upiIdToCandidate[winnerUpiId];
     };
 
     try {
       const qrCodeText = await Promise.race([
         decode(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('DECODE_TIMEOUT')), 20000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('DECODE_TIMEOUT')), 25000)),
       ]);
 
       if (qrCodeText) {
-        if (qrCodeText.startsWith('upi://pay')) {
-          setManualInput(qrCodeText);
-        } else if (isUpiId(qrCodeText)) {
-          onScanSuccess({ raw: `upi://pay?pa=${encodeURIComponent(qrCodeText)}&cu=INR` });
+        const upiId = extractUpiId(qrCodeText);
+        if (upiId) {
+          // Extract payee name for display when available
+          try {
+            const pn = new URLSearchParams(new URL(qrCodeText).search).get('pn');
+            if (pn) setDecodedPayeeName(decodeURIComponent(pn));
+          } catch (_) {}
+
+          // Show just the UPI ID for easy verification/editing
+          setManualInput(upiId);
+          setError('');
         } else {
           setError('Image decoded but no UPI QR code found. Enter the UPI ID manually.');
         }
@@ -248,25 +295,19 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         <>
           <div className="flex-1 flex items-center justify-center mt-32">
             <div className="relative w-72 h-72">
-              {/* Corner Borders */}
               <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-teal-500 rounded-tl-3xl"></div>
               <div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-teal-500 rounded-tr-3xl"></div>
               <div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-teal-500 rounded-bl-3xl"></div>
               <div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-teal-500 rounded-br-3xl"></div>
-
-              {/* Scanning Line Animation */}
               <div className="absolute inset-0 overflow-hidden">
                 <div className="scan-line w-full h-1 bg-gradient-to-r from-transparent via-teal-500 to-transparent shadow-lg shadow-teal-500/50"></div>
               </div>
-
-              {/* Actual QR Scanner Component */}
               <div className="absolute inset-0">
                 <QRScanner onScanSuccess={onScanSuccess} />
               </div>
             </div>
           </div>
 
-          {/* Bottom Instructions */}
           <div className="absolute bottom-0 left-0 right-0 px-6 pb-8">
             <div className="glass-teal rounded-3xl p-6 text-center border border-teal-500/30">
               <h3 className="text-white font-bold text-lg mb-2">Point at UPI QR Code</h3>
@@ -280,30 +321,41 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         </>
       )}
 
-      {/* Manual Input Mode */}
+      {/* Manual / Image Upload Mode */}
       {mode === 'manual' && (
         <div className="flex-1 flex items-center justify-center px-6 mt-32">
           <div className="w-full max-w-md">
             <form onSubmit={handleManualSubmit} className="space-y-4">
-              {/* Input Field */}
+
+              {/* Decoded payee name banner */}
+              {decodedPayeeName && (
+                <div className="bg-teal-500/10 border border-teal-500/30 rounded-2xl px-4 py-3">
+                  <p className="text-teal-300 text-xs font-semibold uppercase mb-0.5">Paying to (from QR)</p>
+                  <p className="text-white text-sm font-medium">{decodedPayeeName}</p>
+                </div>
+              )}
+
+              {/* UPI ID input */}
               <div>
                 <label className="text-white text-sm font-semibold mb-2 block">
-                  Enter UPI ID or UPI URL
+                  {decodedPayeeName ? 'UPI ID — verify before continuing' : 'Enter UPI ID or UPI URL'}
                 </label>
                 <textarea
                   value={manualInput}
-                  onChange={(e) => { setManualInput(e.target.value); setError(''); }}
+                  onChange={(e) => { setManualInput(e.target.value); setError(''); setDecodedPayeeName(''); }}
                   placeholder={'name@bank  or  upi://pay?pa=name@bank&am=500&cu=INR'}
                   className="w-full bg-white/10 backdrop-blur border border-teal-500/30 rounded-2xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono text-sm"
-                  rows={3}
+                  rows={decodedPayeeName ? 1 : 3}
                 />
-                {error && (
-                  <p className="text-red-400 text-xs mt-2">{error}</p>
+                {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+                {decodedPayeeName && !error && (
+                  <p className="text-amber-400 text-xs mt-2 leading-relaxed">
+                    ⚠ Auto-decoded from QR — please verify the UPI ID is correct. QRs with logo overlays can occasionally be mis-read.
+                  </p>
                 )}
-                {/* UPI ID disclaimer — shown only when user typed a bare UPI ID */}
-                {inputIsUpiId && !error && (
+                {inputIsUpiId && !decodedPayeeName && !error && (
                   <p className="text-slate-400 text-xs mt-2 leading-relaxed">
-                    UPI ID entered. Identity is not verified here — your payment app will confirm the recipient before you approve.
+                    UPI ID entered. Identity is verified by your payment app before you approve.
                   </p>
                 )}
               </div>
@@ -325,7 +377,7 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
                   {uploading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Decoding QR Code...</span>
+                      <span>Decoding QR Code…</span>
                     </>
                   ) : (
                     <>
@@ -347,7 +399,6 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
           </div>
         </div>
       )}
-
     </div>
   );
 }

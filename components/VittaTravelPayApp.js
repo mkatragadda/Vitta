@@ -98,33 +98,57 @@ export default function VittaTravelPayApp({ userData, onLogout }) {
   // ---------------------------------------------------------------------------
   // Scan → parse → review
   // ---------------------------------------------------------------------------
-  const handleScanSuccess = async (qrResult) => {
+
+  // Parse UPI URI entirely on the client — the /api/upi/parse-qr endpoint only
+  // did string parsing with no DB side effects, so a network call is unnecessary.
+  // This also avoids 500s from stale webpack chunks in the API layer.
+  const parseUpiString = (qrText) => {
     try {
-      const res  = await fetch('/api/upi/parse-qr', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': userData.id },
-        body:    JSON.stringify({ qrData: qrResult.raw }),
-      });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to parse QR code');
-
-      if (!json.data.amount || json.data.amount === 0) {
-        setPendingScanData(json.data);
-        setShowAmountModal(true);
-        return;
-      }
-
-      setScanData(json.data);
-      setSourceLabel('Scan again');
-      setCurrentScreen('payment-review');
-    } catch (err) {
-      console.error('[TravelPayApp] Scan error:', err.message);
-      setCurrentScreen('home');
+      const url = new URL(qrText);
+      if (url.protocol !== 'upi:') return null;
+      const p = new URLSearchParams(url.search);
+      const upiId = p.get('pa');
+      if (!upiId) return null;
+      return {
+        upiId,
+        payeeName: p.get('pn') ? decodeURIComponent(p.get('pn')) : '',
+        amount:    parseFloat(p.get('am') || '0') || 0,
+        currency:  p.get('cu') || 'INR',
+        note:      p.get('tn') || '',
+        merchantCode: p.get('mc') || '',
+      };
+    } catch {
+      return null;
     }
   };
 
-  const handleAmountSubmit = (enteredAmount) => {
-    const resolved = { ...pendingScanData, amount: enteredAmount };
+  const handleScanSuccess = (qrResult) => {
+    const parsed = parseUpiString(qrResult.raw);
+    if (!parsed) {
+      console.error('[TravelPayApp] Could not parse QR:', qrResult.raw?.slice(0, 80));
+      return;
+    }
+
+    if (!parsed.amount || parsed.amount === 0) {
+      setPendingScanData(parsed);
+      setShowAmountModal(true);
+      return;
+    }
+
+    setScanData(parsed);
+    setSourceLabel('Scan again');
+    setCurrentScreen('payment-review');
+  };
+
+  const handleAmountSubmit = (enteredAmount, correctedUpiId) => {
+    const resolved = {
+      ...pendingScanData,
+      amount: enteredAmount,
+      // Use the corrected UPI ID if the user edited it in the modal
+      ...(correctedUpiId && correctedUpiId !== pendingScanData?.upiId
+        ? { upiId: correctedUpiId }
+        : {}),
+    };
     setPendingScanData(null);
     setShowAmountModal(false);
     setScanData(resolved);

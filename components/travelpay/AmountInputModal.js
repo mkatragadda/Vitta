@@ -13,31 +13,35 @@ export default function AmountInputModal({
   upiId
 }) {
   const [amount, setAmount] = useState('');
+  const [editedUpiId, setEditedUpiId] = useState(upiId || '');
+  const [editingUpi, setEditingUpi]   = useState(false);
   const [error, setError] = useState('');
+
+  // Sync prop → state when the modal opens with a new upiId
+  React.useEffect(() => {
+    setEditedUpiId(upiId || '');
+    setEditingUpi(false);
+  }, [upiId, isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = () => {
     const numAmount = parseFloat(amount);
 
-    // Validation
     if (!amount || amount.trim() === '') {
       setError('Please enter an amount');
       return;
     }
-
     if (isNaN(numAmount) || numAmount <= 0) {
       setError('Please enter a valid amount');
       return;
     }
-
     if (numAmount < 1) {
       setError('Amount must be at least ₹1');
       return;
     }
 
-    // Submit
-    onSubmit(numAmount);
+    onSubmit(numAmount, editedUpiId.trim() || upiId);
   };
 
   const handleKeyPress = (e) => {
@@ -72,14 +76,38 @@ export default function AmountInputModal({
           {/* Content */}
           <div className="p-6">
             {/* Payee Info */}
-            {payeeName && (
+            {(payeeName || upiId) && (
               <div className="mb-6 p-4 glass-teal rounded-2xl border border-teal-500/30">
                 <p className="text-teal-300 text-xs font-semibold uppercase mb-1">
                   Paying to
                 </p>
-                <p className="text-white font-semibold">{payeeName}</p>
+                {payeeName && <p className="text-white font-semibold">{payeeName}</p>}
                 {upiId && (
-                  <p className="text-slate-400 text-sm mt-1">{upiId}</p>
+                  editingUpi ? (
+                    <input
+                      type="text"
+                      value={editedUpiId}
+                      onChange={(e) => setEditedUpiId(e.target.value)}
+                      onBlur={() => setEditingUpi(false)}
+                      autoFocus
+                      className="mt-2 w-full bg-white/10 border border-teal-400/50 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-teal-400"
+                      placeholder="name@bank"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingUpi(true)}
+                      className="mt-1 text-left group"
+                      title="Tap to edit UPI ID"
+                    >
+                      <span className="text-slate-300 font-mono text-sm group-hover:text-white transition-colors">
+                        {editedUpiId || upiId}
+                      </span>
+                      <span className="ml-2 text-teal-400 text-xs opacity-60 group-hover:opacity-100 transition-opacity">
+                        edit
+                      </span>
+                    </button>
+                  )
                 )}
               </div>
             )}
