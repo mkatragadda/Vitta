@@ -10,29 +10,51 @@ const GoogleIcon = ({ size = 12 }) => (
 );
 
 const TRUST_ITEMS = [
-  'No wallet — your money stays in your accounts',
-  'Works with apps you already have',
-  'Works on any UPI QR in India',
+  'No stored balance — your money stays with your payment provider',
+  'Use supported providers you already trust',
+  'Works with UPI QR codes and UPI IDs',
 ];
 
 export default function LandingScreen({ onGoogleSignIn }) {
   return (
     <div style={{
-      background: '#071412', minHeight: '100vh',
-      display: 'flex', flexDirection: 'column',
+      background: '#071412',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
       color: '#fff',
       fontFamily: "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
       WebkitFontSmoothing: 'antialiased',
     }}>
 
-      {/* ── NAV ── */}
-      <nav className="vl-nav" style={{
-        padding: '20px 28px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      {/*
+        Button sizing: full-width on mobile (easy tap), auto-width on desktop.
+        Done via a scoped <style> since inline styles can't express media queries.
+      */}
+      <style>{`
+        .vl-cta {
+          width: 100%;
+        }
+        @media (min-width: 540px) {
+          .vl-cta {
+            width: auto;
+            min-width: 160px;
+          }
+        }
+      `}</style>
+
+      {/* ── NAV — full viewport width, logo hard-left, sign-in hard-right ── */}
+      <nav style={{
+        padding: '18px 28px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
       }}>
-        <div className="vl-logo" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.6px', color: '#fff' }}>
+        <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: '#fff' }}>
           Vitta
-        </div>
+        </span>
+
+        {/* Solid teal button matching the original */}
         <button
           onClick={onGoogleSignIn}
           style={{
@@ -53,83 +75,131 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </button>
       </nav>
 
-      {/* ── HERO ── */}
-      <main className="vl-hero" style={{
+      {/* ── HERO — centered column, matching original layout ── */}
+      <main style={{
         flex: 1,
-        display: 'flex', flexDirection: 'column',
-        padding: '28px 28px 44px',
-        width: '100%', maxWidth: 580, margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',    /* horizontal center */
+        justifyContent: 'center',
+        textAlign: 'center',
+        padding: '36px 24px 56px',
+        width: '100%',
+        maxWidth: 560,
+        margin: '0 auto',
+        boxSizing: 'border-box',
       }}>
 
-        {/* pill */}
-        <div className="vl-pill" style={{
+        {/* Badge — matches original pill style */}
+        <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 7,
           background: 'rgba(78,207,154,0.08)',
           border: '1px solid rgba(78,207,154,0.2)',
           borderRadius: 999, padding: '6px 14px',
-          marginBottom: 22,
+          marginBottom: 24,
         }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a', flexShrink: 0 }} />
           <span style={{ color: '#4ecf9a', fontSize: 12, fontWeight: 600 }}>
-            US→India payments · NRIs &amp; travelers
+            UPI payments for NRIs &amp; India travelers
           </span>
         </div>
 
-        {/* H1 */}
+        {/*
+          Headline.
+
+          Font scale: clamp(28px, 7.5vw, 44px)
+            iPhone 375 → 7.5vw = 28.1px  → 28px floor   (3 lines, still readable)
+            iPhone 430 → 7.5vw = 32.3px  → 32px          (3 lines)
+            540px+     → 7.5vw = 40.5px  → ~40px
+            587px+     → hits 44px cap
+
+          At 44px in a 512px content area (560px − 48px padding):
+            "Scan any UPI QR."           fits on 1 line ✓
+            "Pay with your"              breaks naturally (~13 chars)
+            "preferred provider."        second green line
+
+          The two green lines are intentional — "Pay with your / preferred provider."
+          is a cleaner rhythm than forcing a single overflowing line.
+        */}
         <h1 style={{
-          fontSize: 'clamp(36px, 8.5vw, 56px)',
-          fontWeight: 900, lineHeight: 1.04,
-          letterSpacing: 'clamp(-2px, -0.4vw, -2.5px)',
-          marginBottom: 18, color: '#fff',
+          fontSize: 'clamp(28px, 7.5vw, 44px)',
+          fontWeight: 900,
+          lineHeight: 1.08,
+          letterSpacing: 'clamp(-1px, -0.25vw, -1.8px)',
+          margin: '0 0 18px 0',
+          color: '#fff',
         }}>
-          Scan in India.<br />
-          <em className="vl-em" style={{ color: '#4ecf9a', fontStyle: 'normal', display: 'block' }}>Pay in USD.</em>
+          Scan any UPI QR.<br />
+          <span style={{ color: '#4ecf9a' }}>Pay with your preferred provider.</span>
         </h1>
 
-        {/* subhead */}
-        <p className="vl-subhead" style={{
-          fontSize: 15, lineHeight: 1.6,
+        {/* Body */}
+        <p style={{
+          fontSize: 15,
+          lineHeight: 1.65,
           color: 'rgba(255,255,255,0.48)',
-          maxWidth: 360, marginBottom: 32,
+          maxWidth: 400,
+          margin: '0 0 32px 0',
         }}>
-          Point your camera at any UPI QR. Vitta shows the{' '}
-          <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>INR amount in USD</strong>,
-          classifies it, and opens Wise, Remitly, GPay, or PhonePe.{' '}
-          <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>You pay with your own accounts.</strong>
+          Built for{' '}
+          <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>
+            US-based NRIs and India travelers
+          </strong>.
+          {' '}Vitta reads UPI QR payments and routes you to supported providers so you can{' '}
+          <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>
+            pay using your own account
+          </strong>.
         </p>
 
         {/* CTA */}
-        <button
-          onClick={onGoogleSignIn}
-          className="vl-cta"
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            background: '#4ecf9a', color: '#071412',
-            fontSize: 15, fontWeight: 700,
-            padding: '15px 32px', borderRadius: 14,
-            border: 'none', cursor: 'pointer',
-            marginBottom: 28, whiteSpace: 'nowrap',
-          }}
-        >
-          <span style={{
-            width: 20, height: 20, background: '#fff', borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <GoogleIcon size={12} />
-          </span>
-          Sign in with Google — it&apos;s free
-        </button>
-
-        {/* trust */}
-        <ul className="vl-trust" style={{
+        <div style={{
           display: 'flex', flexDirection: 'column',
-          gap: 9, listStyle: 'none', alignItems: 'center',
+          alignItems: 'center', gap: 10,
+          marginBottom: 36, width: '100%',
+        }}>
+          <button
+            onClick={onGoogleSignIn}
+            className="vl-cta"
+            style={{
+              display: 'inline-flex', alignItems: 'center',
+              justifyContent: 'center', gap: 10,
+              background: '#4ecf9a', color: '#071412',
+              fontSize: 15, fontWeight: 700,
+              padding: '15px 28px', borderRadius: 14,
+              border: 'none', cursor: 'pointer',
+              boxShadow: '0 0 32px rgba(78,207,154,0.2)',
+              letterSpacing: '-0.1px',
+              minHeight: 50,
+            }}
+          >
+            <span style={{
+              width: 20, height: 20, background: '#fff', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <GoogleIcon size={12} />
+            </span>
+            Sign in with Google — it&apos;s free
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', width: '100%', marginBottom: 22 }} />
+
+        {/* Trust items — centered, vertical list */}
+        <ul style={{
+          listStyle: 'none', padding: 0, margin: 0,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 10,
         }}>
           {TRUST_ITEMS.map(item => (
-            <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'rgba(255,255,255,0.42)', fontSize: 13 }}>
+            <li key={item} style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              color: 'rgba(255,255,255,0.4)', fontSize: 13,
+            }}>
               <span style={{
                 width: 18, height: 18, borderRadius: '50%',
-                background: 'rgba(78,207,154,0.12)',
+                background: 'rgba(78,207,154,0.1)',
+                border: '1px solid rgba(78,207,154,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#4ecf9a', fontSize: 10, fontWeight: 700, flexShrink: 0,
               }}>✓</span>
@@ -143,10 +213,16 @@ export default function LandingScreen({ onGoogleSignIn }) {
       <footer style={{
         padding: '18px 28px',
         borderTop: '1px solid rgba(255,255,255,0.05)',
-        display: 'flex', justifyContent: 'center', gap: 24,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 24,
+        flexWrap: 'wrap',
       }}>
         {['Privacy', 'Terms', 'Help'].map(l => (
-          <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, textDecoration: 'none' }}>{l}</a>
+          <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, textDecoration: 'none' }}>
+            {l}
+          </a>
         ))}
         <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>© 2025 Vitta</span>
       </footer>
