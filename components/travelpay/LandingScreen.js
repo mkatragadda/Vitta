@@ -28,51 +28,44 @@ export default function LandingScreen({ onGoogleSignIn }) {
     }}>
 
       <style>{`
-        /*
-         * Mobile-first: left-aligned, top-flush.
-         *
-         * Why left-align on mobile:
-         *   Centered text looks great on desktop marketing pages. On mobile,
-         *   long phrases like "Pay with your preferred provider." create an
-         *   orphaned last word when centered — e.g. "provider." alone on a
-         *   line, visually weak. Left-align means any wrap reads naturally
-         *   as flowing text regardless of where the break falls.
-         *
-         * Why flush-top on mobile:
-         *   justify-content:center in a full-viewport flex column pushes
-         *   content down to the vertical midpoint, leaving ~120px of dead
-         *   space above the badge. On mobile every pixel matters.
-         */
-
         .vl-main {
           flex: 1;
           display: flex;
           flex-direction: column;
-          justify-content: flex-start;
-          padding: 20px 24px 44px;
+          justify-content: center;
+          align-items: flex-start;
+          text-align: left;
+          padding: 24px 24px 40px;
           width: 100%;
           max-width: 560px;
           margin: 0 auto;
           box-sizing: border-box;
         }
-        .vl-badge    { align-self: flex-start; }
-        .vl-h1       { text-align: left; }
-        .vl-body     { text-align: left; }
-        .vl-cta-wrap { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 0; margin-bottom: 28px; }
-        .vl-cta      { width: 100%; }
-        .vl-trust    { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-        .vl-trust li { display: flex; align-items: flex-start; }
-
-        /* Desktop: center everything */
+        .vl-cta {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+        }
+        .vl-trust {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          width: 100%;
+        }
+        .vl-trust-item {
+          width: 100%;
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
         @media (min-width: 540px) {
-          .vl-main     { justify-content: center; padding: 40px 24px 56px; align-items: center; }
-          .vl-badge    { align-self: auto; }
-          .vl-h1       { text-align: center; }
-          .vl-body     { text-align: center; }
-          .vl-cta-wrap { align-items: center; }
-          .vl-cta      { width: auto; min-width: 200px; }
-          .vl-trust    { align-items: center; }
-          .vl-trust li { align-items: center; }
+          .vl-main       { align-items: center; text-align: center; padding: 40px 24px 56px; }
+          .vl-cta        { width: auto; min-width: 200px; }
+          .vl-trust-item { align-items: center; justify-content: center; }
         }
       `}</style>
 
@@ -103,15 +96,14 @@ export default function LandingScreen({ onGoogleSignIn }) {
           }}>
             <GoogleIcon size={10} />
           </span>
-          Sign in with Google
+          Sign in
         </button>
       </nav>
 
       {/* ── HERO ── */}
       <main className="vl-main">
 
-        {/* Badge */}
-        <div className="vl-badge" style={{
+        <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 7,
           background: 'rgba(78,207,154,0.08)',
           border: '1px solid rgba(78,207,154,0.2)',
@@ -124,13 +116,7 @@ export default function LandingScreen({ onGoogleSignIn }) {
           </span>
         </div>
 
-        {/*
-          Headline font: clamp(28px, 7.5vw, 44px)
-          Left-aligned on mobile so line breaks read as flowing text,
-          not as a centered orphan. Centered on desktop (looks great
-          at 44px with shorter visible line-widths in a 512px column).
-        */}
-        <h1 className="vl-h1" style={{
+        <h1 style={{
           fontSize: 'clamp(28px, 7.5vw, 44px)',
           fontWeight: 900,
           lineHeight: 1.1,
@@ -142,12 +128,11 @@ export default function LandingScreen({ onGoogleSignIn }) {
           <span style={{ color: '#4ecf9a' }}>Pay with your preferred provider.</span>
         </h1>
 
-        {/* Body */}
-        <p className="vl-body" style={{
+        <p style={{
           fontSize: 15,
           lineHeight: 1.65,
           color: 'rgba(255,255,255,0.48)',
-          margin: '0 0 28px 0',
+          margin: '0 0 24px 0',
           maxWidth: 400,
         }}>
           Built for{' '}
@@ -160,55 +145,55 @@ export default function LandingScreen({ onGoogleSignIn }) {
           </strong>.
         </p>
 
-        {/* CTA */}
-        <div className="vl-cta-wrap">
-          <button
-            onClick={onGoogleSignIn}
-            className="vl-cta"
-            style={{
-              display: 'inline-flex', alignItems: 'center',
-              justifyContent: 'center', gap: 10,
-              background: '#4ecf9a', color: '#071412',
-              fontSize: 15, fontWeight: 700,
-              padding: '15px 28px', borderRadius: 14,
-              border: 'none', cursor: 'pointer',
-              boxShadow: '0 0 32px rgba(78,207,154,0.2)',
-              minHeight: 50,
-              marginBottom: 12,
-            }}
-          >
-            <span style={{
-              width: 20, height: 20, background: '#fff', borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <GoogleIcon size={12} />
-            </span>
-            Sign in with Google — it&apos;s free
-          </button>
-        </div>
+        <button
+          onClick={onGoogleSignIn}
+          className="vl-cta"
+          style={{
+            gap: 10,
+            background: '#4ecf9a', color: '#071412',
+            fontSize: 15, fontWeight: 700,
+            padding: '15px 28px', borderRadius: 14,
+            border: 'none', cursor: 'pointer',
+            boxShadow: '0 0 32px rgba(78,207,154,0.2)',
+            minHeight: 50,
+            marginBottom: 24,
+          }}
+        >
+          <span style={{
+            width: 20, height: 20, background: '#fff', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <GoogleIcon size={12} />
+          </span>
+          Sign in with Google — it&apos;s free
+        </button>
 
         {/* Divider */}
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
+        <div style={{
+          height: 1, background: 'rgba(255,255,255,0.07)',
+          width: '100%', marginBottom: 20,
+        }} />
 
-        {/* Trust lines */}
         <ul className="vl-trust">
           {TRUST_ITEMS.map(item => (
-            <li key={item} style={{
-              display: 'flex', gap: 10,
-              color: 'rgba(255,255,255,0.4)', fontSize: 13, lineHeight: 1.5,
+            <li key={item} className="vl-trust-item" style={{
+              color: 'rgba(255,255,255,0.4)',
+              fontSize: 13,
+              lineHeight: 1.5,
             }}>
               <span style={{
                 width: 18, height: 18, borderRadius: '50%',
                 background: 'rgba(78,207,154,0.1)',
                 border: '1px solid rgba(78,207,154,0.18)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#4ecf9a', fontSize: 10, fontWeight: 700, flexShrink: 0,
-                marginTop: 1,
+                color: '#4ecf9a', fontSize: 10, fontWeight: 700,
+                flexShrink: 0, marginTop: 1,
               }}>✓</span>
               {item}
             </li>
           ))}
         </ul>
+
       </main>
 
       {/* ── FOOTER ── */}
@@ -223,7 +208,8 @@ export default function LandingScreen({ onGoogleSignIn }) {
         flexShrink: 0,
       }}>
         {['Privacy', 'Terms', 'Help'].map(l => (
-          <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, textDecoration: 'none' }}>
+          <a key={l} href="#"
+            style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, textDecoration: 'none' }}>
             {l}
           </a>
         ))}
