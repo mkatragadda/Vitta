@@ -28,7 +28,7 @@ function prepareCanvas(file, targetPx) {
     const reader = new FileReader();
     reader.onerror = () => { clearTimeout(bail); reject(new Error('FileReader error')); };
     reader.onload  = (ev) => {
-      const img = new Image();
+      const img = new window.Image();
       img.onerror = () => { clearTimeout(bail); reject(new Error('Image load error')); };
       img.onload  = () => {
         const scale  = Math.min(1, targetPx / Math.max(img.naturalWidth, img.naturalHeight));
