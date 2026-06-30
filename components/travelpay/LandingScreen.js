@@ -32,10 +32,10 @@ export default function LandingScreen({ onGoogleSignIn }) {
           flex: 1;
           display: flex;
           flex-direction: column;
-          justify-content: center;
+          justify-content: flex-start;
           align-items: flex-start;
           text-align: left;
-          padding: 24px 24px 40px;
+          padding: 40px 24px 48px;
           width: 100%;
           max-width: 560px;
           margin: 0 auto;
@@ -63,7 +63,7 @@ export default function LandingScreen({ onGoogleSignIn }) {
           gap: 10px;
         }
         @media (min-width: 540px) {
-          .vl-main       { align-items: center; text-align: center; padding: 40px 24px 56px; }
+          .vl-main       { justify-content: center; align-items: center; text-align: center; padding: 40px 24px 56px; }
           .vl-cta        { width: auto; min-width: 200px; }
           .vl-trust-item { align-items: center; justify-content: center; }
         }
@@ -125,7 +125,7 @@ export default function LandingScreen({ onGoogleSignIn }) {
           color: '#fff',
         }}>
           Scan any UPI QR.<br />
-          <span style={{ color: '#4ecf9a' }}>Pay with your preferred provider.</span>
+          <span style={{ color: '#4ecf9a' }}>Pay with your <span style={{ whiteSpace: 'nowrap' }}>preferred provider.</span></span>
         </h1>
 
         <p style={{
