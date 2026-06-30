@@ -27,46 +27,78 @@ export default function LandingScreen({ onGoogleSignIn }) {
       WebkitFontSmoothing: 'antialiased',
     }}>
 
-      {/*
-        Button sizing: full-width on mobile (easy tap), auto-width on desktop.
-        Done via a scoped <style> since inline styles can't express media queries.
-      */}
       <style>{`
-        .vl-cta {
+        /*
+         * Mobile-first: left-aligned, top-flush.
+         *
+         * Why left-align on mobile:
+         *   Centered text looks great on desktop marketing pages. On mobile,
+         *   long phrases like "Pay with your preferred provider." create an
+         *   orphaned last word when centered — e.g. "provider." alone on a
+         *   line, visually weak. Left-align means any wrap reads naturally
+         *   as flowing text regardless of where the break falls.
+         *
+         * Why flush-top on mobile:
+         *   justify-content:center in a full-viewport flex column pushes
+         *   content down to the vertical midpoint, leaving ~120px of dead
+         *   space above the badge. On mobile every pixel matters.
+         */
+
+        .vl-main {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          padding: 20px 24px 44px;
           width: 100%;
+          max-width: 560px;
+          margin: 0 auto;
+          box-sizing: border-box;
         }
+        .vl-badge    { align-self: flex-start; }
+        .vl-h1       { text-align: left; }
+        .vl-body     { text-align: left; }
+        .vl-cta-wrap { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 0; margin-bottom: 28px; }
+        .vl-cta      { width: 100%; }
+        .vl-trust    { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+        .vl-trust li { display: flex; align-items: flex-start; }
+
+        /* Desktop: center everything */
         @media (min-width: 540px) {
-          .vl-cta {
-            width: auto;
-            min-width: 160px;
-          }
+          .vl-main     { justify-content: center; padding: 40px 24px 56px; align-items: center; }
+          .vl-badge    { align-self: auto; }
+          .vl-h1       { text-align: center; }
+          .vl-body     { text-align: center; }
+          .vl-cta-wrap { align-items: center; }
+          .vl-cta      { width: auto; min-width: 200px; }
+          .vl-trust    { align-items: center; }
+          .vl-trust li { align-items: center; }
         }
       `}</style>
 
-      {/* ── NAV — full viewport width, logo hard-left, sign-in hard-right ── */}
+      {/* ── NAV — full viewport width ── */}
       <nav style={{
-        padding: '18px 28px',
+        padding: '16px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        flexShrink: 0,
       }}>
-        <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', color: '#fff' }}>
+        <span style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.5px', color: '#fff' }}>
           Vitta
         </span>
-
-        {/* Solid teal button matching the original */}
         <button
           onClick={onGoogleSignIn}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: '#4ecf9a', color: '#071412',
-            fontSize: 14, fontWeight: 700,
-            padding: '10px 20px', borderRadius: 999,
+            fontSize: 13, fontWeight: 700,
+            padding: '9px 16px', borderRadius: 999,
             border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
           <span style={{
-            width: 17, height: 17, background: '#fff', borderRadius: '50%',
+            width: 16, height: 16, background: '#fff', borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
             <GoogleIcon size={10} />
@@ -75,28 +107,16 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </button>
       </nav>
 
-      {/* ── HERO — centered column, matching original layout ── */}
-      <main style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',    /* horizontal center */
-        justifyContent: 'center',
-        textAlign: 'center',
-        padding: '36px 24px 56px',
-        width: '100%',
-        maxWidth: 560,
-        margin: '0 auto',
-        boxSizing: 'border-box',
-      }}>
+      {/* ── HERO ── */}
+      <main className="vl-main">
 
-        {/* Badge — matches original pill style */}
-        <div style={{
+        {/* Badge */}
+        <div className="vl-badge" style={{
           display: 'inline-flex', alignItems: 'center', gap: 7,
           background: 'rgba(78,207,154,0.08)',
           border: '1px solid rgba(78,207,154,0.2)',
           borderRadius: 999, padding: '6px 14px',
-          marginBottom: 24,
+          marginBottom: 20,
         }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ecf9a', flexShrink: 0 }} />
           <span style={{ color: '#4ecf9a', fontSize: 12, fontWeight: 600 }}>
@@ -105,28 +125,17 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </div>
 
         {/*
-          Headline.
-
-          Font scale: clamp(28px, 7.5vw, 44px)
-            iPhone 375 → 7.5vw = 28.1px  → 28px floor   (3 lines, still readable)
-            iPhone 430 → 7.5vw = 32.3px  → 32px          (3 lines)
-            540px+     → 7.5vw = 40.5px  → ~40px
-            587px+     → hits 44px cap
-
-          At 44px in a 512px content area (560px − 48px padding):
-            "Scan any UPI QR."           fits on 1 line ✓
-            "Pay with your"              breaks naturally (~13 chars)
-            "preferred provider."        second green line
-
-          The two green lines are intentional — "Pay with your / preferred provider."
-          is a cleaner rhythm than forcing a single overflowing line.
+          Headline font: clamp(28px, 7.5vw, 44px)
+          Left-aligned on mobile so line breaks read as flowing text,
+          not as a centered orphan. Centered on desktop (looks great
+          at 44px with shorter visible line-widths in a 512px column).
         */}
-        <h1 style={{
+        <h1 className="vl-h1" style={{
           fontSize: 'clamp(28px, 7.5vw, 44px)',
           fontWeight: 900,
-          lineHeight: 1.08,
+          lineHeight: 1.1,
           letterSpacing: 'clamp(-1px, -0.25vw, -1.8px)',
-          margin: '0 0 18px 0',
+          margin: '0 0 16px 0',
           color: '#fff',
         }}>
           Scan any UPI QR.<br />
@@ -134,12 +143,12 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </h1>
 
         {/* Body */}
-        <p style={{
+        <p className="vl-body" style={{
           fontSize: 15,
           lineHeight: 1.65,
           color: 'rgba(255,255,255,0.48)',
+          margin: '0 0 28px 0',
           maxWidth: 400,
-          margin: '0 0 32px 0',
         }}>
           Built for{' '}
           <strong style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 600 }}>
@@ -152,11 +161,7 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </p>
 
         {/* CTA */}
-        <div style={{
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: 10,
-          marginBottom: 36, width: '100%',
-        }}>
+        <div className="vl-cta-wrap">
           <button
             onClick={onGoogleSignIn}
             className="vl-cta"
@@ -168,8 +173,8 @@ export default function LandingScreen({ onGoogleSignIn }) {
               padding: '15px 28px', borderRadius: 14,
               border: 'none', cursor: 'pointer',
               boxShadow: '0 0 32px rgba(78,207,154,0.2)',
-              letterSpacing: '-0.1px',
               minHeight: 50,
+              marginBottom: 12,
             }}
           >
             <span style={{
@@ -183,25 +188,22 @@ export default function LandingScreen({ onGoogleSignIn }) {
         </div>
 
         {/* Divider */}
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', width: '100%', marginBottom: 22 }} />
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
 
-        {/* Trust items — centered, vertical list */}
-        <ul style={{
-          listStyle: 'none', padding: 0, margin: 0,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: 10,
-        }}>
+        {/* Trust lines */}
+        <ul className="vl-trust">
           {TRUST_ITEMS.map(item => (
             <li key={item} style={{
-              display: 'flex', alignItems: 'center', gap: 9,
-              color: 'rgba(255,255,255,0.4)', fontSize: 13,
+              display: 'flex', gap: 10,
+              color: 'rgba(255,255,255,0.4)', fontSize: 13, lineHeight: 1.5,
             }}>
               <span style={{
                 width: 18, height: 18, borderRadius: '50%',
                 background: 'rgba(78,207,154,0.1)',
-                border: '1px solid rgba(78,207,154,0.15)',
+                border: '1px solid rgba(78,207,154,0.18)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#4ecf9a', fontSize: 10, fontWeight: 700, flexShrink: 0,
+                marginTop: 1,
               }}>✓</span>
               {item}
             </li>
@@ -211,13 +213,14 @@ export default function LandingScreen({ onGoogleSignIn }) {
 
       {/* ── FOOTER ── */}
       <footer style={{
-        padding: '18px 28px',
+        padding: '16px 24px',
         borderTop: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 24,
+        gap: 20,
         flexWrap: 'wrap',
+        flexShrink: 0,
       }}>
         {['Privacy', 'Terms', 'Help'].map(l => (
           <a key={l} href="#" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, textDecoration: 'none' }}>
