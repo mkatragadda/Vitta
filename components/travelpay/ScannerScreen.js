@@ -52,41 +52,70 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
     try {
       let qrCodeText = null;
 
-      // BarcodeDetector: native browser API available on iOS Safari 17+ and Android Chrome.
-      // Handles EXIF rotation correctly — images from iPhone camera roll work without fix-up.
+      // ── Strategy 1: BarcodeDetector (iOS Safari 17+, Android Chrome) ──────
+      // Native API, fastest, handles EXIF rotation automatically.
       if ('BarcodeDetector' in window) {
         try {
           const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
           const bitmap   = await createImageBitmap(file);
           const codes    = await detector.detect(bitmap);
           if (codes.length > 0) qrCodeText = codes[0].rawValue;
-        } catch (_) { /* fall through to html5-qrcode */ }
+        } catch (_) {}
       }
 
-      // Fallback: html5-qrcode scanFile (works on desktop Chrome/Firefox).
-      // showImage=false so it doesn't need the container div to be visible.
+      // ── Strategy 2: <img> → canvas (EXIF-aware) → jsQR ──────────────────
+      // Works on iOS 13-16 where BarcodeDetector is unavailable.
+      // Loading via <img> lets the browser apply EXIF orientation before we
+      // draw to canvas. We scale down to ≤1024px so large iPhone photos
+      // (12MP+) don't cause canvas memory pressure.
       if (!qrCodeText) {
-        const { Html5Qrcode } = await import('html5-qrcode');
-        const scanner = new Html5Qrcode('qr-reader-upload');
-        qrCodeText = await scanner.scanFile(file, /* showImage */ false);
+        try {
+          const jsQR = (await import('jsqr')).default;
+
+          const imgEl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const img = new Image();
+              img.onload  = () => resolve(img);
+              img.onerror = reject;
+              img.src = ev.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          // Scale down while keeping aspect ratio — keeps decode fast and avoids OOM
+          const MAX = 1024;
+          const scale  = Math.min(1, MAX / Math.max(imgEl.naturalWidth, imgEl.naturalHeight));
+          const width  = Math.round(imgEl.naturalWidth  * scale);
+          const height = Math.round(imgEl.naturalHeight * scale);
+
+          const canvas = document.createElement('canvas');
+          canvas.width  = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(imgEl, 0, 0, width, height);
+
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const code = jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
+          if (code?.data) qrCodeText = code.data;
+        } catch (_) {}
       }
 
       if (qrCodeText) {
         if (qrCodeText.startsWith('upi://pay')) {
           setManualInput(qrCodeText);
-          setError('');
         } else if (isUpiId(qrCodeText)) {
-          // QR contained a bare UPI ID — auto-submit directly
           onScanSuccess({ raw: `upi://pay?pa=${encodeURIComponent(qrCodeText)}&cu=INR` });
         } else {
-          setError('Could not find a valid UPI QR code in this image');
+          setError('Image decoded but no UPI QR code found in it');
         }
       } else {
-        setError('Could not find a valid UPI QR code in this image');
+        setError('Could not read QR code. Make sure it is clearly visible, or enter the UPI ID manually.');
       }
     } catch (err) {
-      console.error('[ScannerScreen] QR decode error:', err);
-      setError('Failed to decode QR code from image. Please try another image or enter the UPI ID manually.');
+      console.error('[ScannerScreen] QR image decode error:', err);
+      setError('Failed to read image. Please try another photo or enter the UPI ID manually.');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -242,8 +271,6 @@ export default function ScannerScreen({ onScanSuccess, onClose }) {
         </div>
       )}
 
-      {/* Off-screen div for html5-qrcode fallback — must NOT be display:none or canvas rendering breaks */}
-      <div id="qr-reader-upload" style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}></div>
     </div>
   );
 }
